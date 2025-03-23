@@ -42,10 +42,10 @@ server = MCP::Server.new(name: 'recipe-ai', version: '1.0.0')
 class GetRecipesTool < MCP::Tool
   description "Find recipes based on ingredients"
   
-  arguments do
     # These arguments will generate the needed JSON to be presented to the MCP Client
-    # And they will be vaidated at run time.
+    # And they will be validated at run time.
     # The validation is based off Dry-Schema, with the addition of the description.
+  arguments do
     required(:ingredients).array(:string).description("List of ingredients")
     optional(:cuisine).filled(:string).description("Type of cuisine")
   end
@@ -117,34 +117,6 @@ gem install fast-mcp
 
 ## 🚀 Quick Start
 
-### Testing with the inspector
-
-MCP has developed a very [useful inspector](https://github.com/modelcontextprotocol/inspector).
-You can use it to validate your implementation. I suggest you use the examples I provided with this project as an easy boilerplate.
-Clone this project, then give it a go !
-
-```shell
-npx @modelcontextprotocol/inspector examples/server_with_stdio_transport.rb
-```
-Or to test with an SSE transport using a rack middleware:
-```shell
-npx @modelcontextprotocol/inspector examples/rack_middleware.rb
-```
-
-Or to test over SSE with an authenticated rack middleware:
-```shell
-npx @modelcontextprotocol/inspector examples/authenticated_rack_middleware.rb
-```
-
-You can test your custom implementation with the official MCP inspector by using:
-```shell
-# Test with a stdio transport:
-npx @modelcontextprotocol/inspector path/to/your_ruby_file.rb
-
-# Test with an HTTP / SSE server. In the UI select SSE and input your address.
-npx @modelcontextprotocol/inspector
-```
-
 ### Create a Server with Tools and Resources
 
 ```ruby
@@ -212,6 +184,34 @@ module YourApp
     end
   end
 end
+```
+
+## 🧪 Testing with the inspector
+
+MCP has developed a very [useful inspector](https://github.com/modelcontextprotocol/inspector).
+You can use it to validate your implementation. I suggest you use the examples I provided with this project as an easy boilerplate.
+Clone this project, then give it a go !
+
+```shell
+npx @modelcontextprotocol/inspector examples/server_with_stdio_transport.rb
+```
+Or to test with an SSE transport using a rack middleware:
+```shell
+npx @modelcontextprotocol/inspector examples/rack_middleware.rb
+```
+
+Or to test over SSE with an authenticated rack middleware:
+```shell
+npx @modelcontextprotocol/inspector examples/authenticated_rack_middleware.rb
+```
+
+You can test your custom implementation with the official MCP inspector by using:
+```shell
+# Test with a stdio transport:
+npx @modelcontextprotocol/inspector path/to/your_ruby_file.rb
+
+# Test with an HTTP / SSE server. In the UI select SSE and input your address.
+npx @modelcontextprotocol/inspector
 ```
 
 #### Sinatra
