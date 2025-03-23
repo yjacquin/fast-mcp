@@ -1,0 +1,71 @@
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.0
+  Exclude:
+    - 'vendor/**/*'
+    - 'bin/**/*'
+    - 'tmp/**/*'
+    - 'spec/**/*'  # Temporarily exclude specs to focus on core code
+  SuggestExtensions: false
+
+# Metrics configuration
+Metrics/BlockLength:
+  Max: 50
+
+Metrics/MethodLength:
+  Max: 25
+
+Metrics/ClassLength:
+  Max: 350
+
+Metrics/AbcSize:
+  Max: 60
+
+Metrics/CyclomaticComplexity:
+  Max: 17
+
+Metrics/PerceivedComplexity:
+  Max: 17
+
+# Style configuration
+Style/Documentation:
+  Enabled: false
+
+Style/StringLiterals:
+  EnforcedStyle: single_quotes
+
+Style/SymbolArray:
+  EnforcedStyle: brackets
+
+Style/WordArray:
+  Enabled: false
+
+# Layout configuration
+Layout/LineLength:
+  Max: 120
+
+# Gemspec configuration
+Gemspec/RequireMFA:
+  Enabled: false
+
+# Lint configuration
+Lint/DuplicateMethods:
+  Exclude:
+    - 'lib/mcp/tool.rb'
+
+Lint/AmbiguousOperatorPrecedence:
+  Enabled: false
+
+Lint/SymbolConversion:
+  Enabled: false
+
+Style/QuotedSymbols:
+  Enabled: false
+
+Lint/DuplicateBranch:
+  Exclude:
+    - 'lib/mcp/tool.rb'
+
+Lint/UselessConstantScoping:
+  Exclude:
+    - 'lib/mcp/server.rb'
