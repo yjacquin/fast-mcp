@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby-version: [3.2.0, 3.3.0, 3.4.0]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Ruby ${{ matrix.ruby-version }}
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ matrix.ruby-version }}
+        bundler-cache: true # runs 'bundle install' and caches installed gems automatically
+    
+    - name: Install dependencies
+      run: |
+        gem install bundler
+        bundle install --jobs 4 --retry 3
+    
+    - name: Verify gemspec
+      run: ruby script/verify_gemspec.rb
+    
+    - name: Run tests
+      run: bundle exec rspec
+    
+    - name: Run Rubocop
+      run: bundle exec rubocop 
