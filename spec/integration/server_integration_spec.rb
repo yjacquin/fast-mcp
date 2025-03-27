@@ -3,12 +3,12 @@
 require 'stringio'
 
 RSpec.describe 'MCP Server Integration' do
-  let(:server) { MCP::Server.new(name: 'test-server', version: '1.0.0', logger: Logger.new(nil)) }
-  let(:transport) { MCP::Transports::StdioTransport.new(server) }
+  let(:server) { FastMcp::Server.new(name: 'test-server', version: '1.0.0', logger: Logger.new(nil)) }
+  let(:transport) { FastMcp::Transports::StdioTransport.new(server) }
 
   # Define a test tool class
   let(:greet_tool) do
-    Class.new(MCP::Tool) do
+    Class.new(FastMcp::Tool) do
       def self.name
         'greet'
       end
@@ -29,7 +29,7 @@ RSpec.describe 'MCP Server Integration' do
 
   # Define a test resource class
   let(:counter_resource_class) do
-    Class.new(MCP::Resource) do
+    Class.new(FastMcp::Resource) do
       uri 'test/counter'
       resource_name 'Test Counter'
       description 'A test counter resource'

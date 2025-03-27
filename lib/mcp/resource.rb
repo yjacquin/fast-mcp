@@ -5,7 +5,7 @@ require 'base64'
 require 'mime/types'
 require 'singleton'
 
-module MCP
+module FastMcp
   # Resource class for MCP Resources feature
   # Represents a resource that can be exposed to clients
   class Resource

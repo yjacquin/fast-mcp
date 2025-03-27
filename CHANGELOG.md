@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Initial release of the Fast MCP library
-- MCP::Tool class with multiple definition styles
-- MCP::Server class with STDIO transport and HTTP / SSE transport
+- FastMcp::Tool class with multiple definition styles
+- FastMcp::Server class with STDIO transport and HTTP / SSE transport
 - Rack Integration with authenticated and standard middleware options
 - Resource management with subscription capabilities
 - Binary resource support

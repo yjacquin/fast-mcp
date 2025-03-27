@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # This class is not used yet.
-module MCP
+module FastMcp
   class Logger < Logger
     def initialize
       @client_initialized = false

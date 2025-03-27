@@ -28,16 +28,16 @@ The Fast MCP library supports the following resource features:
 
 ### Creating and Registering Resources
 
-You can create resources by inheriting from the `MCP::Resource` class:
+You can create resources by inheriting from the `FastMcp::Resource` class:
 
 ```ruby
 require 'fast_mcp'
 
 # Create a server
-server = MCP::Server.new(name: "my-mcp-server", version: "1.0.0")
+server = FastMcp::Server.new(name: "my-mcp-server", version: "1.0.0")
 
-# Create a resource by inheriting from MCP::Resource
-class CounterResource < MCP::Resource
+# Create a resource by inheriting from FastMcp::Resource
+class CounterResource < FastMcp::Resource
   uri "example/counter"
   resource_name "Counter"
   description "A simple counter resource"
@@ -64,7 +64,7 @@ You can create resources from files:
 
 ```ruby
 # Create a resource from a file
-image_resource = MCP::Resource.from_file(
+image_resource = FastMcp::Resource.from_file(
   "path/to/image.png",
   name: "Example Image",
   description: "An example image resource"
@@ -99,11 +99,11 @@ server.remove_resource("example/counter")
 
 ## Custom Resource Types
 
-You can create custom resource types by inheriting from `MCP::Resource` and implementing the required methods:
+You can create custom resource types by inheriting from `FastMcp::Resource` and implementing the required methods:
 
 ```ruby
 # Custom resource type for weather data
-class WeatherResource < MCP::Resource
+class WeatherResource < FastMcp::Resource
   uri "weather/current"
   resource_name "Current Weather"
   description "Current weather conditions"

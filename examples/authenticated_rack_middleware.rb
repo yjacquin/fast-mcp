@@ -10,7 +10,7 @@ require 'rack'
 require 'rack/handler/puma'
 
 # Define tools using the class inheritance approach
-class GreetTool < MCP::Tool
+class GreetTool < FastMcp::Tool
   description 'Greet a person'
 
   arguments do
@@ -22,7 +22,7 @@ class GreetTool < MCP::Tool
   end
 end
 
-class CalculateTool < MCP::Tool
+class CalculateTool < FastMcp::Tool
   description 'Perform a calculation'
 
   arguments do
@@ -48,7 +48,7 @@ class CalculateTool < MCP::Tool
   end
 end
 
-class HelloWorldResource < MCP::Resource
+class HelloWorldResource < FastMcp::Resource
   uri 'file://hello_world'
   resource_name 'Hello World'
   description 'A simple hello world program'

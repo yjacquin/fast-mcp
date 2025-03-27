@@ -34,7 +34,7 @@ The standalone approach runs the MCP server as a separate process:
 require 'fast_mcp'
 
 # Create the server
-server = MCP::Server.new(name: 'my-mcp-server', version: '1.0.0')
+server = FastMcp::Server.new(name: 'my-mcp-server', version: '1.0.0')
 
 # Define tools
 class ExampleTool < Mcp::Tool
@@ -48,7 +48,7 @@ class ExampleTool < Mcp::Tool
   end
 end
 
-class HelloWorld < MCP::Resource
+class HelloWorld < FastMcp::Resource
   uri "example/counter.txt"
   name "Counter"
   description "A simple Hello World resource"
@@ -99,7 +99,7 @@ class ExampleTool < Mcp::Tool
   end
 end
 
-class HelloWorld < MCP::Resource
+class HelloWorld < FastMcp::Resource
   uri "example/counter.txt"
   name "Counter"
   description "A simple Hello World resource"
@@ -157,7 +157,7 @@ Both integration approaches support authentication and authorization:
 For standalone servers, you can implement authentication by checking credentials before processing requests:
 
 ```ruby
-class ExampleTool < MCP::Tool
+class ExampleTool < FastMcp::Tool
   description "A secure tool that requires authentication"
   arguments do
     required(:api_key).filled(:string)description("API key for authentication")
@@ -184,7 +184,7 @@ MCP Resources provide a way to share and synchronize data between the server and
 
 ```ruby
 # Create a resource
-class Counter < MCP::Resource
+class Counter < FastMcp::Resource
   uri "example/counter"
   resource_name "Counter",
   description "A simple counter resource"

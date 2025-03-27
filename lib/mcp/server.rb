@@ -9,7 +9,7 @@ require_relative 'transports/rack_transport'
 require_relative 'transports/authenticated_rack_transport'
 require_relative 'logger'
 
-module MCP
+module FastMcp
   class Server
     attr_reader :name, :version, :tools, :resources, :capabilities
 
@@ -23,7 +23,7 @@ module MCP
       }
     }.freeze
 
-    def initialize(name:, version:, logger: MCP::Logger.new, capabilities: {})
+    def initialize(name:, version:, logger: FastMcp::Logger.new, capabilities: {})
       @name = name
       @version = version
       @tools = {}
@@ -98,7 +98,7 @@ module MCP
       @logger.info("Available resources: #{@resources.keys.join(', ')}")
 
       # Use STDIO transport by default
-      @transport_klass = MCP::Transports::StdioTransport
+      @transport_klass = FastMcp::Transports::StdioTransport
       @transport = @transport_klass.new(self, logger: @logger)
       @transport.start
     end
@@ -110,7 +110,7 @@ module MCP
       @logger.info("Available resources: #{@resources.keys.join(', ')}")
 
       # Use Rack transport
-      transport_klass = MCP::Transports::RackTransport
+      transport_klass = FastMcp::Transports::RackTransport
       @transport = transport_klass.new(app, self, options.merge(logger: @logger))
       @transport.start
 
@@ -124,7 +124,7 @@ module MCP
       @logger.info("Available resources: #{@resources.keys.join(', ')}")
 
       # Use Rack transport
-      @transport = MCP::Transports::AuthenticatedRackTransport.new(self, app, options.merge(logger: @logger))
+      @transport = FastMcp::Transports::AuthenticatedRackTransport.new(self, app, options.merge(logger: @logger))
       @transport.start
 
       # Return the transport as middleware
@@ -307,7 +307,7 @@ module MCP
 
         # Format and send the result
         send_formatted_result(result, id)
-      rescue MCP::Tool::InvalidArgumentsError => e
+      rescue FastMcp::Tool::InvalidArgumentsError => e
         @logger.error("Invalid arguments for tool #{tool_name}: #{e.message}")
         send_error_result(e.message, id)
       rescue StandardError => e
