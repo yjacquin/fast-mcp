@@ -28,44 +28,49 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 - 🛠️ **Tools API** - Let AI models call your Ruby functions securely, with in-depth argument validation through [Dry-Schema](https://github.com/dry-rb/dry-schema).
 - 📚 **Resources API** - Share data between your app and AI models
 - 🔄 **Multiple Transports** - Choose from STDIO, HTTP, or SSE based on your needs
-- 🧩 **Framework Integration** - Works seamlessly with Rails, Sinatra, and Hanami
-- 🔒 **Authentication Support** - Secure your AI endpoints with ease
+- 🧩 **Framework Integration** - Works seamlessly with Rails, Sinatra or any Rack app.
+- 🔒 **Authentication Support** - Secure your AI-powered endpoints with ease
 - 🚀 **Real-time Updates** - Subscribe to changes for interactive applications
 
-## 💎 What Makes FastMCP Great
 
+## 💎 What Makes FastMCP Great
 ```ruby
 # Define tools for AI models to use
 server = MCP::Server.new(name: 'recipe-ai', version: '1.0.0')
 
 # Define a tool by inheriting from MCP::Tool
-class GetRecipesTool < MCP::Tool
+class CreateUserTool < MCP::Tool
   description "Find recipes based on ingredients"
   
     # These arguments will generate the needed JSON to be presented to the MCP Client
     # And they will be validated at run time.
     # The validation is based off Dry-Schema, with the addition of the description.
   arguments do
-    required(:ingredients).array(:string).description("List of ingredients")
-    optional(:cuisine).filled(:string).description("Type of cuisine")
+    required(:first_name).filled(:string).description("First name of the user")
+    optional(:age).filled(:integer).description("Age of the user")
+    required(:address).hash do
+      optional(:street).filled(:string)
+      optional(:city).filled(:string)
+      optional(:zipcode).filled(:string)
+    end
   end
   
-  def call(ingredients:, cuisine: nil)
-    Recipe.find_by_ingredients(ingredients, cuisine: cuisine)
+  def call(first_name:, age: nil, address: {})
+    User.create!(first_name:, age:, address:)
   end
 end
 
 # Register the tool with the server
-server.register_tool(GetRecipesTool)
+server.register_tool(CreateUserTool)
 
 # Share data resources with AI models by inheriting from MCP::Resource
-class IngredientsResource < MCP::Resource
-  uri "food/popular_ingredients"
-  resource_name "Popular Ingredients"
+class PopularUsers < MCP::Resource
+  uri "file://popular_users.json"
+  resource_name "Popular Users"
   mime_type "application/json"
   
-  def default_content
-    JSON.generate(Ingredient.popular.as_json)
+  def content
+    JSON.generate(User.popular.limit(5).as_json)
   end
 end
 
@@ -73,28 +78,57 @@ end
 server.register_resource(IngredientsResource)
 
 # Accessing the resource through the server
-server.read_resource("food/popular_ingredients")
+server.read_resource(IngredientsResource.uri)
 
-# Notify the resource content has been updated
-server.notify_resource_updated("food/popular_ingredients")
+# Notify the resource content has been updated to clients
+server.notify_resource_updated(IngredientsResource.uri)
+```
 
+### 🚂 Fast Ruby on Rails implementation
+```shell
+bundle add fast-mcp
+bin/rails generate fast_mcp:install
+```
 
-## 📦 Installation
+This will add a configurable `fast_mcp.rb` initializer
 
 ```ruby
-# In your Gemfile
-gem 'fast-mcp'
+require 'fast_mcp'
 
-# Then run
-bundle install
-
-# Or install it yourself
-gem install fast-mcp
+FastMcp.mount_in_rails(
+  Rails.application,
+  name: Rails.application.class.module_parent_name.underscore.dasherize,
+  version: '1.0.0',
+  path_prefix: '/mcp' # This is the default path prefix
+  # authenticate: true,       # Uncomment to enable authentication
+  # auth_token: 'your-token', # Required if authenticate: true
+) do |server|
+  Rails.application.config.after_initialize do
+    # FastMcpwill automatically discover and register:
+    # - All classes that inherit from ApplicationTool
+    # - All classes that inherit from ApplicationResource
+    server.register_tools(*ApplicationTool.descendants)
+    server.register_resources(*ApplicationResource.descendants)
+    # alternatively, you can register tools and resources manually:
+    # server.register_tool(MyTool)
+    # server.register_resource(MyResource)
+  end
+end
 ```
+The install script will also:
+- add app/resources folder
+- add app/tools folder
+- add app/tools/sample_tool.rb
+- add app/resources/sample_resource.rb
+- add ApplicationTool to inherit from
+- add ApplicationResource to inherit from as well
+
+### Easy Sinatra setup
+I'll let you check out the dedicated [sinatra integration docs](./docs/sinatra_integration.md).
 
 ## 🚀 Quick Start
 
-### Create a Server with Tools and Resources
+### Create a Server with Tools and Resources and STDIO transport
 
 ```ruby
 require 'fast_mcp'
@@ -127,7 +161,7 @@ class StatisticsResource < MCP::Resource
   description "Current system statistics"
   mime_type "application/json"
   
-  def default_content
+  def content
     JSON.generate({
       users_online: 120,
       queries_per_minute: 250,
@@ -142,87 +176,6 @@ server.register_resource(StatisticsResource)
 # Start the server
 server.start
 ```
-
-### Integrate with Web Frameworks
-
-#### Rails
-
-```ruby
-# Generate the FastMcp initializer and directory structure
-rails generate fast_mcp:install
-
-# This will create:
-# - config/initializers/fast_mcp.rb
-# - app/tools/
-# - app/resources/
-```
-
-The initializer will mount the FastMcp middleware in your Rails application with sensible defaults:
-
-```ruby
-# config/initializers/fast_mcp.rb
-FastMcp.mount_in_rails(
-  Rails.application,
-  name: Rails.application.class.module_parent_name.underscore.dasherize,
-  version: '1.0.0',
-  path_prefix: '/mcp',        # This is the default path prefix
-  # authenticate: true,       # Uncomment to enable authentication
-  # auth_token: 'your-token', # Required if authenticate: true
-) do |server|
-  # You can configure the server here if needed
-  # For example, register tools or resources directly
-end
-```
-
-Create tools in `app/tools/`:
-
-```ruby
-# app/tools/summarize_tool.rb
-class Tools::SummarizeTool < MCP::Tool
-  description "Summarize a given text"
-  
-  arguments do
-    required(:text).filled(:string).description("Text to summarize")
-    optional(:max_length).filled(:integer).description("Maximum length of summary")
-  end
-  
-  def call(text:, max_length: 100)
-    # Your summarization logic here
-    text.split('.').first(3).join('.') + '...'
-  end
-end
-```
-
-Create resources in `app/resources/`:
-
-```ruby
-# app/resources/statistics_resource.rb
-class Resources::StatisticsResource < MCP::Resource
-  uri "data/statistics"
-  name "Usage Statistics"
-  description "Current system statistics"
-  mime_type "application/json"
-  
-  def default_content
-    JSON.generate({
-      users_online: 120,
-      queries_per_minute: 250,
-      popular_topics: ["Ruby", "AI", "WebDev"]
-    })
-  end
-  
-  # Required for automatic initialization
-  def self.initialize_singleton(server)
-    server.register_resource(new)
-  end
-end
-```
-
-The FastMcp engine will automatically discover and register:
-- All classes in the `Tools` module that inherit from `MCP::Tool`
-- All classes in the `Resources` module that inherit from `MCP::Resource` and implement the `initialize_singleton` class method
-
-You can access the server instance anywhere in your code with `FastMcp.server`.
 
 ## 🧪 Testing with the inspector
 

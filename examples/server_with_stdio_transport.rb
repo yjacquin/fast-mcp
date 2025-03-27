@@ -6,10 +6,10 @@ require 'fast_mcp'
 require 'json'
 
 # Create a server
-server = MCP::Server.new(name: 'resource-example-server', version: '1.0.0')
+server = FastMcp::Server.new(name: 'resource-example-server', version: '1.0.0')
 
 # Define a counter resource
-class CounterResource < MCP::Resource
+class CounterResource < FastMcp::Resource
   uri 'counter'
   resource_name 'Counter'
   description 'A simple counter resource'
@@ -29,7 +29,7 @@ class CounterResource < MCP::Resource
 end
 
 # Define a users resource
-class UsersResource < MCP::Resource
+class UsersResource < FastMcp::Resource
   uri 'users'
   resource_name 'Users'
   description 'List of users'
@@ -52,7 +52,7 @@ class UsersResource < MCP::Resource
 end
 
 # Define a weather resource that updates periodically
-class WeatherResource < MCP::Resource
+class WeatherResource < FastMcp::Resource
   uri 'weather'
   resource_name 'Weather'
   description 'Current weather conditions'
@@ -80,7 +80,7 @@ end
 server.register_resources(CounterResource, UsersResource, WeatherResource)
 
 # Class-based tool for incrementing the counter
-class IncrementCounterTool < MCP::Tool
+class IncrementCounterTool < FastMcp::Tool
   description 'Increment the counter'
 
   def call
@@ -96,7 +96,7 @@ class IncrementCounterTool < MCP::Tool
 end
 
 # Class-based tool for adding a user
-class AddUserTool < MCP::Tool
+class AddUserTool < FastMcp::Tool
   description 'Add a new user'
   tool_name 'Add User'
   arguments do
@@ -130,7 +130,7 @@ class AddUserTool < MCP::Tool
 end
 
 # Class-based tool for deleting a user
-class DeleteUserTool < MCP::Tool
+class DeleteUserTool < FastMcp::Tool
   description 'Delete a user by ID'
   tool_name 'Delete User'
 
@@ -163,5 +163,5 @@ end
 server.register_tools(IncrementCounterTool, AddUserTool, DeleteUserTool)
 
 # Start the server
-# puts 'Starting MCP server with resources...'
+# puts 'Starting FastMcp server with resources...'
 server.start
