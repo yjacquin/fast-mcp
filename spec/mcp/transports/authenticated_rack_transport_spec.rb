@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-RSpec.describe MCP::Transports::AuthenticatedRackTransport do
-  let(:server) { instance_double(MCP::Server, logger: Logger.new(nil)) }
+RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
+  let(:server) { instance_double(FastMcp::Server, logger: Logger.new(nil)) }
   let(:app) { ->(_env) { [200, { 'Content-Type' => 'text/plain' }, ['OK']] } }
   let(:logger) { Logger.new(nil) }
   let(:auth_token) { 'valid-token-123' }

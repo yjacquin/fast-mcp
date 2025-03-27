@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-RSpec.describe MCP::Transports::RackTransport do
-  let(:server) { instance_double(MCP::Server, logger: Logger.new(nil), transport: nil) }
+RSpec.describe FastMcp::Transports::RackTransport do
+  let(:server) { instance_double(FastMcp::Server, logger: Logger.new(nil), transport: nil) }
   let(:app) { ->(_env) { [200, { 'Content-Type' => 'text/plain' }, ['OK']] } }
   let(:logger) { Logger.new(nil) }
   let(:transport) { described_class.new(app, server, logger: logger) }

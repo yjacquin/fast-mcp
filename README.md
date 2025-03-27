@@ -36,10 +36,10 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 ## 💎 What Makes FastMCP Great
 ```ruby
 # Define tools for AI models to use
-server = MCP::Server.new(name: 'recipe-ai', version: '1.0.0')
+server = FastMcp::Server.new(name: 'recipe-ai', version: '1.0.0')
 
-# Define a tool by inheriting from MCP::Tool
-class CreateUserTool < MCP::Tool
+# Define a tool by inheriting from FastMcp::Tool
+class CreateUserTool < FastMcp::Tool
   description "Find recipes based on ingredients"
   
     # These arguments will generate the needed JSON to be presented to the MCP Client
@@ -63,8 +63,8 @@ end
 # Register the tool with the server
 server.register_tool(CreateUserTool)
 
-# Share data resources with AI models by inheriting from MCP::Resource
-class PopularUsers < MCP::Resource
+# Share data resources with AI models by inheriting from FastMcp::Resource
+class PopularUsers < FastMcp::Resource
   uri "file://popular_users.json"
   resource_name "Popular Users"
   mime_type "application/json"
@@ -134,10 +134,10 @@ I'll let you check out the dedicated [sinatra integration docs](./docs/sinatra_i
 require 'fast_mcp'
 
 # Create an MCP server
-server = MCP::Server.new(name: 'my-ai-server', version: '1.0.0')
+server = FastMcp::Server.new(name: 'my-ai-server', version: '1.0.0')
 
-# Define a tool by inheriting from MCP::Tool
-class SummarizeTool < MCP::Tool
+# Define a tool by inheriting from FastMcp::Tool
+class SummarizeTool < FastMcp::Tool
   description "Summarize a given text"
   
   arguments do
@@ -154,8 +154,8 @@ end
 # Register the tool with the server
 server.register_tool(SummarizeTool)
 
-# Create a resource by inheriting from MCP::Resource
-class StatisticsResource < MCP::Resource
+# Create a resource by inheriting from FastMcp::Resource
+class StatisticsResource < FastMcp::Resource
   uri "data/statistics"
   resource_name "Usage Statistics"
   description "Current system statistics"
@@ -212,7 +212,7 @@ npx @modelcontextprotocol/inspector
 require 'sinatra'
 require 'fast_mcp'
 
-use MCP::RackMiddleware.new(name: 'my-ai-server', version: '1.0.0') do |server|
+use FastMcp::RackMiddleware.new(name: 'my-ai-server', version: '1.0.0') do |server|
   # Register tools and resources here
   server.register_tool(SummarizeTool)
 end

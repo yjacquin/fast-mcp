@@ -41,7 +41,7 @@ The STDIO transport uses standard input/output for communication. It's the simpl
 **Server Side:**
 
 ```ruby
-server = MCP::Server.new(name: 'stdio-server', version: '1.0.0')
+server = FastMcp::Server.new(name: 'stdio-server', version: '1.0.0')
 # Define tools and resources
 server.start  # Uses STDIO transport by default
 ```
@@ -49,7 +49,7 @@ server.start  # Uses STDIO transport by default
 **Client Side:**
 
 ```ruby
-client = MCP::Client.new(name: 'stdio-client', version: '1.0.0')
+client = FastMcp::Client.new(name: 'stdio-client', version: '1.0.0')
 client.connect('ruby server.rb')  # Launches the server as a subprocess
 ```
 
@@ -70,7 +70,7 @@ The HTTP transport uses HTTP requests for communication. It's suitable for web a
 **Server Side:**
 
 ```ruby
-server = MCP::Server.new(name: 'http-server', version: '1.0.0')
+server = FastMcp::Server.new(name: 'http-server', version: '1.0.0')
 # Define tools and resources
 server.start_http(port: 4567)
 ```
@@ -78,7 +78,7 @@ server.start_http(port: 4567)
 **Client Side:**
 
 ```ruby
-client = MCP::Client.new(name: 'http-client', version: '1.0.0')
+client = FastMcp::Client.new(name: 'http-client', version: '1.0.0')
 client.connect_http('http://localhost:4567')
 ```
 
@@ -100,7 +100,7 @@ The Server-Sent Events (SSE) transport uses HTTP for requests and SSE for real-t
 **Server Side:**
 
 ```ruby
-server = MCP::Server.new(name: 'sse-server', version: '1.0.0')
+server = FastMcp::Server.new(name: 'sse-server', version: '1.0.0')
 # Define tools and resources
 server.start_sse(port: 4567)
 ```
@@ -108,7 +108,7 @@ server.start_sse(port: 4567)
 **Client Side:**
 
 ```ruby
-client = MCP::Client.new(name: 'sse-client', version: '1.0.0')
+client = FastMcp::Client.new(name: 'sse-client', version: '1.0.0')
 client.connect_sse('http://localhost:4567')
 ```
 
@@ -144,7 +144,7 @@ end
 **Client Side:**
 
 ```ruby
-client = MCP::Client.new(name: 'rack-client', version: '1.0.0')
+client = FastMcp::Client.new(name: 'rack-client', version: '1.0.0')
 client.connect_http('http://localhost:3000/mcp')  # Adjust the path as needed
 ```
 
@@ -283,9 +283,9 @@ module MCP
 end
 
 # Use the custom transport
-server = MCP::Server.new(name: 'custom-server', version: '1.0.0')
+server = FastMcp::Server.new(name: 'custom-server', version: '1.0.0')
 # Define tools and resources
-server.start_with_transport(MCP::Transports::CustomTransport, custom_option: 'value')
+server.start_with_transport(FastMcp::Transports::CustomTransport, custom_option: 'value')
 ```
 
 ## Best Practices

@@ -10,14 +10,10 @@ module FastMcp
   end
 end
 
-MCP = FastMcp
-
 # Require the core components
 require_relative 'mcp/tool'
 require_relative 'mcp/server'
 require_relative 'mcp/resource'
-# require_relative 'mcp/protocol_controller' if defined?(ActionController::Base)
-require_relative 'mcp/engine' if defined?(Rails::Engine)
 require_relative 'mcp/railtie' if defined?(Rails::Railtie)
 
 # Load generators if Rails is available
@@ -42,14 +38,14 @@ module FastMcp
   # @option options [String] :path_prefix The path prefix for the MCP endpoints
   # @option options [Logger] :logger The logger to use
   # @yield [server] A block to configure the server
-  # @yieldparam server [MCP::Server] The server to configure
+  # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
   def self.rack_middleware(app, options = {})
     name = options.delete(:name) || 'mcp-server'
     version = options.delete(:version) || '1.0.0'
     logger = options.delete(:logger) || Logger.new
 
-    server = MCP::Server.new(name: name, version: version, logger: logger)
+    server = FastMcp::Server.new(name: name, version: version, logger: logger)
     yield server if block_given?
 
     # Store the server in the Sinatra settings if available
@@ -68,14 +64,14 @@ module FastMcp
   # @option options [String] :version The version of the server
   # @option options [String] :auth_token The authentication token
   # @yield [server] A block to configure the server
-  # @yieldparam server [MCP::Server] The server to configure
+  # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
   def self.authenticated_rack_middleware(app, options = {})
     name = options.delete(:name) || 'mcp-server'
     version = options.delete(:version) || '1.0.0'
     logger = options.delete(:logger) || Logger.new
 
-    server = MCP::Server.new(name: name, version: version, logger: logger)
+    server = FastMcp::Server.new(name: name, version: version, logger: logger)
     yield server if block_given?
 
     # Store the server in the FastMcp module
@@ -85,34 +81,34 @@ module FastMcp
   end
 
   # Register a tool with the MCP server
-  # @param tool [MCP::Tool] The tool to register
-  # @return [MCP::Tool] The registered tool
+  # @param tool [FastMcp::Tool] The tool to register
+  # @return [FastMcp::Tool] The registered tool
   def self.register_tool(tool)
-    self.server ||= MCP::Server.new(name: 'mcp-server', version: '1.0.0')
+    self.server ||= FastMcp::Server.new(name: 'mcp-server', version: '1.0.0')
     self.server.register_tool(tool)
   end
 
   # Register multiple tools at once
-  # @param tools [Array<MCP::Tool>] The tools to register
-  # @return [Array<MCP::Tool>] The registered tools
+  # @param tools [Array<FastMcp::Tool>] The tools to register
+  # @return [Array<FastMcp::Tool>] The registered tools
   def self.register_tools(*tools)
-    self.server ||= MCP::Server.new(name: 'mcp-server', version: '1.0.0')
+    self.server ||= FastMcp::Server.new(name: 'mcp-server', version: '1.0.0')
     self.server.register_tools(*tools)
   end
 
   # Register a resource with the MCP server
-  # @param resource [MCP::Resource] The resource to register
-  # @return [MCP::Resource] The registered resource
+  # @param resource [FastMcp::Resource] The resource to register
+  # @return [FastMcp::Resource] The registered resource
   def self.register_resource(resource)
-    self.server ||= MCP::Server.new(name: 'mcp-server', version: '1.0.0')
+    self.server ||= FastMcp::Server.new(name: 'mcp-server', version: '1.0.0')
     self.server.register_resource(resource)
   end
 
   # Register multiple resources at once
-  # @param resources [Array<MCP::Resource>] The resources to register
-  # @return [Array<MCP::Resource>] The registered resources
+  # @param resources [Array<FastMcp::Resource>] The resources to register
+  # @return [Array<FastMcp::Resource>] The registered resources
   def self.register_resources(*resources)
-    self.server ||= MCP::Server.new(name: 'mcp-server', version: '1.0.0')
+    self.server ||= FastMcp::Server.new(name: 'mcp-server', version: '1.0.0')
     self.server.register_resources(*resources)
   end
 
@@ -126,7 +122,7 @@ module FastMcp
   # @option options [Boolean] :authenticate Whether to use authentication
   # @option options [String] :auth_token The authentication token
   # @yield [server] A block to configure the server
-  # @yieldparam server [MCP::Server] The server to configure
+  # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
   def self.mount_in_rails(app, options = {})
     # Default options
@@ -138,14 +134,14 @@ module FastMcp
 
     options[:logger] = logger
     # Create or get the server
-    self.server = MCP::Server.new(name: name, version: version, logger: logger)
+    self.server = FastMcp::Server.new(name: name, version: version, logger: logger)
     yield self.server if block_given?
 
     # Choose the right middleware based on authentication
     self.server.transport_klass = if authenticate
-                                    MCP::Transports::AuthenticatedRackTransport
+                                    FastMcp::Transports::AuthenticatedRackTransport
                                   else
-                                    MCP::Transports::RackTransport
+                                    FastMcp::Transports::RackTransport
                                   end
 
     # Insert the middleware in the Rails middleware stack

@@ -2,36 +2,36 @@
 
 require 'spec_helper'
 
-RSpec.describe MCP::Resource do
-  let(:server) { MCP::Server.new(name: 'test-server', version: '1.0.0') }
+RSpec.describe FastMcp::Resource do
+  let(:server) { FastMcp::Server.new(name: 'test-server', version: '1.0.0') }
 
   describe 'class methods' do
     it 'allows setting and getting uri' do
-      resource_class = Class.new(MCP::Resource)
+      resource_class = Class.new(FastMcp::Resource)
       resource_class.uri('test/resource')
       expect(resource_class.uri).to eq('test/resource')
     end
 
     it 'allows setting and getting resource_name' do
-      resource_class = Class.new(MCP::Resource)
+      resource_class = Class.new(FastMcp::Resource)
       resource_class.resource_name('Test Resource')
       expect(resource_class.resource_name).to eq('Test Resource')
     end
 
     it 'allows setting and getting description' do
-      resource_class = Class.new(MCP::Resource)
+      resource_class = Class.new(FastMcp::Resource)
       resource_class.description('A test resource')
       expect(resource_class.description).to eq('A test resource')
     end
 
     it 'allows setting and getting mime_type' do
-      resource_class = Class.new(MCP::Resource)
+      resource_class = Class.new(FastMcp::Resource)
       resource_class.mime_type('text/plain')
       expect(resource_class.mime_type).to eq('text/plain')
     end
 
     it 'inherits attributes from parent class' do
-      parent_class = Class.new(MCP::Resource) do
+      parent_class = Class.new(FastMcp::Resource) do
         description "A base resource class"
         mime_type "text/plain"
       end
@@ -50,17 +50,17 @@ RSpec.describe MCP::Resource do
 
   describe 'instance methods' do
     it 'requires implementing content method in subclasses' do
-      resource_class = Class.new(MCP::Resource)
+      resource_class = Class.new(FastMcp::Resource)
       expect { resource_class.instance.content }.to raise_error(NotImplementedError)
     end
 
     it 'determines if content is binary based on mime_type' do
-      text_resource = Class.new(MCP::Resource) do
+      text_resource = Class.new(FastMcp::Resource) do
         mime_type 'text/plain'
         def content; 'text'; end
       end
 
-      binary_resource = Class.new(MCP::Resource) do
+      binary_resource = Class.new(FastMcp::Resource) do
         mime_type 'image/png'
         def content; 'binary data'; end
       end
@@ -70,7 +70,7 @@ RSpec.describe MCP::Resource do
     end
 
     it 'provides metadata as a hash' do
-      resource = Class.new(MCP::Resource) do
+      resource = Class.new(FastMcp::Resource) do
         uri 'test/resource'
         resource_name 'Test Resource'
         description 'A test resource'
@@ -88,7 +88,7 @@ RSpec.describe MCP::Resource do
     end
 
     it 'provides contents with text for non-binary resources' do
-      resource = Class.new(MCP::Resource) do
+      resource = Class.new(FastMcp::Resource) do
         uri 'test/resource'
         mime_type 'text/plain'
         def content; 'test content'; end
@@ -100,7 +100,7 @@ RSpec.describe MCP::Resource do
     end
 
     it 'provides contents with blob for binary resources' do
-      resource = Class.new(MCP::Resource) do
+      resource = Class.new(FastMcp::Resource) do
         uri 'test/resource'
         mime_type 'image/png'
         def content; 'binary data'; end
@@ -114,7 +114,7 @@ RSpec.describe MCP::Resource do
 
   describe 'integration with server' do
     let(:counter_resource_class) do
-      Class.new(MCP::Resource) do
+      Class.new(FastMcp::Resource) do
         uri 'file://counter.txt'
         resource_name 'Counter'
         description 'A simple counter resource'
@@ -127,7 +127,7 @@ RSpec.describe MCP::Resource do
     end
 
     let(:users_resource_class) do
-      Class.new(MCP::Resource) do
+      Class.new(FastMcp::Resource) do
         uri 'file://users.json'
         resource_name 'Users'
         description 'List of users'
@@ -148,7 +148,7 @@ RSpec.describe MCP::Resource do
       expect(server.resources).to have_key('file://counter.txt')
       
       resource = server.resources['file://counter.txt']
-      expect(resource.ancestors).to include(MCP::Resource)
+      expect(resource.ancestors).to include(FastMcp::Resource)
       expect(resource.uri).to eq('file://counter.txt')
       expect(resource.resource_name).to eq('Counter')
       expect(resource.description).to eq('A simple counter resource')
@@ -166,7 +166,7 @@ RSpec.describe MCP::Resource do
     it 'allows reading registered resources through the server' do
       server.register_resource(users_resource_class)
       resource = server.read_resource('file://users.json')
-      expect(resource.ancestors).to include(MCP::Resource)
+      expect(resource.ancestors).to include(FastMcp::Resource)
       expect(resource.uri).to eq('file://users.json')
       expect(resource.resource_name).to eq('Users')
       expect(JSON.parse(resource.instance.content).size).to eq(2)
@@ -175,7 +175,7 @@ RSpec.describe MCP::Resource do
 
   describe 'resource with dynamic content' do
     let(:weather_resource_class) do
-      Class.new(MCP::Resource) do
+      Class.new(FastMcp::Resource) do
         uri 'weather'
         resource_name 'Weather'
         description 'Current weather conditions'
@@ -204,7 +204,7 @@ RSpec.describe MCP::Resource do
 
   describe 'resource update_content method' do
     let(:counter_resource_class) do
-      Class.new(MCP::Resource) do
+      Class.new(FastMcp::Resource) do
         uri 'counter'
         resource_name 'Counter'
         description 'A counter resource'
@@ -238,9 +238,9 @@ RSpec.describe MCP::Resource do
       allow(File).to receive(:read).and_return('file content')
       allow(File).to receive(:basename).and_return('test.txt')
       
-      resource = MCP::Resource.from_file('test.txt')
+      resource = FastMcp::Resource.from_file('test.txt')
       
-      expect(resource.ancestors).to include(MCP::Resource)
+      expect(resource.ancestors).to include(FastMcp::Resource)
       expect(resource.uri).to match(/test\.txt$/)
       expect(resource.resource_name).to eq('test.txt')
       expect(resource.mime_type).to eq('text/plain')
@@ -252,7 +252,7 @@ RSpec.describe MCP::Resource do
       allow(File).to receive(:read).and_return('file content')
       allow(File).to receive(:basename).and_return('test.json')
       
-      resource = MCP::Resource.from_file('test.json')
+      resource = FastMcp::Resource.from_file('test.json')
       
       expect(resource.mime_type).to eq('application/json')
     end
@@ -262,7 +262,7 @@ RSpec.describe MCP::Resource do
       allow(File).to receive(:read).and_return('file content')
       allow(File).to receive(:basename).and_return('test.txt')
       
-      resource = MCP::Resource.from_file('test.txt', name: 'Custom Name', description: 'Custom description')
+      resource = FastMcp::Resource.from_file('test.txt', name: 'Custom Name', description: 'Custom description')
       
       expect(resource.resource_name).to eq('Custom Name')
       expect(resource.description).to eq('Custom description')

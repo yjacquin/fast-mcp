@@ -2,7 +2,7 @@
 
 require_relative 'rack_transport'
 
-module MCP
+module FastMcp
   module Transports
     class AuthenticatedRackTransport < RackTransport
       def initialize(app, server, options = {})

@@ -5,7 +5,7 @@ require 'securerandom'
 require 'rack'
 require_relative 'base_transport'
 
-module MCP
+module FastMcp
   module Transports
     # Rack middleware transport for MCP
     # This transport can be mounted in any Rack-compatible web framework
@@ -337,10 +337,10 @@ module MCP
 
         while @running && !io.closed?
           begin
-            ping_count = send_keep_alive_ping(io, client_id, ping_count, max_ping_count)
-            break if ping_count >= max_ping_count
+            # ping_count = send_keep_alive_ping(io, client_id, ping_count, max_ping_count)
+            # break if ping_count >= max_ping_count
 
-            sleep ping_interval
+            # sleep ping_interval
           rescue Errno::EPIPE, IOError => e
             # Broken pipe or IO error - client disconnected
             @logger.error("SSE connection error for client #{client_id}: #{e.message}")

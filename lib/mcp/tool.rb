@@ -62,7 +62,7 @@ module Dry
   end
 end
 
-module MCP
+module FastMcp
   # Main Tool class that represents an MCP Tool
   class Tool
     class InvalidArgumentsError < StandardError; end
@@ -794,7 +794,7 @@ module MCP
 end
 
 # Example
-# class ExampleTool < MCP::Tool
+# class ExampleTool < FastMcp::Tool
 #   description 'An example tool'
 
 #   arguments do

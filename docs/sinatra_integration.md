@@ -30,7 +30,7 @@ require 'sinatra'
 require 'fast_mcp'
 
 # Create the MCP server
-mcp_server = MCP::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
+mcp_server = FastMcp::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
 
 # Define your tools
 class ExampleTool < Mcp::Tool
@@ -45,7 +45,7 @@ class ExampleTool < Mcp::Tool
 end
 
 # Register resources
-class Counter < MCP::Resource
+class Counter < FastMcp::Resource
   uri "example/counter"
   resource_name "Counter",
   description "A simple counter resource"
@@ -64,7 +64,7 @@ end
 
 
 # Use the MCP middleware
-use MCP::Transports::RackTransport, server
+use FastMcp::Transports::RackTransport, server
 
 # Define your Sinatra routes
 get '/' do
@@ -83,7 +83,7 @@ require 'sinatra'
 require 'fast_mcp'
 
 # Create the MCP server
-mcp_server = MCP::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
+mcp_server = FastMcp::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
 
 # Define your tools
 class ExampleTool < Mcp::Tool
@@ -98,7 +98,7 @@ class ExampleTool < Mcp::Tool
 end
 
 # Register resources
-class Counter < MCP::Resource
+class Counter < FastMcp::Resource
   uri "example/counter"
   resource_name "Counter",
   description "A simple counter resource"
@@ -117,7 +117,7 @@ end
 
 
 # Use the MCP middleware
-use MCP::Transports::AuthenticatedRackTransport, server
+use FastMcp::Transports::AuthenticatedRackTransport, server
 
 # Define your Sinatra routes
 get '/' do
@@ -152,7 +152,7 @@ use FastMcp.rack_middleware, { name: 'sinatra-mcp-server', version: '1.0.0'} do 
   server.register_tool(tool)
   
   # Register resources
-  counter_resource = Class.new(MCP::Resource) do
+  counter_resource = Class.new(FastMcp::Resource) do
     uri "example/counter"
     resource_name "Counter",
     description "A simple counter resource"
@@ -253,7 +253,7 @@ use MCP.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server
   end
   
   # Register a resource that uses ActiveRecord models
-  server.register_resource(MCP::Resource.new(
+  server.register_resource(FastMcp::Resource.new(
     uri: "data/users",
     name: "Users",
     description: "List of all users",
@@ -279,7 +279,7 @@ class User < ActiveRecord::Base
 end
 
 # Create the MCP server
-mcp_server = MCP::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
+mcp_server = FastMcp::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
 
 class Users < Mcp::Resource
   uri "data/users"
@@ -309,7 +309,7 @@ mcp_server.register_resource(Users)
 mcp_server.register_tool(CreateUserTool)
 
 # Use the MCP middleware
-use MCP::Transports::RackTransport, mcp_server
+use FastMcp::Transports::RackTransport, mcp_server
 
 
 ## Deployment Considerations
