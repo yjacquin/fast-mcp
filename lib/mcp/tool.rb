@@ -68,6 +68,8 @@ module MCP
     class InvalidArgumentsError < StandardError; end
 
     class << self
+      attr_accessor :server
+
       def arguments(&block)
         @input_schema = Dry::Schema.JSON(&block)
       end
@@ -98,6 +100,10 @@ module MCP
         compiler = SchemaCompiler.new
         compiler.process(@input_schema)
       end
+    end
+
+    def notify_resource_updated(uri)
+      self.class.server.notify_resource_updated(uri)
     end
 
     def call_with_schema_validation!(**args)

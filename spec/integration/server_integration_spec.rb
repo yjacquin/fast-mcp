@@ -143,10 +143,10 @@ RSpec.describe 'MCP Server Integration' do
       expect(io_as_json['id']).to eq(1)
     end
 
-    it 'updates resources' do
+    it 'notifies subscribers about resource updates' do
       # First update the resource
       new_content = JSON.generate({ count: 1 })
-      server.update_resource('test/counter', new_content)
+      server.notify_resource_updated('test/counter')
 
       # Then read it to verify the update
       request = { jsonrpc: '2.0', method: 'resources/read', params: { uri: 'test/counter' }, id: 1 }

@@ -4,13 +4,24 @@
 # https://modelcontextprotocol.io/introduction
 
 # Define the MCP module
-module MCP
+module FastMcp
+  class << self
+    attr_accessor :server
+  end
 end
+
+MCP = FastMcp
 
 # Require the core components
 require_relative 'mcp/tool'
 require_relative 'mcp/server'
 require_relative 'mcp/resource'
+# require_relative 'mcp/protocol_controller' if defined?(ActionController::Base)
+require_relative 'mcp/engine' if defined?(Rails::Engine)
+require_relative 'mcp/railtie' if defined?(Rails::Railtie)
+
+# Load generators if Rails is available
+require_relative 'generators/fast_mcp/install/install_generator' if defined?(Rails::Generators)
 
 # Require all transport files
 require_relative 'mcp/transports/base_transport'
@@ -22,7 +33,7 @@ end
 require_relative 'mcp/version'
 
 # Convenience method to create a Rack middleware
-module MCP
+module FastMcp
   # Create a Rack middleware for the MCP server
   # @param app [#call] The Rack application
   # @param options [Hash] Options for the middleware
@@ -44,6 +55,9 @@ module MCP
     # Store the server in the Sinatra settings if available
     app.settings.set(:mcp_server, server) if app.respond_to?(:settings) && app.settings.respond_to?(:mcp_server=)
 
+    # Store the server in the FastMcp module
+    self.server = server
+
     server.start_rack(app, options)
   end
 
@@ -64,6 +78,83 @@ module MCP
     server = MCP::Server.new(name: name, version: version, logger: logger)
     yield server if block_given?
 
+    # Store the server in the FastMcp module
+    self.server = server
+
     server.start_authenticated_rack(app, options)
+  end
+
+  # Register a tool with the MCP server
+  # @param tool [MCP::Tool] The tool to register
+  # @return [MCP::Tool] The registered tool
+  def self.register_tool(tool)
+    self.server ||= MCP::Server.new(name: 'mcp-server', version: '1.0.0')
+    self.server.register_tool(tool)
+  end
+
+  # Register multiple tools at once
+  # @param tools [Array<MCP::Tool>] The tools to register
+  # @return [Array<MCP::Tool>] The registered tools
+  def self.register_tools(*tools)
+    self.server ||= MCP::Server.new(name: 'mcp-server', version: '1.0.0')
+    self.server.register_tools(*tools)
+  end
+
+  # Register a resource with the MCP server
+  # @param resource [MCP::Resource] The resource to register
+  # @return [MCP::Resource] The registered resource
+  def self.register_resource(resource)
+    self.server ||= MCP::Server.new(name: 'mcp-server', version: '1.0.0')
+    self.server.register_resource(resource)
+  end
+
+  # Register multiple resources at once
+  # @param resources [Array<MCP::Resource>] The resources to register
+  # @return [Array<MCP::Resource>] The registered resources
+  def self.register_resources(*resources)
+    self.server ||= MCP::Server.new(name: 'mcp-server', version: '1.0.0')
+    self.server.register_resources(*resources)
+  end
+
+  # Mount the MCP middleware in a Rails application
+  # @param app [Rails::Application] The Rails application
+  # @param options [Hash] Options for the middleware
+  # @option options [String] :name The name of the server
+  # @option options [String] :version The version of the server
+  # @option options [String] :path_prefix The path prefix for the MCP endpoints
+  # @option options [Logger] :logger The logger to use
+  # @option options [Boolean] :authenticate Whether to use authentication
+  # @option options [String] :auth_token The authentication token
+  # @yield [server] A block to configure the server
+  # @yieldparam server [MCP::Server] The server to configure
+  # @return [#call] The Rack middleware
+  def self.mount_in_rails(app, options = {})
+    # Default options
+    name = options.delete(:name) || app.class.module_parent_name.underscore.dasherize
+    version = options.delete(:version) || '1.0.0'
+    logger = options[:logger] || Rails.logger
+    path_prefix = options.delete(:path_prefix) || '/mcp'
+    authenticate = options.delete(:authenticate) || false
+
+    options[:logger] = logger
+    # Create or get the server
+    self.server = MCP::Server.new(name: name, version: version, logger: logger)
+    yield self.server if block_given?
+
+    # Choose the right middleware based on authentication
+    self.server.transport_klass = if authenticate
+                                    MCP::Transports::AuthenticatedRackTransport
+                                  else
+                                    MCP::Transports::RackTransport
+                                  end
+
+    # Insert the middleware in the Rails middleware stack
+    app.middleware.use self.server.transport_klass, self.server, options.merge(path_prefix: path_prefix)
+  end
+
+  # Notify the server that a resource has been updated
+  # @param uri [String] The URI of the resource
+  def self.notify_resource_updated(uri)
+    self.server.notify_resource_updated(uri)
   end
 end
