@@ -38,10 +38,10 @@ Tools are particularly useful for AI models, as they provide a way for models to
 
 ### Basic Tool Definition
 
-To define a tool, create a class that inherits from `MCP::Tool`:
+To define a tool, create a class that inherits from `FastMcp::Tool`:
 
 ```ruby
-class HelloTool < MCP::Tool
+class HelloTool < FastMcp::Tool
   description "Say hello to someone"
   
   def call(**_args)
@@ -50,7 +50,7 @@ class HelloTool < MCP::Tool
 end
 
 # Create a server
-server = MCP::Server.new(name: 'example-server', version: '1.0.0')
+server = FastMcp::Server.new(name: 'example-server', version: '1.0.0')
 
 # Register the tool with the server
 server.register_tool(HelloTool)
@@ -67,7 +67,7 @@ When defining a tool class, you can:
 To define arguments for a tool, use the `arguments` class method with a block using Dry::Schema syntax:
 
 ```ruby
-class GreetTool < MCP::Tool
+class GreetTool < FastMcp::Tool
   description "Greet a person"
   
   arguments do
@@ -104,7 +104,7 @@ Fast MCP supports the following argument types using Dry::Schema predicates:
 Example with different types:
 
 ```ruby
-class ProcessDataTool < MCP::Tool
+class ProcessDataTool < FastMcp::Tool
   description "Process various types of data"
   
   arguments do
@@ -141,7 +141,7 @@ Fast MCP automatically validates arguments based on the Dry::Schema definition. 
 You can also add custom validation in the `call` method:
 
 ```ruby
-class DivideTool < MCP::Tool
+class DivideTool < FastMcp::Tool
   description "Divide two numbers"
   
   arguments do
@@ -163,7 +163,7 @@ end
 You can specify default values in the method parameters of the `call` method:
 
 ```ruby
-class RepeatTool < MCP::Tool
+class RepeatTool < FastMcp::Tool
   description "Repeat a string multiple times"
   
   arguments do
@@ -184,7 +184,7 @@ end
 To call a tool from a client:
 
 ```ruby
-client = MCP::Client.new(name: 'example-client', version: '1.0.0')
+client = FastMcp::Client.new(name: 'example-client', version: '1.0.0')
 client.connect('ruby server.rb')
 
 # Call a tool with arguments
@@ -201,7 +201,7 @@ puts result  # Outputs: Hello, world!
 Tools can call other tools through the server instance:
 
 ```ruby
-class GreetMultipleTool < MCP::Tool
+class GreetMultipleTool < FastMcp::Tool
   description "Greet multiple people"
   
   # Class variable to hold server instance
@@ -244,7 +244,7 @@ server.register_tool(GreetMultipleTool)
 You can organize tools into categories using instance variables or metadata:
 
 ```ruby
-class AddTool < MCP::Tool
+class AddTool < FastMcp::Tool
   description "Add two numbers"
   
   class << self
@@ -263,7 +263,7 @@ class AddTool < MCP::Tool
   end
 end
 
-class SubtractTool < MCP::Tool
+class SubtractTool < FastMcp::Tool
   description "Subtract two numbers"
   
   class << self
@@ -288,7 +288,7 @@ end
 You can add metadata to tools using class methods:
 
 ```ruby
-class WeatherTool < MCP::Tool
+class WeatherTool < FastMcp::Tool
   description "Get the weather for a location"
   
   class << self
@@ -317,7 +317,7 @@ end
 You can implement permission checks:
 
 ```ruby
-class AdminActionTool < MCP::Tool
+class AdminActionTool < FastMcp::Tool
   description "Perform an admin action"
   
   class << self
@@ -359,7 +359,7 @@ Here are some best practices for working with MCP tools:
 Here's a more complex example of a tool that interacts with resources:
 
 ```ruby
-class IncrementCounterTool < MCP::Tool
+class IncrementCounterTool < FastMcp::Tool
   description "Increment a counter resource"
   
   # Class variable to hold server instance

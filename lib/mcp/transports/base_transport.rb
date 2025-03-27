@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module MCP
+module FastMcp
   module Transports
     # Base class for all MCP transports
     # This defines the interface that all transports must implement

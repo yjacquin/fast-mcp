@@ -9,9 +9,9 @@ require_relative 'transports/rack_transport'
 require_relative 'transports/authenticated_rack_transport'
 require_relative 'logger'
 
-module MCP
+module FastMcp
   class Server
-    attr_reader :name, :version, :tools, :resources, :logger, :transport, :capabilities
+    attr_reader :name, :version, :tools, :resources, :capabilities
 
     DEFAULT_CAPABILITIES = {
       resources: {
@@ -23,7 +23,7 @@ module MCP
       }
     }.freeze
 
-    def initialize(name:, version:, logger: MCP::Logger.new, capabilities: {})
+    def initialize(name:, version:, logger: FastMcp::Logger.new, capabilities: {})
       @name = name
       @version = version
       @tools = {}
@@ -32,13 +32,17 @@ module MCP
       @logger = logger
       @logger.level = Logger::INFO
       @request_id = 0
+      @transport_klass = nil
       @transport = nil
       @capabilities = DEFAULT_CAPABILITIES.dup
 
       # Merge with provided capabilities
       @capabilities.merge!(capabilities) if capabilities.is_a?(Hash)
     end
+    attr_accessor :transport, :transport_klass, :logger
 
+    # Register multiple tools at once
+    # @param tools [Array<Tool>] Tools to register
     def register_tools(*tools)
       tools.each do |tool|
         register_tool(tool)
@@ -49,6 +53,7 @@ module MCP
     def register_tool(tool)
       @tools[tool.tool_name] = tool
       @logger.info("Registered tool: #{tool.tool_name}")
+      tool.server = self
     end
 
     # Register multiple resources at once
@@ -63,7 +68,7 @@ module MCP
     def register_resource(resource)
       @resources[resource.uri] = resource
       @logger.info("Registered resource: #{resource.name} (#{resource.uri})")
-
+      resource.server = self
       # Notify subscribers about the list change
       notify_resource_list_changed if @transport
 
@@ -93,7 +98,8 @@ module MCP
       @logger.info("Available resources: #{@resources.keys.join(', ')}")
 
       # Use STDIO transport by default
-      @transport = MCP::Transports::StdioTransport.new(self, logger: @logger)
+      @transport_klass = FastMcp::Transports::StdioTransport
+      @transport = @transport_klass.new(self, logger: @logger)
       @transport.start
     end
 
@@ -104,7 +110,8 @@ module MCP
       @logger.info("Available resources: #{@resources.keys.join(', ')}")
 
       # Use Rack transport
-      @transport = MCP::Transports::RackTransport.new(self, app, options.merge(logger: @logger))
+      transport_klass = FastMcp::Transports::RackTransport
+      @transport = transport_klass.new(app, self, options.merge(logger: @logger))
       @transport.start
 
       # Return the transport as middleware
@@ -117,7 +124,8 @@ module MCP
       @logger.info("Available resources: #{@resources.keys.join(', ')}")
 
       # Use Rack transport
-      @transport = MCP::Transports::AuthenticatedRackTransport.new(self, app, options.merge(logger: @logger))
+      transport_klass = FastMcp::Transports::AuthenticatedRackTransport
+      @transport = transport_klass.new(app, self, options.merge(logger: @logger))
       @transport.start
 
       # Return the transport as middleware
@@ -180,47 +188,6 @@ module MCP
       end
     end
 
-    # Register a callback for resource updates
-    def on_resource_update(&block)
-      @resource_update_callbacks ||= []
-      callback_id = SecureRandom.uuid
-      @resource_update_callbacks << { id: callback_id, callback: block }
-      callback_id
-    end
-
-    # Remove a resource update callback
-    def remove_resource_update_callback(callback_id)
-      @resource_update_callbacks ||= []
-      @resource_update_callbacks.reject! { |cb| cb[:id] == callback_id }
-    end
-
-    # Update a resource and notify subscribers
-    def update_resource(uri, content)
-      return false unless @resources.key?(uri)
-
-      resource = @resources[uri]
-      resource.instance.content = content
-
-      # Notify subscribers
-      notify_resource_updated(uri) if @transport && @resource_subscriptions.key?(uri)
-
-      # Notify resource update callbacks
-      if @resource_update_callbacks && !@resource_update_callbacks.empty?
-        @resource_update_callbacks.each do |cb|
-          cb[:callback].call(
-            {
-              uri: uri,
-              name: resource.name,
-              mime_type: resource.mime_type,
-              content: content
-            }
-          )
-        end
-      end
-
-      true
-    end
-
     # Read a resource directly
     def read_resource(uri)
       resource = @resources[uri]
@@ -229,13 +196,32 @@ module MCP
       resource
     end
 
+    # Notify subscribers about a resource update
+    def notify_resource_updated(uri)
+      @logger.warn("Notifying subscribers about resource update: #{uri}, #{@resource_subscriptions.inspect}")
+      return unless @client_initialized && @resource_subscriptions.key?(uri)
+
+      resource = @resources[uri]
+      notification = {
+        jsonrpc: '2.0',
+        method: 'notifications/resources/updated',
+        params: {
+          uri: uri,
+          name: resource.name,
+          mimeType: resource.mime_type
+        }
+      }
+
+      @transport.send_message(notification)
+    end
+
     private
 
     PROTOCOL_VERSION = '2024-11-05'
 
     def handle_initialize(params, id)
-      params['protocolVersion']
-      client_capabilities = params['capabilities'] || {}
+      # Store client capabilities for later use
+      @client_capabilities = params['capabilities'] || {}
       client_info = params['clientInfo'] || {}
 
       # Log client information
@@ -253,9 +239,6 @@ module MCP
       }
 
       @logger.info("Server response: #{response.inspect}")
-
-      # Store client capabilities for later use
-      @client_capabilities = client_capabilities
 
       send_result(response, id)
     end
@@ -290,8 +273,9 @@ module MCP
       # The client is now ready for normal operation
       # No response needed for notifications
       @client_initialized = true
-      @logger.set_client_initialized
       @logger.info('Client initialized, beginning normal operation')
+
+      nil
     end
 
     # Handle tools/list request
@@ -324,7 +308,7 @@ module MCP
 
         # Format and send the result
         send_formatted_result(result, id)
-      rescue MCP::Tool::InvalidArgumentsError => e
+      rescue FastMcp::Tool::InvalidArgumentsError => e
         @logger.error("Invalid arguments for tool #{tool_name}: #{e.message}")
         send_error_result(e.message, id)
       rescue StandardError => e
@@ -410,24 +394,6 @@ module MCP
       send_result({ unsubscribed: true }, id)
     end
 
-    # Notify subscribers about a resource update
-    def notify_resource_updated(uri)
-      return unless @client_initialized && @resource_subscriptions.key?(uri)
-
-      resource = @resources[uri]
-      notification = {
-        jsonrpc: '2.0',
-        method: 'notifications/resources/updated',
-        params: {
-          uri: uri,
-          name: resource.name,
-          mimeType: resource.mime_type
-        }
-      }
-
-      @transport.send_message(notification)
-    end
-
     # Notify clients about resource list changes
     def notify_resource_list_changed
       return unless @client_initialized
@@ -470,10 +436,10 @@ module MCP
     def send_response(response)
       if @transport
         @logger.info("Sending response: #{response.inspect}")
-        @logger.info("Transport: #{@transport.inspect}")
         @transport.send_message(response)
       else
         @logger.warn("No transport available to send response: #{response.inspect}")
+        @logger.warn("Transport: #{@transport.inspect}, transport_klass: #{@transport_klass.inspect}")
       end
     end
 

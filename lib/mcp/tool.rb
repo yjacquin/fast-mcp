@@ -62,12 +62,14 @@ module Dry
   end
 end
 
-module MCP
+module FastMcp
   # Main Tool class that represents an MCP Tool
   class Tool
     class InvalidArgumentsError < StandardError; end
 
     class << self
+      attr_accessor :server
+
       def arguments(&block)
         @input_schema = Dry::Schema.JSON(&block)
       end
@@ -98,6 +100,10 @@ module MCP
         compiler = SchemaCompiler.new
         compiler.process(@input_schema)
       end
+    end
+
+    def notify_resource_updated(uri)
+      self.class.server.notify_resource_updated(uri)
     end
 
     def call_with_schema_validation!(**args)
@@ -788,7 +794,7 @@ module MCP
 end
 
 # Example
-# class ExampleTool < MCP::Tool
+# class ExampleTool < FastMcp::Tool
 #   description 'An example tool'
 
 #   arguments do

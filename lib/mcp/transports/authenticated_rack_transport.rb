@@ -2,10 +2,10 @@
 
 require_relative 'rack_transport'
 
-module MCP
+module FastMcp
   module Transports
     class AuthenticatedRackTransport < RackTransport
-      def initialize(server, app, options = {})
+      def initialize(app, server, options = {})
         super
 
         @auth_token = options[:auth_token]
