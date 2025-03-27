@@ -254,7 +254,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         expect(result[0]).to eq(200)
         expect(result[1]['Content-Type']).to eq('application/json')
-        expect(result[2].first).to eq('{"jsonrpc":"2.0","result":{},"id":1}')
+        expect(result[2]).to eq('{"jsonrpc":"2.0","result":{},"id":1}')
       end
 
       it 'handles errors in JSON-RPC requests' do
