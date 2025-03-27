@@ -54,7 +54,7 @@ class HelloWorldResource < FastMcp::Resource
   description 'A simple hello world program'
   mime_type 'text/plain'
 
-  def default_content
+  def content
     'puts "Hello, world!"'
   end
 end
@@ -66,8 +66,8 @@ app = lambda do |_env|
 end
 
 # Create the MCP middleware
-mcp_app = MCP.authenticated_rack_middleware(app, name: 'example-mcp-server', version: '1.0.0',
-                                                 auth_token: 'secret') do |server|
+mcp_app = FastMcp.authenticated_rack_middleware(app, name: 'example-mcp-server', version: '1.0.0',
+                                                     auth_token: 'secret') do |server|
   # Register tool classes
   server.register_tools(GreetTool, CalculateTool)
 
