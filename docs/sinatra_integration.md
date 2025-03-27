@@ -33,26 +33,91 @@ require 'fast_mcp'
 mcp_server = MCP::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
 
 # Define your tools
-mcp_server.tool "example_tool" do
+class ExampleTool < Mcp::Tool
   description "An example tool"
-  argument :input, description: "Input value", type: :string, required: true
+  arguments  do
+   required(:input).filled(:string).description("Input value")
+  end
   
-  call do |args|
-    "You provided: #{args[:input]}"
+  def call(input:)
+    "You provided: #{input}"
   end
 end
 
 # Register resources
-mcp_server.register_resource(MCP::Resource.new(
-  uri: "example/counter",
-  name: "Counter",
-  description: "A simple counter resource",
-  mime_type: "application/json",
-  content: JSON.generate({ count: 0 })
-))
+class Counter < MCP::Resource
+  uri "example/counter"
+  resource_name "Counter",
+  description "A simple counter resource"
+  mime_type "application/json"
+
+  def initialize
+    @count = 0
+  end
+
+  attr_accessor :count
+
+  def content
+    JSON.generate({ count: @count })
+  end
+end
+
 
 # Use the MCP middleware
-use MCP::Transports::RackTransport.new(mcp_server)
+use MCP::Transports::RackTransport, server
+
+# Define your Sinatra routes
+get '/' do
+  'Hello, world!'
+end
+```
+
+
+### Using Authenticated Rack Middleware
+
+Add the MCP authenticated rack middleware to your Sinatra application:
+
+```ruby
+# app.rb
+require 'sinatra'
+require 'fast_mcp'
+
+# Create the MCP server
+mcp_server = MCP::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
+
+# Define your tools
+class ExampleTool < Mcp::Tool
+  description "An example tool"
+  arguments  do
+   required(:input).filled(:string).description("Input value")
+  end
+  
+  def call(input:)
+    "You provided: #{input}"
+  end
+end
+
+# Register resources
+class Counter < MCP::Resource
+  uri "example/counter"
+  resource_name "Counter",
+  description "A simple counter resource"
+  mime_type "application/json"
+
+  def initialize
+    @count = 0
+  end
+
+  attr_accessor :count
+
+  def content
+    JSON.generate({ count: @count })
+  end
+end
+
+
+# Use the MCP middleware
+use MCP::Transports::AuthenticatedRackTransport, server
 
 # Define your Sinatra routes
 get '/' do
@@ -70,25 +135,41 @@ require 'sinatra'
 require 'fast_mcp'
 
 # Use the MCP middleware with a configuration block
-use MCP.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server|
-  # Define your tools
-  server.tool "example_tool" do
+use FastMcp.rack_middleware, { name: 'sinatra-mcp-server', version: '1.0.0'} do |server|
+  # Define your tools, here with anonymous classes
+  tool = Class.new(Mcp::Tool) do
     description "An example tool"
-    argument :input, description: "Input value", type: :string, required: true
+    tool_name "Example"
+
+    arguments  do
+      required(:input).filled(:string).description("Input value")
+    end
     
-    call do |args|
-      "You provided: #{args[:input]}"
+    def call(input:)
+      "You provided: #{input}"
     end
   end
+  server.register_tool(tool)
   
   # Register resources
-  server.register_resource(MCP::Resource.new(
-    uri: "example/counter",
-    name: "Counter",
-    description: "A simple counter resource",
-    mime_type: "application/json",
-    content: JSON.generate({ count: 0 })
-  ))
+  counter_resource = Class.new(MCP::Resource) do
+    uri "example/counter"
+    resource_name "Counter",
+    description "A simple counter resource"
+    mime_type "application/json"
+
+    def initialize
+      @count = 0
+    end
+
+    attr_accessor :count
+
+    def content
+      JSON.generate({ count: @count })
+    end
+  end
+
+  server.register_resource(counter_resource)
 end
 
 # Define your Sinatra routes
@@ -122,14 +203,16 @@ set :api_key, ENV['API_KEY']
 # Use the MCP middleware
 use MCP.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server|
   # Define a tool that uses Sinatra helpers and settings
-  server.tool "process_data" do
+  class ProcessDataTool < Mcp::Tool
     description "Process data using Sinatra helpers"
-    argument :input, description: "Input data", type: :string, required: true
+    arguments do
+      required(:input).filled(:string).description("Input data")
+    end
     
-    call do |args|
+    def call(input:)
       # Access Sinatra helpers and settings
       api_key = settings.api_key
-      formatted_data = helpers.format_data(args[:input])
+      formatted_data = helpers.format_data(input)
       
       # Return the result
       { status: "success", result: formatted_data }
@@ -200,7 +283,7 @@ mcp_server = MCP::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
 
 class Users < Mcp::Resource
   uri "data/users"
-  name "Users"
+  resource_name "Users"
   description "List of all users"
   mime_type "application/json"
   
