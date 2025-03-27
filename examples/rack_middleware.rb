@@ -54,7 +54,7 @@ class HelloWorldResource < FastMcp::Resource
   description 'A simple hello world program'
   mime_type 'text/plain'
 
-  def default_content
+  def content
     'puts "Hello, world!"'
   end
 end

@@ -98,7 +98,7 @@ end
 # Class-based tool for adding a user
 class AddUserTool < FastMcp::Tool
   description 'Add a new user'
-  tool_name 'Add User'
+  tool_name 'add_user'
   arguments do
     required(:name).filled(:string).description("User's name")
     required(:email).filled(:string).description("User's email")
@@ -132,7 +132,7 @@ end
 # Class-based tool for deleting a user
 class DeleteUserTool < FastMcp::Tool
   description 'Delete a user by ID'
-  tool_name 'Delete User'
+  tool_name 'delete_user'
 
   arguments do
     required(:id).filled(:integer).description('User ID to delete')

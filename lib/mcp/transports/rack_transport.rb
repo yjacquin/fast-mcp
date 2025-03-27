@@ -337,10 +337,10 @@ module FastMcp
 
         while @running && !io.closed?
           begin
-            # ping_count = send_keep_alive_ping(io, client_id, ping_count, max_ping_count)
-            # break if ping_count >= max_ping_count
+            ping_count = send_keep_alive_ping(io, client_id, ping_count, max_ping_count)
+            break if ping_count >= max_ping_count
 
-            # sleep ping_interval
+            sleep ping_interval
           rescue Errno::EPIPE, IOError => e
             # Broken pipe or IO error - client disconnected
             @logger.error("SSE connection error for client #{client_id}: #{e.message}")
@@ -433,9 +433,10 @@ module FastMcp
         # Parse the request body
         body = request.body.read
 
-        response = process_message(body)
+        response = process_message(body) || ''
         @logger.info("Response: #{response}")
-        [200, { 'Content-Type' => 'application/json' }, [response]]
+
+        [200, { 'Content-Type' => 'application/json' }, response]
       end
 
       # Return a method not allowed error response

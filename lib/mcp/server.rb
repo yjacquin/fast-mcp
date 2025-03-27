@@ -124,7 +124,8 @@ module FastMcp
       @logger.info("Available resources: #{@resources.keys.join(', ')}")
 
       # Use Rack transport
-      @transport = FastMcp::Transports::AuthenticatedRackTransport.new(self, app, options.merge(logger: @logger))
+      transport_klass = FastMcp::Transports::AuthenticatedRackTransport
+      @transport = transport_klass.new(app, self, options.merge(logger: @logger))
       @transport.start
 
       # Return the transport as middleware
@@ -274,7 +275,7 @@ module FastMcp
       @client_initialized = true
       @logger.info('Client initialized, beginning normal operation')
 
-      @transport.send_message({})
+      nil
     end
 
     # Handle tools/list request
