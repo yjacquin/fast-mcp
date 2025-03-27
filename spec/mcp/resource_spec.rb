@@ -57,12 +57,12 @@ RSpec.describe MCP::Resource do
     it 'determines if content is binary based on mime_type' do
       text_resource = Class.new(MCP::Resource) do
         mime_type 'text/plain'
-        def default_content; 'text'; end
+        def content; 'text'; end
       end
 
       binary_resource = Class.new(MCP::Resource) do
         mime_type 'image/png'
-        def default_content; 'binary data'; end
+        def content; 'binary data'; end
       end
 
       expect(text_resource.instance.binary?).to be false
@@ -75,7 +75,7 @@ RSpec.describe MCP::Resource do
         resource_name 'Test Resource'
         description 'A test resource'
         mime_type 'text/plain'
-        def default_content; 'test content'; end
+        def content; 'test content'; end
       end
 
       metadata = resource.metadata
@@ -91,7 +91,7 @@ RSpec.describe MCP::Resource do
       resource = Class.new(MCP::Resource) do
         uri 'test/resource'
         mime_type 'text/plain'
-        def default_content; 'test content'; end
+        def content; 'test content'; end
       end
 
       contents = resource.instance.contents
@@ -103,7 +103,7 @@ RSpec.describe MCP::Resource do
       resource = Class.new(MCP::Resource) do
         uri 'test/resource'
         mime_type 'image/png'
-        def default_content; 'binary data'; end
+        def content; 'binary data'; end
       end
 
       contents = resource.instance.contents
@@ -120,7 +120,7 @@ RSpec.describe MCP::Resource do
         description 'A simple counter resource'
         mime_type 'text/plain'
 
-        def default_content
+        def content
           '0'
         end
       end
@@ -133,7 +133,7 @@ RSpec.describe MCP::Resource do
         description 'List of users'
         mime_type 'application/json'
 
-        def default_content
+        def content
           JSON.generate([
             { id: 1, name: 'Alice', email: 'alice@example.com' },
             { id: 2, name: 'Bob', email: 'bob@example.com' }
@@ -181,7 +181,7 @@ RSpec.describe MCP::Resource do
         description 'Current weather conditions'
         mime_type 'application/json'
 
-        def default_content
+        def content
           JSON.generate({
             temperature: rand(0..35),
             condition: ['Sunny', 'Cloudy', 'Rainy', 'Snowy'].sample,
@@ -210,9 +210,11 @@ RSpec.describe MCP::Resource do
         description 'A counter resource'
         mime_type 'text/plain'
 
-        def default_content
-          '0'
+        def initialize
+          @content = '0'
         end
+        
+        attr_accessor :content
       end
     end
 
@@ -242,7 +244,7 @@ RSpec.describe MCP::Resource do
       expect(resource.uri).to match(/test\.txt$/)
       expect(resource.resource_name).to eq('test.txt')
       expect(resource.mime_type).to eq('text/plain')
-      expect(resource.instance.default_content).to eq('file content')
+      expect(resource.instance.content).to eq('file content')
     end
 
     it 'detects mime type from file extension' do

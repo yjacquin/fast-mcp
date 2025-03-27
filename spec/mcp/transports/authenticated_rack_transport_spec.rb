@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe MCP::Transports::AuthenticatedRackTransport do
-  let(:server) { instance_double('MCP::Server', logger: Logger.new(nil)) }
+  let(:server) { instance_double(MCP::Server, logger: Logger.new(nil)) }
   let(:app) { ->(_env) { [200, { 'Content-Type' => 'text/plain' }, ['OK']] } }
   let(:logger) { Logger.new(nil) }
   let(:auth_token) { 'valid-token-123' }
@@ -10,8 +10,8 @@ RSpec.describe MCP::Transports::AuthenticatedRackTransport do
 
   let(:transport) do
     described_class.new(
-      server,
       app,
+      server,
       logger: logger,
       auth_token: auth_token,
       auth_header_name: auth_header_name,
@@ -66,9 +66,11 @@ RSpec.describe MCP::Transports::AuthenticatedRackTransport do
           'HTTP_AUTHORIZATION' => "Bearer #{auth_token}"
         }
 
+        expect(server).to receive(:transport=).with(transport)
+
         # The RackTransport class will call server.handle_json_request with the message
         json_response = '{"jsonrpc":"2.0","result":{},"id":1}'
-        allow(server).to receive(:handle_json_request).with(json_message).and_return(json_response)
+        expect(server).to receive(:handle_json_request).with(json_message).and_return(json_response)
 
         # For MCP paths, we don't expect app.call to be invoked
         expect(app).not_to receive(:call)
@@ -97,9 +99,7 @@ RSpec.describe MCP::Transports::AuthenticatedRackTransport do
         env['rack.hijack_io'] = io
         allow(env['rack.hijack']).to receive(:call)
 
-        # Add Thread stub to prevent actual thread creation
-        allow(Thread).to receive(:new).and_yield
-
+        expect(server).to receive(:transport=).with(transport)
         # Since we're testing the auth layer passes to parent, we don't expect app.call
         expect(app).not_to receive(:call)
 
@@ -166,6 +166,7 @@ RSpec.describe MCP::Transports::AuthenticatedRackTransport do
 
         # For exempt paths, the parent auth check is bypassed, but we should expect
         # the parent class to return a 404 for unknown MCP endpoints
+        expect(server).to receive(:transport=).with(transport)
 
         # We expect the app not to be called directly
         expect(app).not_to receive(:call)
@@ -210,8 +211,8 @@ RSpec.describe MCP::Transports::AuthenticatedRackTransport do
 
       it 'handles header with hyphens correctly' do
         custom_transport = described_class.new(
-          server,
           app,
+          server,
           logger: logger,
           auth_token: auth_token,
           auth_header_name: 'X-Custom-Auth'
@@ -229,8 +230,8 @@ RSpec.describe MCP::Transports::AuthenticatedRackTransport do
 
       it 'properly converts hyphenated header names to Rack format' do
         custom_transport = described_class.new(
-          server,
           app,
+          server,
           logger: logger,
           auth_token: auth_token,
           auth_header_name: 'X-Custom-Auth-Token'
@@ -281,7 +282,7 @@ RSpec.describe MCP::Transports::AuthenticatedRackTransport do
     end
 
     context 'with authentication disabled' do
-      let(:transport) { described_class.new(server, app, logger: logger) }
+      let(:transport) { described_class.new(app, server,logger: logger) }
 
       it 'skips authentication when disabled' do
         env = { 'PATH_INFO' => '/not-mcp' }

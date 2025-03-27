@@ -35,16 +35,16 @@ RSpec.describe 'MCP Server Integration' do
       description 'A test counter resource'
       mime_type 'application/json'
 
-
-      def default_content
+      def initialize
         @count = 0
+      end
 
+      def content
         JSON.generate({ count: @count })
       end
 
-      def update_content(new_content)
-        data = JSON.parse(new_content)
-        @count = data['count']
+      def update_count(new_count)
+        @count = new_count
       end
     end
   end
@@ -145,8 +145,8 @@ RSpec.describe 'MCP Server Integration' do
 
     it 'notifies subscribers about resource updates' do
       # First update the resource
-      new_content = JSON.generate({ count: 1 })
-      server.notify_resource_updated('test/counter')
+      new_count = 1
+      counter_resource_class.instance.update_count(new_count)
 
       # Then read it to verify the update
       request = { jsonrpc: '2.0', method: 'resources/read', params: { uri: 'test/counter' }, id: 1 }
@@ -155,7 +155,7 @@ RSpec.describe 'MCP Server Integration' do
       io_response.rewind
       io_as_json = JSON.parse(io_response.read)
       expect(io_as_json['jsonrpc']).to eq('2.0')
-      expect(io_as_json['result']['contents'][0]['text']).to eq(new_content)
+      expect(io_as_json['result']['contents'][0]['text']).to eq(JSON.generate({ count: new_count }))
       expect(io_as_json['id']).to eq(1)
     end
 
