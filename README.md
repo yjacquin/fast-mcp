@@ -75,32 +75,9 @@ server.register_resource(IngredientsResource)
 # Accessing the resource through the server
 server.read_resource("food/popular_ingredients")
 
-# Updating the resource content through the server
-server.update_resource("food/popular_ingredients", JSON.generate({id: 1, name: 'tomato'}))
+# Notify the resource content has been updated
+server.notify_resource_updated("food/popular_ingredients")
 
-
-# Easily integrate with web frameworks
-# config/application.rb (Rails)
-config.middleware.use MCP::RackMiddleware.new(
-  name: 'recipe-ai', 
-  version: '1.0.0'
-) do |server|
-  # Register tools and resources here
-  server.register_tool(GetRecipesTool)
-end
-
-# Secure your AI endpoints
-config.middleware.use MCP::AuthenticatedRackMiddleware.new(
-  name: 'recipe-ai',
-  version: '1.0.0',
-  token: ENV['MCP_AUTH_TOKEN']
-)
-
-# Build real-time applications
-server.on_resource_update do |resource|
-  ActionCable.server.broadcast("recipe_updates", resource.metadata)
-end
-```
 
 ## 📦 Installation
 
@@ -171,20 +148,81 @@ server.start
 #### Rails
 
 ```ruby
-# config/application.rb
-module YourApp
-  class Application < Rails::Application
-    # ...
-    config.middleware.use MCP::RackMiddleware.new(
-      name: 'my-ai-server', 
-      version: '1.0.0'
-    ) do |server|
-      # Register tools and resources here
-      server.register_tool(SummarizeTool)
-    end
+# Generate the FastMcp initializer and directory structure
+rails generate fast_mcp:install
+
+# This will create:
+# - config/initializers/fast_mcp.rb
+# - app/tools/
+# - app/resources/
+```
+
+The initializer will mount the FastMcp middleware in your Rails application with sensible defaults:
+
+```ruby
+# config/initializers/fast_mcp.rb
+FastMcp.mount_in_rails(
+  Rails.application,
+  name: Rails.application.class.module_parent_name.underscore.dasherize,
+  version: '1.0.0',
+  path_prefix: '/mcp',        # This is the default path prefix
+  # authenticate: true,       # Uncomment to enable authentication
+  # auth_token: 'your-token', # Required if authenticate: true
+) do |server|
+  # You can configure the server here if needed
+  # For example, register tools or resources directly
+end
+```
+
+Create tools in `app/tools/`:
+
+```ruby
+# app/tools/summarize_tool.rb
+class Tools::SummarizeTool < MCP::Tool
+  description "Summarize a given text"
+  
+  arguments do
+    required(:text).filled(:string).description("Text to summarize")
+    optional(:max_length).filled(:integer).description("Maximum length of summary")
+  end
+  
+  def call(text:, max_length: 100)
+    # Your summarization logic here
+    text.split('.').first(3).join('.') + '...'
   end
 end
 ```
+
+Create resources in `app/resources/`:
+
+```ruby
+# app/resources/statistics_resource.rb
+class Resources::StatisticsResource < MCP::Resource
+  uri "data/statistics"
+  name "Usage Statistics"
+  description "Current system statistics"
+  mime_type "application/json"
+  
+  def default_content
+    JSON.generate({
+      users_online: 120,
+      queries_per_minute: 250,
+      popular_topics: ["Ruby", "AI", "WebDev"]
+    })
+  end
+  
+  # Required for automatic initialization
+  def self.initialize_singleton(server)
+    server.register_resource(new)
+  end
+end
+```
+
+The FastMcp engine will automatically discover and register:
+- All classes in the `Tools` module that inherit from `MCP::Tool`
+- All classes in the `Resources` module that inherit from `MCP::Resource` and implement the `initialize_singleton` class method
+
+You can access the server instance anywhere in your code with `FastMcp.server`.
 
 ## 🧪 Testing with the inspector
 
@@ -280,7 +318,6 @@ Add your server to your Claude Desktop configuration at:
 - [📚 Resources](docs/resources.md)
 - [🛠️ Tools](docs/tools.md)
 - [🔌 Transports](docs/transports.md)
-- [📘 API Reference](docs/api_reference.md)
 
 ## 💻 Examples
 

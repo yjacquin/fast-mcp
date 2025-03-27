@@ -1,0 +1,104 @@
+# Fast MCP Rails Integration
+
+Fast MCP has been installed in your Rails application!
+
+## What was set up
+
+1. An initializer at `config/initializers/fast_mcp.rb` that configures the Fast MCP middleware
+2. A sample tool in `app/tools/sample_tool.rb`
+3. A sample resource in `app/resources/sample_resource.rb`
+
+## Testing the installation
+
+To test if everything is working:
+
+1. Start your Rails server: 
+   ```
+   rails s
+   ```
+
+2. Visit http://localhost:3000/mcp/tools to see a list of available tools
+
+3. Call the sample tool with: 
+   ```
+   curl -X POST http://localhost:3000/mcp/messages -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"tools.sample","params":{"input":"Hello, world!"},"id":1}'
+   ```
+
+4. View the sample resource:
+   ```
+   curl http://localhost:3000/mcp/resources/examples/sample
+   ```
+
+## How the integration works
+
+The Fast MCP integration with Rails works as follows:
+
+1. The Tools and Resources modules are automatically defined and added to your app's autoload paths
+2. The MCP rack middleware is inserted into your Rails middleware stack via the initializer
+3. Any classes in app/tools/ that inherit from MCP::Tool are automatically registered
+4. Any classes in app/resources/ that inherit from MCP::Resource are automatically registered
+
+## Creating your own tools and resources
+
+### Creating a tool
+
+Create a new tool in `app/tools/your_tool.rb`:
+   
+```ruby
+class Tools::YourTool < MCP::Tool
+  description "Your tool description"
+  
+  arguments do
+    required(:param1).filled(:string).description("Parameter 1")
+  end
+  
+  def call(param1:)
+    # Your logic here
+    "Result: #{param1}"
+  end
+end
+```
+
+### Creating a resource
+
+Create a new resource in `app/resources/your_resource.rb`:
+
+```ruby
+class Resources::YourResource < MCP::Resource
+  uri "your/resource/uri"
+  name "YourResource"
+  description "Your resource description"
+  mime_type "application/json"
+  
+  class << self
+    attr_reader :instance
+  end
+  
+  def self.initialize_singleton(server)
+    @instance = new
+    @server = server
+    server.register_resource(@instance)
+    @instance
+  end
+  
+  def initialize
+    super
+    @data = { your: "data" }
+  end
+  
+  def content
+    JSON.generate(@data)
+  end
+  
+  def update_content(new_content)
+    @data = JSON.parse(new_content)
+  end
+end
+```
+
+Your tools and resources will be automatically discovered and registered by the initializer.
+
+## Documentation
+
+For more information, check out the Fast MCP documentation:
+https://github.com/your-username/fast-mcp 
