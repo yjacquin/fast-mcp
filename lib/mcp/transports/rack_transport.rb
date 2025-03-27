@@ -24,13 +24,13 @@ module MCP
 
       # Start the transport
       def start
-        @logger.info("Starting Rack transport with path prefix: #{@path_prefix}")
+        @logger.debug("Starting Rack transport with path prefix: #{@path_prefix}")
         @running = true
       end
 
       # Stop the transport
       def stop
-        @logger.info('Stopping Rack transport')
+        @logger.debug('Stopping Rack transport')
         @running = false
 
         # Close all SSE connections
@@ -45,7 +45,7 @@ module MCP
       # Send a message to all connected SSE clients
       def send_message(message)
         json_message = message.is_a?(String) ? message : JSON.generate(message)
-        @logger.info("Broadcasting message to #{@sse_clients.size} SSE clients: #{json_message}")
+        @logger.debug("Broadcasting message to #{@sse_clients.size} SSE clients: #{json_message}")
 
         clients_to_remove = []
 
@@ -85,11 +85,11 @@ module MCP
       def call(env)
         request = Rack::Request.new(env)
         path = request.path
-        @logger.info("Rack request path: #{path}")
+        @logger.debug("Rack request path: #{path}")
 
         # Check if the request is for our MCP endpoints
         if path.start_with?(@path_prefix)
-          @logger.info('Setting server transport to self')
+          @logger.debug('Setting server transport to RackTransport')
           @server.transport = self
           handle_mcp_request(request, env)
         else
