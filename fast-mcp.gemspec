@@ -32,5 +32,10 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'json', '~> 2.0'
   spec.add_dependency 'mime-types', '~> 3.4'
 
+  # Conditional dependency for Ruby >= 3.3
+  if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('3.3.0')
+    spec.add_dependency 'base64'
+  end
+
   # Development dependencies are specified in the Gemfile
 end
