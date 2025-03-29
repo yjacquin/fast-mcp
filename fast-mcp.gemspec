@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.email = ['yorickjacquin@gmail.com']
 
   spec.summary = 'A Ruby implementation of the Model Context Protocol.'
-  spec.description = 'A flexible and powerful implementation of the MCP with multiple approaches for defining tools.'
+  spec.description = 'A flexible and powerful implementation of the MCP with tools, resources, and prompts support.'
   spec.homepage = 'https://github.com/yjacquin/fast_mcp'
   spec.license = 'MIT'
   spec.required_ruby_version = '>= 3.0.0'
