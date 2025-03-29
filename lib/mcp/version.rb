@@ -2,5 +2,5 @@
 
 # Version information
 module FastMCP
-  VERSION = '0.1.0'
+  VERSION = '0.1.0.patch.2'
 end
