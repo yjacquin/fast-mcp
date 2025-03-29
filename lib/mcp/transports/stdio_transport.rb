@@ -20,7 +20,12 @@ module MCP
         # Process input from stdin
         while @running && (line = $stdin.gets)
           begin
-            process_message(line.strip)
+            response = process_message(line.strip)
+            # Only send response if it's not nil (notifications don't need responses)
+            if response
+              # Don't store the return value to avoid accidental logging
+              send_message(response)
+            end
           rescue StandardError => e
             @logger.error("Error processing message: #{e.message}")
             @logger.error(e.backtrace.join("\n"))
@@ -41,6 +46,8 @@ module MCP
 
         $stdout.puts(json_message)
         $stdout.flush
+        # Don't return or output anything that could be accidentally logged
+        nil
       end
 
       private

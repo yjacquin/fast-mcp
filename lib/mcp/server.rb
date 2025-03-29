@@ -185,13 +185,21 @@ module MCP
       params = request['params'] || {}
       id = request['id']
 
+      # Check if it's a notification (no ID) or a request (with ID)
+      is_notification = id.nil?
+      
+      # Special handling for notifications
+      if is_notification && method == 'notifications/initialized'
+        handle_initialized_notification
+        return nil # Return nil for notifications as they don't expect a response
+      end
+      
+      # Regular method handling (expecting responses with IDs)
       case method
       when 'ping'
         send_result({}, id)
       when 'initialize'
         handle_initialize(params, id)
-      when 'notifications/initialized'
-        handle_initialized_notification
       when 'tools/list'
         handle_tools_list(id)
       when 'tools/call'
@@ -217,13 +225,19 @@ module MCP
     end
 
     # Handle a JSON-RPC request and return the response as a JSON string
+    # Returns nil for notifications which don't require a response
     def handle_json_request(request)
       # Process the request
-      if request.is_a?(String)
-        handle_request(request)
-      else
-        handle_request(JSON.generate(request))
-      end
+      response = if request.is_a?(String)
+                   handle_request(request)
+                 else
+                   handle_request(JSON.generate(request))
+                 end
+      
+      # Return nil for notifications (no response needed)
+      return nil if response.nil?
+      
+      response
     end
 
     # Register a callback for resource updates
@@ -567,7 +581,7 @@ module MCP
     def send_response(response)
       if @transport
         @logger.info("Sending response: #{response.inspect}")
-        @logger.info("Transport: #{@transport.inspect}")
+        @logger.debug("Using transport: #{@transport.class.name}")
         @transport.send_message(response)
       else
         @logger.warn("No transport available to send response: #{response.inspect}")

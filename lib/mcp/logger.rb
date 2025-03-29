@@ -29,6 +29,10 @@ module MCP
     def client_initialized?
       client_initialized
     end
+    
+    def set_client_initialized
+      @client_initialized = true
+    end
 
     def stdio_transport?
       transport == :stdio
@@ -40,7 +44,26 @@ module MCP
 
     # Override add to ensure logs go to file only
     def add(severity, message = nil, progname = nil, &block)
-      super
+      # Handle IO objects safely to avoid accidentally logging them
+      message = safe_format(message) if message
+      
+      if block_given?
+        original_message = yield
+        message = safe_format(original_message)
+      end
+      
+      super(severity, message, progname)
+    end
+    
+    private
+    
+    # Safely format objects to avoid issues with IO objects
+    def safe_format(obj)
+      if obj.is_a?(IO) || obj.is_a?(StringIO)
+        "IO:#{obj.object_id}"
+      else
+        obj
+      end
     end
   end
 end

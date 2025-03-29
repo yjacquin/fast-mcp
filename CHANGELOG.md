@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-03-29
+
+### Fixed
+
+- Fixed handling of notifications without IDs (e.g., notifications/initialized)
+- Updated JSON-RPC message handling to properly process notification format
+- Fixed transport layer to correctly handle nil responses for notifications
+- Fixed issue with IO objects being accidentally printed in standard output
+- Improved logger to safely handle IO objects in log messages
+- Fixed StdIO transport to avoid returning unnecessary values
+- Added missing `set_client_initialized` method to MCP::Logger class
+
 ## [0.2.0] - 2025-03-29
 
 ### Added
