@@ -8,10 +8,11 @@ require_relative 'transports/stdio_transport'
 require_relative 'transports/rack_transport'
 require_relative 'transports/authenticated_rack_transport'
 require_relative 'logger'
+require_relative 'prompt'
 
 module MCP
   class Server
-    attr_reader :name, :version, :tools, :resources, :logger, :transport, :capabilities
+    attr_reader :name, :version, :tools, :resources, :prompts, :logger, :transport, :capabilities
 
     DEFAULT_CAPABILITIES = {
       resources: {
@@ -19,6 +20,9 @@ module MCP
         listChanged: true
       },
       tools: {
+        listChanged: true
+      },
+      prompts: {
         listChanged: true
       }
     }.freeze
@@ -28,6 +32,7 @@ module MCP
       @version = version
       @tools = {}
       @resources = {}
+      @prompts = {}
       @resource_subscriptions = {}
       @logger = logger
       @logger.level = Logger::INFO
@@ -68,6 +73,43 @@ module MCP
       notify_resource_list_changed if @transport
 
       resource
+    end
+    
+    # Register multiple prompts at once
+    # @param prompts [Array<Prompt>] Prompts to register
+    def register_prompts(*prompts)
+      prompts.each do |prompt|
+        register_prompt(prompt)
+      end
+    end
+    
+    # Register a prompt with the server
+    # @param prompt [Prompt] Prompt to register
+    def register_prompt(prompt)
+      @prompts[prompt.name] = prompt
+      @logger.info("Registered prompt: #{prompt.name}")
+
+      # Notify clients about the list change
+      notify_prompts_list_changed if @transport
+
+      prompt
+    end
+    
+    # Remove a prompt from the server
+    # @param name [String] Name of the prompt to remove
+    # @return [Boolean] True if the prompt was removed, false otherwise
+    def remove_prompt(name)
+      if @prompts.key?(name)
+        prompt = @prompts.delete(name)
+        @logger.info("Removed prompt: #{name}")
+
+        # Notify clients about the list change
+        notify_prompts_list_changed if @transport
+
+        true
+      else
+        false
+      end
     end
 
     # Remove a resource from the server
@@ -143,13 +185,21 @@ module MCP
       params = request['params'] || {}
       id = request['id']
 
+      # Check if it's a notification (no ID) or a request (with ID)
+      is_notification = id.nil?
+      
+      # Special handling for notifications
+      if is_notification && method == 'notifications/initialized'
+        handle_initialized_notification
+        return nil # Return nil for notifications as they don't expect a response
+      end
+      
+      # Regular method handling (expecting responses with IDs)
       case method
       when 'ping'
         send_result({}, id)
       when 'initialize'
         handle_initialize(params, id)
-      when 'notifications/initialized'
-        handle_initialized_notification
       when 'tools/list'
         handle_tools_list(id)
       when 'tools/call'
@@ -162,6 +212,10 @@ module MCP
         handle_resources_subscribe(params, id)
       when 'resources/unsubscribe'
         handle_resources_unsubscribe(params, id)
+      when 'prompts/list'
+        handle_prompts_list(params, id)
+      when 'prompts/get'
+        handle_prompts_get(params, id)
       else
         send_error(-32_601, "Method not found: #{method}", id)
       end
@@ -171,13 +225,19 @@ module MCP
     end
 
     # Handle a JSON-RPC request and return the response as a JSON string
+    # Returns nil for notifications which don't require a response
     def handle_json_request(request)
       # Process the request
-      if request.is_a?(String)
-        handle_request(request)
-      else
-        handle_request(JSON.generate(request))
-      end
+      response = if request.is_a?(String)
+                   handle_request(request)
+                 else
+                   handle_request(JSON.generate(request))
+                 end
+      
+      # Return nil for notifications (no response needed)
+      return nil if response.nil?
+      
+      response
     end
 
     # Register a callback for resource updates
@@ -410,6 +470,44 @@ module MCP
       send_result({ unsubscribed: true }, id)
     end
 
+    # Handle prompts/list request
+    # @param params [Hash] Request parameters (pagination support)
+    # @param id [Object] Request ID for response correlation
+    def handle_prompts_list(params, id)
+      cursor = params['cursor'] if params
+      # For now, no pagination is implemented - return all prompts
+      
+      prompts_list = @prompts.values.map(&:to_list_hash)
+      
+      # In a future version, implement pagination with cursor
+      result = { prompts: prompts_list }
+      # result[:nextCursor] = next_cursor if next_cursor
+
+      send_result(result, id)
+    end
+
+    # Handle prompts/get request
+    # @param params [Hash] Request parameters (prompt name and arguments)
+    # @param id [Object] Request ID for response correlation
+    def handle_prompts_get(params, id)
+      prompt_name = params['name']
+      arguments = params['arguments'] || {}
+
+      return send_error(-32_602, 'Invalid params: missing prompt name', id) unless prompt_name
+
+      prompt = @prompts[prompt_name]
+      return send_error(-32_602, "Prompt not found: #{prompt_name}", id) unless prompt
+
+      begin
+        # Get the prompt content with the provided arguments
+        result = prompt.get_content(arguments)
+        send_result(result, id)
+      rescue StandardError => e
+        @logger.error("Error getting prompt #{prompt_name}: #{e.message}")
+        send_error(-32_602, "Error: #{e.message}", id)
+      end
+    end
+
     # Notify subscribers about a resource update
     def notify_resource_updated(uri)
       return unless @client_initialized && @resource_subscriptions.key?(uri)
@@ -435,6 +533,19 @@ module MCP
       notification = {
         jsonrpc: '2.0',
         method: 'notifications/resources/listChanged',
+        params: {}
+      }
+
+      @transport.send_message(notification)
+    end
+    
+    # Notify clients about prompt list changes
+    def notify_prompts_list_changed
+      return unless @client_initialized
+
+      notification = {
+        jsonrpc: '2.0',
+        method: 'notifications/prompts/list_changed',
         params: {}
       }
 
@@ -470,7 +581,7 @@ module MCP
     def send_response(response)
       if @transport
         @logger.info("Sending response: #{response.inspect}")
-        @logger.info("Transport: #{@transport.inspect}")
+        @logger.debug("Using transport: #{@transport.class.name}")
         @transport.send_message(response)
       else
         @logger.warn("No transport available to send response: #{response.inspect}")

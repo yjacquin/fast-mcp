@@ -11,6 +11,7 @@ end
 require_relative 'mcp/tool'
 require_relative 'mcp/server'
 require_relative 'mcp/resource'
+require_relative 'mcp/prompt'
 
 # Require all transport files
 require_relative 'mcp/transports/base_transport'

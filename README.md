@@ -27,6 +27,7 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 
 - 🛠️ **Tools API** - Let AI models call your Ruby functions securely, with in-depth argument validation through [Dry-Schema](https://github.com/dry-rb/dry-schema).
 - 📚 **Resources API** - Share data between your app and AI models
+- 💬 **Prompts API** - Define structured prompt templates for LLM interactions
 - 🔄 **Multiple Transports** - Choose from STDIO, HTTP, or SSE based on your needs
 - 🧩 **Framework Integration** - Works seamlessly with Rails, Sinatra, and Hanami
 - 🔒 **Authentication Support** - Secure your AI endpoints with ease
@@ -257,6 +258,7 @@ Add your server to your Claude Desktop configuration at:
 | ✅ **JSON-RPC 2.0** | Full implementation for communication |
 | ✅ **Tool Definition & Calling** | Define and call tools with rich argument types |
 | ✅ **Resource Management** | Create, read, update, and subscribe to resources |
+| ✅ **Prompt Templates** | Define and share prompt templates with arguments |
 | ✅ **Transport Options** | STDIO, HTTP, and SSE for flexible integration |
 | ✅ **Framework Integration** | Rails, Sinatra, Hanami, and any Rack-compatible framework |
 | ✅ **Authentication** | Secure your AI endpoints with token authentication |
@@ -279,6 +281,7 @@ Add your server to your Claude Desktop configuration at:
 - [🌸 Hanami Integration](docs/hanami_integration.md)
 - [📚 Resources](docs/resources.md)
 - [🛠️ Tools](docs/tools.md)
+- [💬 Prompts](docs/prompts.md)
 - [🔌 Transports](docs/transports.md)
 - [📘 API Reference](docs/api_reference.md)
 
@@ -289,6 +292,7 @@ Check out the [examples directory](examples) for more detailed examples:
 - **🔨 Basic Examples**:
   - [Simple Server](examples/server_with_stdio_transport.rb)
   - [Tool Examples](examples/tool_examples.rb)
+  - [Prompt Examples](examples/prompt_examples.rb)
 
 - **🌐 Web Integration**:
   - [Rack Middleware](examples/rack_middleware.rb)

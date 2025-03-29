@@ -432,6 +432,13 @@ module MCP
         body = request.body.read
 
         response = process_message(body)
+        
+        # If response is nil (for notifications), return an empty response
+        if response.nil?
+          @logger.debug("No response needed for notification")
+          return [204, {}, []]
+        end
+        
         @logger.info("Response: #{response}")
         [200, { 'Content-Type' => 'application/json' }, [response]]
       end

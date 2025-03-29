@@ -32,6 +32,7 @@ module MCP
 
       # Process an incoming message
       # This is a helper method that can be used by subclasses
+      # Returns nil for notifications (no response needed)
       def process_message(message)
         server.handle_json_request(message)
       end

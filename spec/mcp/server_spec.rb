@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe MCP::Server do
-  let(:server) { described_class.new(name: 'test-server', version: '1.0.0', logger: Logger.new(nil)) }
+  let(:server) { described_class.new(name: 'test-server', version: '1.0.0', logger: MCP::MockLogger.new) }
 
   describe '#initialize' do
     it 'creates a server with the given name and version' do
@@ -228,6 +228,32 @@ RSpec.describe MCP::Server do
 
         expect(server).to receive(:send_error).with(-32_600, 'Invalid Request', nil)
         server.handle_request(request)
+      end
+    end
+    
+    context 'with a notification (no id)' do
+      it 'handles notifications/initialized correctly' do
+        expect(server).not_to receive(:send_result)
+        expect(server).not_to receive(:send_error)
+        
+        # Before the notification, client_initialized should be false
+        expect(server.instance_variable_get(:@client_initialized)).to be_falsey
+        
+        # Send the notification
+        request = { jsonrpc: '2.0', method: 'notifications/initialized' }.to_json
+        result = server.handle_request(request)
+        
+        # The result should be nil (no response for notifications)
+        expect(result).to be_nil
+        
+        # After the notification, client_initialized should be true
+        expect(server.instance_variable_get(:@client_initialized)).to be_truthy
+      end
+      
+      it 'returns nil for notifications in handle_json_request' do
+        request = { jsonrpc: '2.0', method: 'notifications/initialized' }.to_json
+        result = server.handle_json_request(request)
+        expect(result).to be_nil
       end
     end
   end

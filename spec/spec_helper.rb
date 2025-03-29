@@ -1,8 +1,21 @@
 # frozen_string_literal: true
 
 require 'fast_mcp'
+require_relative 'support/mock_logger'
 
 Bundler.require(:default, :test)
+
+# Override the default logger for tests
+module MCP
+  class Server
+    # Override the default logger initialization
+    alias_method :original_initialize, :initialize
+    
+    def initialize(name:, version:, logger: MCP::MockLogger.new, capabilities: {})
+      original_initialize(name: name, version: version, logger: logger, capabilities: capabilities)
+    end
+  end
+end
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
