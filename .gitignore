@@ -1,5 +1,8 @@
 *.gem
+.tool-versions
 .rspec_status
+
+examples/_*/**/*
+
 CLAUDE.md
 docs-dev/*
-.tool-versions
