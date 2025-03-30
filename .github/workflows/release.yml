@@ -53,3 +53,37 @@ jobs:
         chmod 0600 ~/.gem/credentials
         gem push *.gem
         rm -f ~/.gem/credentials 
+  
+  github_release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: gem
+    
+    - name: Extract version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Extract changelog entry
+      id: changelog
+      run: |
+        CHANGELOG_CONTENT=$(awk "/## \\[${{ steps.get_version.outputs.VERSION }}\\]/{flag=1;next}/## \\[/{flag=0}flag" CHANGELOG.md)
+        echo "CHANGELOG_CONTENT<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG_CONTENT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: '*.gem'
+        body: ${{ steps.changelog.outputs.CHANGELOG_CONTENT }}
+        generate_release_notes: true 
