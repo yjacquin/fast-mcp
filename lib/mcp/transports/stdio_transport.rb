@@ -2,7 +2,7 @@
 
 require_relative 'base_transport'
 
-module MCP
+module FastMcp
   module Transports
     # STDIO transport for MCP
     # This transport uses standard input/output for communication

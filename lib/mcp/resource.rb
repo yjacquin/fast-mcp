@@ -5,11 +5,13 @@ require 'base64'
 require 'mime/types'
 require 'singleton'
 
-module MCP
+module FastMcp
   # Resource class for MCP Resources feature
   # Represents a resource that can be exposed to clients
   class Resource
     class << self
+      attr_accessor :server
+
       # Define URI for this resource
       # @param value [String, nil] The URI for this resource
       # @return [String] The URI for this resource
@@ -74,7 +76,7 @@ module MCP
           end
 
           # Override content method to load from file
-          define_method :default_content do
+          define_method :content do
             if binary?
               File.binread(file_path)
             else
@@ -86,13 +88,6 @@ module MCP
     end
 
     include Singleton
-
-    attr_accessor :content
-
-    # Initialize a resource singleton instance
-    def initialize
-      @content = default_content
-    end
 
     # URI of the resource - delegates to class method
     # @return [String, nil] The URI for this resource
@@ -120,7 +115,7 @@ module MCP
 
     # Method to be overridden by subclasses to dynamically generate content
     # @return [String, nil] Generated content for this resource
-    def default_content
+    def content
       raise NotImplementedError, 'Subclasses must implement content'
     end
 

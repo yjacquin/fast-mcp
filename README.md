@@ -28,44 +28,49 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 - 🛠️ **Tools API** - Let AI models call your Ruby functions securely, with in-depth argument validation through [Dry-Schema](https://github.com/dry-rb/dry-schema).
 - 📚 **Resources API** - Share data between your app and AI models
 - 🔄 **Multiple Transports** - Choose from STDIO, HTTP, or SSE based on your needs
-- 🧩 **Framework Integration** - Works seamlessly with Rails, Sinatra, and Hanami
-- 🔒 **Authentication Support** - Secure your AI endpoints with ease
+- 🧩 **Framework Integration** - Works seamlessly with Rails, Sinatra or any Rack app.
+- 🔒 **Authentication Support** - Secure your AI-powered endpoints with ease
 - 🚀 **Real-time Updates** - Subscribe to changes for interactive applications
 
-## 💎 What Makes FastMCP Great
 
+## 💎 What Makes FastMCP Great
 ```ruby
 # Define tools for AI models to use
-server = MCP::Server.new(name: 'recipe-ai', version: '1.0.0')
+server = FastMcp::Server.new(name: 'recipe-ai', version: '1.0.0')
 
-# Define a tool by inheriting from MCP::Tool
-class GetRecipesTool < MCP::Tool
+# Define a tool by inheriting from FastMcp::Tool
+class CreateUserTool < FastMcp::Tool
   description "Find recipes based on ingredients"
   
     # These arguments will generate the needed JSON to be presented to the MCP Client
     # And they will be validated at run time.
     # The validation is based off Dry-Schema, with the addition of the description.
   arguments do
-    required(:ingredients).array(:string).description("List of ingredients")
-    optional(:cuisine).filled(:string).description("Type of cuisine")
+    required(:first_name).filled(:string).description("First name of the user")
+    optional(:age).filled(:integer).description("Age of the user")
+    required(:address).hash do
+      optional(:street).filled(:string)
+      optional(:city).filled(:string)
+      optional(:zipcode).filled(:string)
+    end
   end
   
-  def call(ingredients:, cuisine: nil)
-    Recipe.find_by_ingredients(ingredients, cuisine: cuisine)
+  def call(first_name:, age: nil, address: {})
+    User.create!(first_name:, age:, address:)
   end
 end
 
 # Register the tool with the server
-server.register_tool(GetRecipesTool)
+server.register_tool(CreateUserTool)
 
-# Share data resources with AI models by inheriting from MCP::Resource
-class IngredientsResource < MCP::Resource
-  uri "food/popular_ingredients"
-  resource_name "Popular Ingredients"
+# Share data resources with AI models by inheriting from FastMcp::Resource
+class PopularUsers < FastMcp::Resource
+  uri "file://popular_users.json"
+  resource_name "Popular Users"
   mime_type "application/json"
   
-  def default_content
-    JSON.generate(Ingredient.popular.as_json)
+  def content
+    JSON.generate(User.popular.limit(5).as_json)
   end
 end
 
@@ -73,60 +78,66 @@ end
 server.register_resource(IngredientsResource)
 
 # Accessing the resource through the server
-server.read_resource("food/popular_ingredients")
+server.read_resource(IngredientsResource.uri)
 
-# Updating the resource content through the server
-server.update_resource("food/popular_ingredients", JSON.generate({id: 1, name: 'tomato'}))
-
-
-# Easily integrate with web frameworks
-# config/application.rb (Rails)
-config.middleware.use MCP::RackMiddleware.new(
-  name: 'recipe-ai', 
-  version: '1.0.0'
-) do |server|
-  # Register tools and resources here
-  server.register_tool(GetRecipesTool)
-end
-
-# Secure your AI endpoints
-config.middleware.use MCP::AuthenticatedRackMiddleware.new(
-  name: 'recipe-ai',
-  version: '1.0.0',
-  token: ENV['MCP_AUTH_TOKEN']
-)
-
-# Build real-time applications
-server.on_resource_update do |resource|
-  ActionCable.server.broadcast("recipe_updates", resource.metadata)
-end
+# Notify the resource content has been updated to clients
+server.notify_resource_updated(IngredientsResource.uri)
 ```
 
-## 📦 Installation
+### 🚂 Fast Ruby on Rails implementation
+```shell
+bundle add fast-mcp
+bin/rails generate fast_mcp:install
+```
+
+This will add a configurable `fast_mcp.rb` initializer
 
 ```ruby
-# In your Gemfile
-gem 'fast-mcp'
+require 'fast_mcp'
 
-# Then run
-bundle install
-
-# Or install it yourself
-gem install fast-mcp
+FastMcp.mount_in_rails(
+  Rails.application,
+  name: Rails.application.class.module_parent_name.underscore.dasherize,
+  version: '1.0.0',
+  path_prefix: '/mcp' # This is the default path prefix
+  # authenticate: true,       # Uncomment to enable authentication
+  # auth_token: 'your-token', # Required if authenticate: true
+) do |server|
+  Rails.application.config.after_initialize do
+    # FastMcpwill automatically discover and register:
+    # - All classes that inherit from ApplicationTool
+    # - All classes that inherit from ApplicationResource
+    server.register_tools(*ApplicationTool.descendants)
+    server.register_resources(*ApplicationResource.descendants)
+    # alternatively, you can register tools and resources manually:
+    # server.register_tool(MyTool)
+    # server.register_resource(MyResource)
+  end
+end
 ```
+The install script will also:
+- add app/resources folder
+- add app/tools folder
+- add app/tools/sample_tool.rb
+- add app/resources/sample_resource.rb
+- add ApplicationTool to inherit from
+- add ApplicationResource to inherit from as well
+
+### Easy Sinatra setup
+I'll let you check out the dedicated [sinatra integration docs](./docs/sinatra_integration.md).
 
 ## 🚀 Quick Start
 
-### Create a Server with Tools and Resources
+### Create a Server with Tools and Resources and STDIO transport
 
 ```ruby
 require 'fast_mcp'
 
 # Create an MCP server
-server = MCP::Server.new(name: 'my-ai-server', version: '1.0.0')
+server = FastMcp::Server.new(name: 'my-ai-server', version: '1.0.0')
 
-# Define a tool by inheriting from MCP::Tool
-class SummarizeTool < MCP::Tool
+# Define a tool by inheriting from FastMcp::Tool
+class SummarizeTool < FastMcp::Tool
   description "Summarize a given text"
   
   arguments do
@@ -143,14 +154,14 @@ end
 # Register the tool with the server
 server.register_tool(SummarizeTool)
 
-# Create a resource by inheriting from MCP::Resource
-class StatisticsResource < MCP::Resource
+# Create a resource by inheriting from FastMcp::Resource
+class StatisticsResource < FastMcp::Resource
   uri "data/statistics"
   resource_name "Usage Statistics"
   description "Current system statistics"
   mime_type "application/json"
   
-  def default_content
+  def content
     JSON.generate({
       users_online: 120,
       queries_per_minute: 250,
@@ -164,26 +175,6 @@ server.register_resource(StatisticsResource)
 
 # Start the server
 server.start
-```
-
-### Integrate with Web Frameworks
-
-#### Rails
-
-```ruby
-# config/application.rb
-module YourApp
-  class Application < Rails::Application
-    # ...
-    config.middleware.use MCP::RackMiddleware.new(
-      name: 'my-ai-server', 
-      version: '1.0.0'
-    ) do |server|
-      # Register tools and resources here
-      server.register_tool(SummarizeTool)
-    end
-  end
-end
 ```
 
 ## 🧪 Testing with the inspector
@@ -221,7 +212,7 @@ npx @modelcontextprotocol/inspector
 require 'sinatra'
 require 'fast_mcp'
 
-use MCP::RackMiddleware.new(name: 'my-ai-server', version: '1.0.0') do |server|
+use FastMcp::RackMiddleware.new(name: 'my-ai-server', version: '1.0.0') do |server|
   # Register tools and resources here
   server.register_tool(SummarizeTool)
 end
@@ -250,6 +241,9 @@ Add your server to your Claude Desktop configuration at:
 }
 ```
 
+## How to add a MCP server to Claude, Cursor, or other MCP clients?
+Please refer to [configuring_mcp_clients](docs/configuring_mcp_clients.md)
+
 ## 📊 Supported Specifications
 
 | Feature | Status |
@@ -276,11 +270,8 @@ Add your server to your Claude Desktop configuration at:
 - [🧩 Integration Guide](docs/integration_guide.md)
 - [🛤️ Rails Integration](docs/rails_integration.md)
 - [🌐 Sinatra Integration](docs/sinatra_integration.md)
-- [🌸 Hanami Integration](docs/hanami_integration.md)
 - [📚 Resources](docs/resources.md)
 - [🛠️ Tools](docs/tools.md)
-- [🔌 Transports](docs/transports.md)
-- [📘 API Reference](docs/api_reference.md)
 
 ## 💻 Examples
 

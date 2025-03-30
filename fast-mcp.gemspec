@@ -6,7 +6,7 @@ require_relative 'lib/mcp/version'
 
 Gem::Specification.new do |spec|
   spec.name = 'fast-mcp'
-  spec.version = FastMCP::VERSION
+  spec.version = FastMcp::VERSION
   spec.authors = ['Yorick Jacquin']
   spec.email = ['yorickjacquin@gmail.com']
 
