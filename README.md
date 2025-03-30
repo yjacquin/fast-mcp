@@ -61,7 +61,7 @@ server.register_tool(GetRecipesTool)
 # Share data resources with AI models by inheriting from MCP::Resource
 class IngredientsResource < MCP::Resource
   uri "food/popular_ingredients"
-  name "Popular Ingredients"
+  resource_name "Popular Ingredients"
   mime_type "application/json"
   
   def default_content
@@ -146,7 +146,7 @@ server.register_tool(SummarizeTool)
 # Create a resource by inheriting from MCP::Resource
 class StatisticsResource < MCP::Resource
   uri "data/statistics"
-  name "Usage Statistics"
+  resource_name "Usage Statistics"
   description "Current system statistics"
   mime_type "application/json"
   
@@ -160,7 +160,7 @@ class StatisticsResource < MCP::Resource
 end
 
 # Register the resource with the server
-server.register_resource(StatisticsResource.new)
+server.register_resource(StatisticsResource)
 
 # Start the server
 server.start
