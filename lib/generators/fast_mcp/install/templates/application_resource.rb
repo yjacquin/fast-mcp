@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
-class ApplicationResource < FastMcp::Resource
+class ApplicationResource < ActionResource::Base
   # write your custom logic to be shared across all resources here
 end

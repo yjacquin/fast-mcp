@@ -4,6 +4,19 @@ require 'logger'
 require 'fileutils'
 require_relative '../mcp/server'
 
+# Create ActionTool and ActionResource modules at load time
+unless defined?(ActionTool)
+  module ::ActionTool
+    Base = FastMcp::Tool
+  end
+end
+
+unless defined?(ActionResource)
+  module ::ActionResource
+    Base = FastMcp::Resource
+  end
+end
+
 module FastMcp
   # Railtie for integrating Fast MCP with Rails applications
   class Railtie < Rails::Railtie

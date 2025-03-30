@@ -104,9 +104,9 @@ FastMcp.mount_in_rails(
   # auth_token: 'your-token', # Required if authenticate: true
 ) do |server|
   Rails.application.config.after_initialize do
-    # FastMcpwill automatically discover and register:
-    # - All classes that inherit from ApplicationTool
-    # - All classes that inherit from ApplicationResource
+    # FastMcp will automatically discover and register:
+    # - All classes that inherit from ApplicationTool (which uses ActionTool::Base)
+    # - All classes that inherit from ApplicationResource (which uses ActionResource::Base)
     server.register_tools(*ApplicationTool.descendants)
     server.register_resources(*ApplicationResource.descendants)
     # alternatively, you can register tools and resources manually:
@@ -122,6 +122,49 @@ The install script will also:
 - add app/resources/sample_resource.rb
 - add ApplicationTool to inherit from
 - add ApplicationResource to inherit from as well
+
+#### Rails-friendly class naming conventions
+
+For Rails applications, FastMCP provides Rails-style class names to better fit with Rails conventions:
+
+- `ActionTool::Base` - An alias for `FastMcp::Tool`
+- `ActionResource::Base` - An alias for `FastMcp::Resource`
+
+These are automatically set up in Rails applications. You can use either naming convention in your code:
+
+```ruby
+# Using Rails-style naming:
+class MyTool < ActionTool::Base
+  description "My awesome tool"
+  
+  arguments do
+    required(:input).filled(:string)
+  end
+  
+  def call(input:)
+    # Your implementation
+  end
+end
+
+# Using standard FastMcp naming:
+class AnotherTool < FastMcp::Tool
+  # Both styles work interchangeably in Rails apps
+end
+```
+
+When creating new tools or resources, the generators will use the Rails naming convention by default:
+
+```ruby
+# app/tools/application_tool.rb
+class ApplicationTool < ActionTool::Base
+  # Base methods for all tools
+end
+
+# app/resources/application_resource.rb
+class ApplicationResource < ActionResource::Base
+  # Base methods for all resources
+end
+```
 
 ### Easy Sinatra setup
 I'll let you check out the dedicated [sinatra integration docs](./docs/sinatra_integration.md).
