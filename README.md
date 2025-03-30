@@ -99,7 +99,7 @@ FastMcp.mount_in_rails(
   Rails.application,
   name: Rails.application.class.module_parent_name.underscore.dasherize,
   version: '1.0.0',
-  path_prefix: '/mcp' # This is the default path prefix
+  path: '/mcp' # This is the default path
   # authenticate: true,       # Uncomment to enable authentication
   # auth_token: 'your-token', # Required if authenticate: true
 ) do |server|

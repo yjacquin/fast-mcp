@@ -10,21 +10,21 @@ module FastMcp
     # Rack middleware transport for MCP
     # This transport can be mounted in any Rack-compatible web framework
     class RackTransport < BaseTransport
-      DEFAULT_PATH_PREFIX = '/mcp'
+      DEFAULT_PATH = '/mcp'
 
-      attr_reader :app, :path_prefix, :sse_clients
+      attr_reader :app, :path, :sse_clients
 
       def initialize(app, server, options = {}, &_block)
         super(server, logger: options[:logger])
         @app = app
-        @path_prefix = options[:path_prefix] || DEFAULT_PATH_PREFIX
+        @path = options[:path] || DEFAULT_PATH
         @sse_clients = {}
         @running = false
       end
 
       # Start the transport
       def start
-        @logger.debug("Starting Rack transport with path prefix: #{@path_prefix}")
+        @logger.debug("Starting Rack transport with path: #{@path}")
         @running = true
       end
 
@@ -88,7 +88,7 @@ module FastMcp
         @logger.debug("Rack request path: #{path}")
 
         # Check if the request is for our MCP endpoints
-        if path.start_with?(@path_prefix)
+        if path.start_with?(@path)
           @logger.debug('Setting server transport to RackTransport')
           @server.transport = self
           handle_mcp_request(request, env)
@@ -102,7 +102,7 @@ module FastMcp
 
       # Handle MCP-specific requests
       def handle_mcp_request(request, env)
-        subpath = request.path[@path_prefix.length..]
+        subpath = request.path[@path.length..]
         @logger.info("MCP request subpath: '#{subpath.inspect}'")
 
         case subpath
@@ -300,7 +300,7 @@ module FastMcp
         io.write(": SSE connection established\n\n")
 
         # Send endpoint information as the first message
-        endpoint = "#{@path_prefix}/messages"
+        endpoint = "#{@path}/messages"
         @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
         io.write("event: endpoint\ndata: #{endpoint}\n\n")
 

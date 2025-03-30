@@ -11,13 +11,13 @@ RSpec.describe FastMcp::Transports::RackTransport do
       expect(transport.server).to eq(server)
       expect(transport.app).to eq(app)
       expect(transport.logger).to eq(logger)
-      expect(transport.path_prefix).to eq('/mcp')
+      expect(transport.path).to eq('/mcp')
       expect(transport.sse_clients).to eq({})
     end
 
     it 'accepts custom path prefix' do
-      custom_transport = described_class.new(server, app, path_prefix: '/api/mcp', logger: logger)
-      expect(custom_transport.path_prefix).to eq('/api/mcp')
+      custom_transport = described_class.new(server, app, path: '/api/mcp', logger: logger)
+      expect(custom_transport.path).to eq('/api/mcp')
     end
   end
 

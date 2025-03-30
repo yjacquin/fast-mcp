@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Example Ruby on Rails app in the documentation
 - `FastMcp.server` now exposes the MCP server to apps that may need it to access resources
 - Automated Github Releases through Github Workflow
+- ⚠️ [Breaking] Renamed the `path_prefix` argument of rack transports to `path` for 2025-03-26 revision and streamable HTTP Transport support.
 
 ### Fixed
 - Fixed bug with Rack middlewares not being initialized properly.
