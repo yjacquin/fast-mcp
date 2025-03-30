@@ -66,7 +66,11 @@ app = lambda do |_env|
 end
 
 # Create the MCP middleware
-mcp_app = FastMcp.rack_middleware(app, name: 'example-mcp-server', version: '1.0.0') do |server|
+mcp_app = FastMcp.rack_middleware(
+  app,
+  name: 'example-mcp-server', version: '1.0.0',
+  logger: Logger.new($stdout)
+) do |server|
   # Register tool classes
   server.register_tools(GreetTool, CalculateTool)
 
