@@ -11,9 +11,9 @@ require_relative 'logger'
 
 module FastMcp
   class Server
-    attr_reader :name, :version, :tools, :resources, :capabilities
+    attr_reader :name, :version, :tools, :resources, :capabilities, :protocol_version
 
-    DEFAULT_CAPABILITIES = {
+    STREAMABLE_DEFAULT_CAPABILITIES = {
       resources: {
         subscribe: true,
         listChanged: true
@@ -23,7 +23,23 @@ module FastMcp
       }
     }.freeze
 
-    def initialize(name:, version:, logger: FastMcp::Logger.new, capabilities: {})
+    NON_STREAMABLE_DEFAULT_CAPABILITIES = {
+      resources: {},
+      tools: {}
+    }.freeze
+
+    PROTOCOL_VERSIONS = [
+      LATEST_PROTOCOL_VERSION = '2025-03-26',
+      FINAL_PROTOCOL_VERSION = '2024-11-05'
+    ].freeze
+
+    def initialize(
+      name:,
+      version:,
+      logger: FastMcp::Logger.new,
+      streamable: false,
+      protocol_version: FINAL_PROTOCOL_VERSION # TODO: Move defaul to latest once it is better supported
+    )
       @name = name
       @version = version
       @tools = {}
@@ -34,11 +50,17 @@ module FastMcp
       @request_id = 0
       @transport_klass = nil
       @transport = nil
-      @capabilities = DEFAULT_CAPABILITIES.dup
+      @capabilities = streamable ? STREAMABLE_DEFAULT_CAPABILITIES.dup : NON_STREAMABLE_DEFAULT_CAPABILITIES.dup
+      @protocol_version = protocol_version
 
       # Merge with provided capabilities
       @capabilities.merge!(capabilities) if capabilities.is_a?(Hash)
+      raise "Protocol version #{protocol_version} is not supported" unless protocol_version.in?(PROTOCOL_VERSIONS)
+      return unless !streamable && protocol_version == FINAL_PROTOCOL_VERSION
+
+      raise "Can't use stateless HTTP transport with protocol version #{protocol_version}"
     end
+
     attr_accessor :transport, :transport_klass, :logger
 
     # Register multiple tools at once
@@ -217,8 +239,6 @@ module FastMcp
 
     private
 
-    PROTOCOL_VERSION = '2025-03-26'
-
     def handle_initialize(params, id)
       # Store client capabilities for later use
       @client_capabilities = params['capabilities'] || {}
@@ -226,11 +246,10 @@ module FastMcp
 
       # Log client information
       @logger.info("Client connected: #{client_info['name']} v#{client_info['version']}")
-      # @logger.debug("Client capabilities: #{client_capabilities.inspect}")
 
       # Prepare server response
       response = {
-        protocolVersion: PROTOCOL_VERSION, # For now, only version 2024-11-05 is supported.
+        protocolVersion: FINAL_PROTOCOL_VERSION,
         capabilities: @capabilities,
         serverInfo: {
           name: @name,

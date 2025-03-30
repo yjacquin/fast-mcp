@@ -12,12 +12,14 @@ module FastMcp
     class RackTransport < BaseTransport
       DEFAULT_PATH = '/mcp'
 
-      attr_reader :app, :path, :sse_clients
+      attr_reader :app, :path, :sse_clients, :streamable
+      alias streamable? streamable
 
       def initialize(app, server, options = {}, &_block)
         super(server, logger: options[:logger])
         @app = app
         @path = options[:path] || DEFAULT_PATH
+        @streamable = options[:streamable] || false
         @sse_clients = {}
         @running = false
       end
@@ -106,6 +108,8 @@ module FastMcp
         @logger.info("MCP request subpath: '#{subpath.inspect}'")
 
         case subpath
+        when '' # Root path
+          handle_mcp_endpoint_request(request, env)
         when '/sse'
           handle_sse_request(request, env)
         when '/messages'
@@ -129,6 +133,38 @@ module FastMcp
              },
              id: nil
            }
+         )]]
+      end
+
+      def handle_mcp_endpoint_request(request, env)
+        @logger.debug('Received MCP endpoint request')
+
+        if request.get? && env['HTTP_ACCEPT'] == 'text/event-stream'
+          # Return Method not allowed if the client requests SSE and the transport is not streamable
+          return method_not_allowed_response unless @streamable
+
+          # Proceed with SSE handling if the transport is streamable
+          handle_streaming(env, setup_sse_headers)
+        end
+
+        if request.delete?
+          session_id = env['HTTP_MCP-SESSION-ID']
+          if session_id
+            @logger.info("Unregistering SSE client: #{session_id}")
+
+            unregister_sse_client(session_id)
+          end
+
+          # Return 204 No Content if the client requests DELETE
+          return [204, {}, []]
+        end
+
+        return handle_message_request(request) if request.post?
+
+        # Return 405 Method not allowed for unknown request methods
+        [405, { 'Content-Type' => 'application/json' },
+         [JSON.generate(
+           { jsonrpc: '2.0', error: { code: -32_601, message: 'Method not allowed' } }
          )]]
       end
 
@@ -204,17 +240,14 @@ module FastMcp
         request = Rack::Request.new(env)
 
         # Check various places for client ID
-        client_id = request.params['client_id']
-        client_id ||= env['HTTP_LAST_EVENT_ID']
-        client_id ||= env['HTTP_X_CLIENT_ID']
+        client_id = request.params['id'] # JSON-RPC 2.0 ID
+        client_id ||= env['HTTP_LAST_EVENT_ID'] # Last SSE sessionId for resumable connections
+        client_id ||= env['HTTP_MCP-SESSION-ID'] # MCP-Session-ID header
 
         # Get browser information
         user_agent = env['HTTP_USER_AGENT'] || ''
         browser_type = detect_browser_type(user_agent)
-        @logger.info("Client connection from: #{user_agent} (#{browser_type})")
-
-        # Handle MCP inspector with fixed client ID
-        @logger.info("MCP Inspector detected, using fixed client ID: #{client_id}") if mcp_inspector?(user_agent, env)
+        @logger.debug("Client connection from: #{user_agent} (#{browser_type})")
 
         # Handle reconnection
         if client_id && @sse_clients.key?(client_id)
@@ -246,11 +279,6 @@ module FastMcp
         else
           'Other browser'
         end
-      end
-
-      # Check if client is MCP inspector
-      def mcp_inspector?(user_agent, env)
-        user_agent.include?('mcp-inspector') || (env['mcp.client_name'] == 'mcp-inspector')
       end
 
       # Handle client reconnection

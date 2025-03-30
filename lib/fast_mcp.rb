@@ -131,10 +131,11 @@ module FastMcp
     logger = options[:logger] || Rails.logger
     path = options.delete(:path) || '/mcp'
     authenticate = options.delete(:authenticate) || false
+    streamable = options[:streamable] || false
 
     options[:logger] = logger
     # Create or get the server
-    self.server = FastMcp::Server.new(name: name, version: version, logger: logger)
+    self.server = FastMcp::Server.new(name: name, version: version, logger: logger, streamable: streamable)
     yield self.server if block_given?
 
     # Choose the right middleware based on authentication

@@ -11,7 +11,9 @@ FastMcp.mount_in_rails(
   Rails.application,
   name: Rails.application.class.module_parent_name.underscore.dasherize,
   version: '1.0.0',
-  path: '/mcp' # This is the default path prefix
+  path: '/mcp' # This is the default path at which the MCP endpoint is mounted
+  # protocol_version: '2025-03-26' # Uncomment to use a specific protocol version, default is 2024-11-05 (final)
+  # streamable: true # Uncomment to enable streamable HTTP Transport with SSE, protocol version 2025-03-26 required
   # authenticate: true,       # Uncomment to enable authentication
   # auth_token: 'your-token', # Required if authenticate: true
 ) do |server|
