@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-RSpec.describe MCP::SchemaCompiler do
+RSpec.describe FastMcp::SchemaCompiler do
   let(:compiler) { described_class.new }
 
   describe '#process' do

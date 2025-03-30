@@ -6,6 +6,8 @@ AllCops:
     - 'bin/**/*'
     - 'tmp/**/*'
     - 'spec/**/*'  # Temporarily exclude specs to focus on core code
+    - 'examples/rails-demo-app/**/*' # exclude the demo app as it has its own rubocop config
+
   SuggestExtensions: false
 
 # Metrics configuration

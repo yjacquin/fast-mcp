@@ -5,7 +5,7 @@ require 'securerandom'
 require 'rack'
 require_relative 'base_transport'
 
-module MCP
+module FastMcp
   module Transports
     # Rack middleware transport for MCP
     # This transport can be mounted in any Rack-compatible web framework
@@ -14,7 +14,7 @@ module MCP
 
       attr_reader :app, :path_prefix, :sse_clients
 
-      def initialize(server, app, options = {})
+      def initialize(app, server, options = {}, &_block)
         super(server, logger: options[:logger])
         @app = app
         @path_prefix = options[:path_prefix] || DEFAULT_PATH_PREFIX
@@ -24,13 +24,13 @@ module MCP
 
       # Start the transport
       def start
-        @logger.info("Starting Rack transport with path prefix: #{@path_prefix}")
+        @logger.debug("Starting Rack transport with path prefix: #{@path_prefix}")
         @running = true
       end
 
       # Stop the transport
       def stop
-        @logger.info('Stopping Rack transport')
+        @logger.debug('Stopping Rack transport')
         @running = false
 
         # Close all SSE connections
@@ -45,7 +45,7 @@ module MCP
       # Send a message to all connected SSE clients
       def send_message(message)
         json_message = message.is_a?(String) ? message : JSON.generate(message)
-        @logger.info("Broadcasting message to #{@sse_clients.size} SSE clients: #{json_message}")
+        @logger.debug("Broadcasting message to #{@sse_clients.size} SSE clients: #{json_message}")
 
         clients_to_remove = []
 
@@ -85,10 +85,12 @@ module MCP
       def call(env)
         request = Rack::Request.new(env)
         path = request.path
-        @logger.info("Rack request path: #{path}")
+        @logger.debug("Rack request path: #{path}")
 
         # Check if the request is for our MCP endpoints
         if path.start_with?(@path_prefix)
+          @logger.debug('Setting server transport to RackTransport')
+          @server.transport = self
           handle_mcp_request(request, env)
         else
           # Pass through to the main application
@@ -107,7 +109,6 @@ module MCP
         when '/sse'
           handle_sse_request(request, env)
         when '/messages'
-          @logger.info('Received message request')
           handle_message_request(request)
         else
           @logger.info('Received unknown request')
@@ -270,11 +271,11 @@ module MCP
       # Handle SSE with Rack hijacking (e.g., Puma)
       def handle_rack_hijack_sse(env, headers)
         client_id = extract_client_id(env)
-        @logger.info("Setting up Rack hijack SSE connection for client #{client_id}")
+        @logger.debug("Setting up Rack hijack SSE connection for client #{client_id}")
 
         env['rack.hijack'].call
         io = env['rack.hijack_io']
-        @logger.info("Obtained hijack IO for client #{client_id}")
+        @logger.debug("Obtained hijack IO for client #{client_id}")
 
         setup_sse_connection(client_id, io, headers)
         start_keep_alive_thread(client_id, io)
@@ -286,7 +287,7 @@ module MCP
       # Set up the SSE connection
       def setup_sse_connection(client_id, io, headers)
         # Send headers
-        @logger.info("Sending HTTP headers for SSE connection #{client_id}")
+        @logger.debug("Sending HTTP headers for SSE connection #{client_id}")
         io.write("HTTP/1.1 200 OK\r\n")
         headers.each { |k, v| io.write("#{k}: #{v}\r\n") }
         io.write("\r\n")
@@ -300,7 +301,7 @@ module MCP
 
         # Send endpoint information as the first message
         endpoint = "#{@path_prefix}/messages"
-        @logger.info("Sending endpoint information to client #{client_id}: #{endpoint}")
+        @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
         io.write("event: endpoint\ndata: #{endpoint}\n\n")
 
         # Send a retry directive with a very short reconnect time
@@ -332,6 +333,7 @@ module MCP
         ping_count = 0
         ping_interval = 1 # Send a ping every 1 second
         max_ping_count = 30 # Reset connection after 30 pings (about 30 seconds)
+        @running = true
 
         while @running && !io.closed?
           begin
@@ -357,13 +359,13 @@ module MCP
 
         # Only send actual ping events every 5 counts to reduce overhead
         if (ping_count % 5).zero?
-          @logger.info("Sending ping ##{ping_count} to SSE client #{client_id}")
+          @logger.debug("Sending ping ##{ping_count} to SSE client #{client_id}")
           send_ping_event(io)
         end
 
         # If we've reached the max ping count, force a reconnection
         if ping_count >= max_ping_count
-          @logger.info("Reached max ping count (#{max_ping_count}) for client #{client_id}, forcing reconnection")
+          @logger.debug("Reached max ping count (#{max_ping_count}) for client #{client_id}, forcing reconnection")
           send_reconnect_event(io)
         end
 
@@ -414,7 +416,7 @@ module MCP
 
       # Handle message POST request
       def handle_message_request(request)
-        @logger.info('Received message request')
+        @logger.debug('Received message request')
         return method_not_allowed_response unless request.post?
 
         begin
@@ -431,9 +433,10 @@ module MCP
         # Parse the request body
         body = request.body.read
 
-        response = process_message(body)
+        response = process_message(body) || ''
         @logger.info("Response: #{response}")
-        [200, { 'Content-Type' => 'application/json' }, [response]]
+
+        [200, { 'Content-Type' => 'application/json' }, response]
       end
 
       # Return a method not allowed error response

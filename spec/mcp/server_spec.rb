@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe MCP::Server do
+RSpec.describe FastMcp::Server do
   let(:server) { described_class.new(name: 'test-server', version: '1.0.0', logger: Logger.new(nil)) }
 
   describe '#initialize' do
@@ -13,7 +13,7 @@ RSpec.describe MCP::Server do
 
   describe '#register_tool' do
     it 'registers a tool with the server' do
-      test_tool_class = Class.new(MCP::Tool) do
+      test_tool_class = Class.new(FastMcp::Tool) do
         def self.name
           'test-tool'
         end
@@ -35,7 +35,7 @@ RSpec.describe MCP::Server do
 
   describe '#handle_request' do
     let(:test_tool_class) do
-      Class.new(MCP::Tool) do
+      Class.new(FastMcp::Tool) do
         def self.name
           'test-tool'
         end
@@ -55,7 +55,7 @@ RSpec.describe MCP::Server do
     end
 
     let(:profile_tool_class) do
-      Class.new(MCP::Tool) do
+      Class.new(FastMcp::Tool) do
         def self.name
           'profile-tool'
         end
@@ -100,7 +100,7 @@ RSpec.describe MCP::Server do
         request = { jsonrpc: '2.0', method: 'initialize', id: 1 }.to_json
 
         expect(server).to receive(:send_result).with({
-                                                       protocolVersion: MCP::Server::PROTOCOL_VERSION,
+                                                       protocolVersion: FastMcp::Server::PROTOCOL_VERSION,
                                                        capabilities: server.capabilities,
                                                        serverInfo: {
                                                          name: server.name,

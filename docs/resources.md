@@ -28,50 +28,34 @@ The Fast MCP library supports the following resource features:
 
 ### Creating and Registering Resources
 
-You can create resources by inheriting from the `MCP::Resource` class:
+You can create resources by inheriting from the `FastMcp::Resource` class:
 
 ```ruby
 require 'fast_mcp'
 
 # Create a server
-server = MCP::Server.new(name: "my-mcp-server", version: "1.0.0")
+server = FastMcp::Server.new(name: "my-mcp-server", version: "1.0.0")
 
-# Create a resource by inheriting from MCP::Resource
-class CounterResource < MCP::Resource
+# Create a resource by inheriting from FastMcp::Resource
+class CounterResource < FastMcp::Resource
   uri "example/counter"
-  name "Counter"
+  resource_name "Counter"
   description "A simple counter resource"
   mime_type "application/json"
   
-  def content
-    JSON.generate({ count: 0 })
+  def initialize
+    @count = 0
   end
   
-  def update_content(new_content)
-    # Parse the new content and update internal state if needed
-    # This method is called when the resource is updated
+  attr_accessor :count
+  
+  def content
+    JSON.generate({ count: @count })
   end
 end
 
 # Register the resource with the server
-server.register_resource(CounterResource.new)
-```
-
-### Creating Direct Instances
-
-For simple resources or dynamic content, you can still use the constructor directly:
-
-```ruby
-# Create a resource using the constructor
-server.register_resource(
-  MCP::Resource.new(
-    uri: "example/counter",
-    name: "Counter",
-    description: "A simple counter resource",
-    mime_type: "application/json",
-    content: JSON.generate({ count: 0 })
-  )
-)
+server.register_resource(CounterResource)
 ```
 
 ### Creating Resources from Files
@@ -80,7 +64,7 @@ You can create resources from files:
 
 ```ruby
 # Create a resource from a file
-image_resource = MCP::Resource.from_file(
+image_resource = FastMcp::Resource.from_file(
   "path/to/image.png",
   name: "Example Image",
   description: "An example image resource"
@@ -97,11 +81,10 @@ You can update a resource's content:
 ```ruby
 # Update the counter resource
 counter_resource = server.read_resource("example/counter")
-counter_data = JSON.parse(counter_resource.instance.content)
-counter_data["count"] += 1
+counter_resource.instance.count += 1
 
-# Update the content
-server.update_resource("example/counter", counter_data)
+# Notify the content has been updated
+server.notify_resource_updated("example/counter")
 ```
 
 ### Removing Resources
@@ -116,13 +99,13 @@ server.remove_resource("example/counter")
 
 ## Custom Resource Types
 
-You can create custom resource types by inheriting from `MCP::Resource` and implementing the required methods:
+You can create custom resource types by inheriting from `FastMcp::Resource` and implementing the required methods:
 
 ```ruby
 # Custom resource type for weather data
-class WeatherResource < MCP::Resource
+class WeatherResource < FastMcp::Resource
   uri "weather/current"
-  name "Current Weather"
+  resource_name "Current Weather"
   description "Current weather conditions"
   mime_type "application/json"
   
@@ -138,7 +121,7 @@ class WeatherResource < MCP::Resource
     }
   end
   
-  def default_content
+  def content
     JSON.generate(@conditions)
   end
   
@@ -150,8 +133,8 @@ class WeatherResource < MCP::Resource
   
   # Custom method to update just the temperature
   def update_temperature(temp)
-    @content[:temperature] = temp
-    @content[:updated_at] = Time.now.to_s
+    @conditions[:temperature] = temp
+    @conditions[:updated_at] = Time.now.to_s
   end
 end
 
@@ -160,6 +143,8 @@ server.register_resource(WeatherResource)
 
 # Later, update just the temperature
 WeatherResource.instance.update_temperature(25.5)
+# Notify the resource has been updated
+server.notify_resource_updated(WeatherResource.uri)
 ```
 
 This custom resource type has:

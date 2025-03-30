@@ -30,29 +30,94 @@ require 'sinatra'
 require 'fast_mcp'
 
 # Create the MCP server
-mcp_server = MCP::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
+mcp_server = FastMcp::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
 
 # Define your tools
-mcp_server.tool "example_tool" do
+class ExampleTool < Mcp::Tool
   description "An example tool"
-  argument :input, description: "Input value", type: :string, required: true
+  arguments  do
+   required(:input).filled(:string).description("Input value")
+  end
   
-  call do |args|
-    "You provided: #{args[:input]}"
+  def call(input:)
+    "You provided: #{input}"
   end
 end
 
 # Register resources
-mcp_server.register_resource(MCP::Resource.new(
-  uri: "example/counter",
-  name: "Counter",
-  description: "A simple counter resource",
-  mime_type: "application/json",
-  content: JSON.generate({ count: 0 })
-))
+class Counter < FastMcp::Resource
+  uri "example/counter"
+  resource_name "Counter",
+  description "A simple counter resource"
+  mime_type "application/json"
+
+  def initialize
+    @count = 0
+  end
+
+  attr_accessor :count
+
+  def content
+    JSON.generate({ count: @count })
+  end
+end
+
 
 # Use the MCP middleware
-use MCP::Transports::RackTransport.new(mcp_server)
+use FastMcp::Transports::RackTransport, server
+
+# Define your Sinatra routes
+get '/' do
+  'Hello, world!'
+end
+```
+
+
+### Using Authenticated Rack Middleware
+
+Add the MCP authenticated rack middleware to your Sinatra application:
+
+```ruby
+# app.rb
+require 'sinatra'
+require 'fast_mcp'
+
+# Create the MCP server
+mcp_server = FastMcp::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
+
+# Define your tools
+class ExampleTool < Mcp::Tool
+  description "An example tool"
+  arguments  do
+   required(:input).filled(:string).description("Input value")
+  end
+  
+  def call(input:)
+    "You provided: #{input}"
+  end
+end
+
+# Register resources
+class Counter < FastMcp::Resource
+  uri "example/counter"
+  resource_name "Counter",
+  description "A simple counter resource"
+  mime_type "application/json"
+
+  def initialize
+    @count = 0
+  end
+
+  attr_accessor :count
+
+  def content
+    JSON.generate({ count: @count })
+  end
+end
+
+
+# Use the MCP middleware
+use FastMcp::Transports::AuthenticatedRackTransport, server
 
 # Define your Sinatra routes
 get '/' do
@@ -70,25 +135,41 @@ require 'sinatra'
 require 'fast_mcp'
 
 # Use the MCP middleware with a configuration block
-use MCP.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server|
-  # Define your tools
-  server.tool "example_tool" do
+use FastMcp.rack_middleware, { name: 'sinatra-mcp-server', version: '1.0.0'} do |server|
+  # Define your tools, here with anonymous classes
+  tool = Class.new(Mcp::Tool) do
     description "An example tool"
-    argument :input, description: "Input value", type: :string, required: true
+    tool_name "Example"
+
+    arguments  do
+      required(:input).filled(:string).description("Input value")
+    end
     
-    call do |args|
-      "You provided: #{args[:input]}"
+    def call(input:)
+      "You provided: #{input}"
     end
   end
+  server.register_tool(tool)
   
   # Register resources
-  server.register_resource(MCP::Resource.new(
-    uri: "example/counter",
-    name: "Counter",
-    description: "A simple counter resource",
-    mime_type: "application/json",
-    content: JSON.generate({ count: 0 })
-  ))
+  counter_resource = Class.new(FastMcp::Resource) do
+    uri "example/counter"
+    resource_name "Counter",
+    description "A simple counter resource"
+    mime_type "application/json"
+
+    def initialize
+      @count = 0
+    end
+
+    attr_accessor :count
+
+    def content
+      JSON.generate({ count: @count })
+    end
+  end
+
+  server.register_resource(counter_resource)
 end
 
 # Define your Sinatra routes
@@ -122,14 +203,16 @@ set :api_key, ENV['API_KEY']
 # Use the MCP middleware
 use MCP.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server|
   # Define a tool that uses Sinatra helpers and settings
-  server.tool "process_data" do
+  class ProcessDataTool < Mcp::Tool
     description "Process data using Sinatra helpers"
-    argument :input, description: "Input data", type: :string, required: true
+    arguments do
+      required(:input).filled(:string).description("Input data")
+    end
     
-    call do |args|
+    def call(input:)
       # Access Sinatra helpers and settings
       api_key = settings.api_key
-      formatted_data = helpers.format_data(args[:input])
+      formatted_data = helpers.format_data(input)
       
       # Return the result
       { status: "success", result: formatted_data }
@@ -170,7 +253,7 @@ use MCP.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server
   end
   
   # Register a resource that uses ActiveRecord models
-  server.register_resource(MCP::Resource.new(
+  server.register_resource(FastMcp::Resource.new(
     uri: "data/users",
     name: "Users",
     description: "List of all users",
@@ -196,260 +279,38 @@ class User < ActiveRecord::Base
 end
 
 # Create the MCP server
-mcp_server = MCP::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
+mcp_server = FastMcp::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
+
+class Users < Mcp::Resource
+  uri "data/users"
+  resource_name "Users"
+  description "List of all users"
+  mime_type "application/json"
+  
+  
+  def content
+    JSON.generate(User.all.map { |user| { id: user.id, name: user.name } })
+  end
+end
+
+class CreateUserTool < Mcp::Tool
+  description "Create a User"
+  arguments do
+    required(:name).filled(:string).description("The user's name")
+  end
+
+  def call(name:)
+    User.create!(name:)
+  end
+end
 
 # Register resources
-mcp_server.register_resource(MCP::Resource.new(
-  uri: "data/users",
-  name: "Users",
-  description: "List of all users",
-  mime_type: "application/json",
-  content: JSON.generate(User.all.map { |user| { id: user.id, name: user.name } })
-))
+mcp_server.register_resource(Users)
+mcp_server.register_tool(CreateUserTool)
 
 # Use the MCP middleware
-use MCP::Transports::RackTransport.new(mcp_server)
+use FastMcp::Transports::RackTransport, mcp_server
 
-# Define a route to create a user
-post '/users' do
-  # Create the user
-  user = User.create(name: params[:name], email: params[:email])
-  
-  # Update the MCP resource
-  mcp_server.update_resource(
-    "data/users",
-    JSON.generate(User.all.map { |u| { id: u.id, name: u.name } })
-  )
-  
-  # Return the user as JSON
-  content_type :json
-  { id: user.id, name: user.name, email: user.email }.to_json
-end
-```
-
-## Creating Routes for MCP
-
-You can create dedicated routes for MCP-related functionality:
-
-```ruby
-# app.rb
-require 'sinatra'
-require 'fast_mcp'
-
-# Create the MCP server
-mcp_server = MCP::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
-
-# Define your tools and resources
-# ...
-
-# Use the MCP middleware
-use MCP::Transports::RackTransport.new(mcp_server)
-
-# Define a route to list tools
-get '/mcp/tools' do
-  @tools = mcp_server.list_tools
-  erb :tools
-end
-
-# Define a route to list resources
-get '/mcp/resources' do
-  @resources = mcp_server.list_resources
-  erb :resources
-end
-
-# Define a route to call a tool
-post '/mcp/tools/:name/call' do
-  tool_name = params[:name]
-  args = JSON.parse(request.body.read).transform_keys(&:to_sym)
-  
-  begin
-    result = mcp_server.call_tool(tool_name, args)
-    content_type :json
-    { result: result }.to_json
-  rescue => e
-    status 400
-    { error: e.message }.to_json
-  end
-end
-
-# Define a route to read a resource
-get '/mcp/resources/:uri' do
-  uri = params[:uri]
-  
-  begin
-    resource = mcp_server.read_resource(uri)
-    content_type resource[:mime_type]
-    resource[:content]
-  rescue => e
-    status 404
-    { error: e.message }.to_json
-  end
-end
-```
-
-## Using the MCP Client in Sinatra
-
-You can use the MCP client to connect to other MCP servers:
-
-```ruby
-# app.rb
-require 'sinatra'
-require 'fast_mcp'
-
-# Create an MCP client
-mcp_client = MCP::Client.new(name: 'sinatra-mcp-client', version: '1.0.0')
-
-# Connect to an external MCP server
-mcp_client.connect_http('http://external-mcp-server.example.com')
-
-# Define a route that uses the MCP client
-get '/external/tools' do
-  @tools = mcp_client.list_tools
-  erb :external_tools
-end
-
-# Define a route that calls an external tool
-post '/external/tools/:name/call' do
-  tool_name = params[:name]
-  args = JSON.parse(request.body.read).transform_keys(&:to_sym)
-  
-  begin
-    result = mcp_client.call_tool(tool_name, args)
-    content_type :json
-    { result: result }.to_json
-  rescue => e
-    status 400
-    { error: e.message }.to_json
-  end
-end
-
-# Define a route that reads an external resource
-get '/external/resources/:uri' do
-  uri = params[:uri]
-  
-  begin
-    resource = mcp_client.read_resource(uri)
-    content_type resource[:mime_type]
-    resource[:content]
-  rescue => e
-    status 404
-    { error: e.message }.to_json
-  end
-end
-```
-
-## Working with Resources
-
-MCP Resources provide a way to share and synchronize data between your Sinatra application and MCP clients.
-
-### Creating and Registering Resources
-
-```ruby
-# Create a resource
-resource = MCP::Resource.new(
-  uri: "example/counter",
-  name: "Counter",
-  description: "A simple counter resource",
-  mime_type: "application/json",
-  content: JSON.generate({ count: 0 })
-)
-
-# Register the resource with the server
-mcp_server.register_resource(resource)
-```
-
-### Updating Resources
-
-You can update resources when your data changes:
-
-```ruby
-# Update a resource
-counter_data = JSON.parse(resource.content)
-counter_data["count"] += 1
-mcp_server.update_resource("example/counter", JSON.generate(counter_data))
-```
-
-### Accessing Resources in Views
-
-You can access MCP resources in your Sinatra views:
-
-```erb
-<!-- views/resources.erb -->
-<h1>MCP Resources</h1>
-
-<ul>
-  <% @resources.each do |resource| %>
-    <li>
-      <h2><%= resource[:name] %></h2>
-      <p><%= resource[:description] %></p>
-      <p>URI: <%= resource[:uri] %></p>
-      <p>MIME Type: <%= resource[:mime_type] %></p>
-      <% if resource[:mime_type] == "application/json" %>
-        <pre><%= JSON.pretty_generate(JSON.parse(resource[:content])) %></pre>
-      <% end %>
-    </li>
-  <% end %>
-</ul>
-```
-
-### Real-Time Updates with EventSource
-
-You can use Server-Sent Events (SSE) to deliver real-time updates from MCP resources:
-
-```ruby
-# app.rb
-require 'sinatra'
-require 'fast_mcp'
-
-# Create the MCP server
-mcp_server = MCP::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
-
-# Define your tools and resources
-# ...
-
-# Use the MCP middleware
-use MCP::Transports::RackTransport.new(mcp_server)
-
-# Define a route for SSE
-get '/sse' do
-  content_type 'text/event-stream'
-  stream(:keep_open) do |out|
-    # Send initial data
-    out << "data: #{JSON.generate({ type: 'connected' })}\n\n"
-    
-    # Subscribe to resource updates
-    callback = mcp_server.on_resource_update do |resource|
-      out << "data: #{JSON.generate({
-        type: 'resource_update',
-        uri: resource[:uri],
-        content: resource[:content]
-      })}\n\n"
-    end
-    
-    # Clean up when the connection is closed
-    out.callback do
-      mcp_server.remove_resource_update_callback(callback)
-    end
-  end
-end
-```
-
-Then, in your JavaScript:
-
-```javascript
-// Connect to the SSE endpoint
-const eventSource = new EventSource('/sse');
-
-// Handle resource updates
-eventSource.addEventListener('message', (event) => {
-  const data = JSON.parse(event.data);
-  
-  if (data.type === 'resource_update') {
-    // Update the UI with the new resource data
-    updateResource(data.uri, data.content);
-  }
-});
-```
 
 ## Deployment Considerations
 
@@ -464,4 +325,3 @@ When deploying your Sinatra application with MCP integration, consider the follo
 
 - Check out the [examples directory](../examples) for more examples of using MCP.
 - Read the [Resources documentation](./resources.md) for more details on using MCP Resources.
-- Explore the [advanced configuration options](./advanced_configuration.md) for customizing MCP behavior. 

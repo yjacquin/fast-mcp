@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-RSpec.describe MCP::Transports::RackTransport do
-  let(:server) { instance_double('MCP::Server', logger: Logger.new(nil)) }
+RSpec.describe FastMcp::Transports::RackTransport do
+  let(:server) { instance_double(FastMcp::Server, logger: Logger.new(nil), transport: nil) }
   let(:app) { ->(_env) { [200, { 'Content-Type' => 'text/plain' }, ['OK']] } }
   let(:logger) { Logger.new(nil) }
-  let(:transport) { described_class.new(server, app, logger: logger) }
+  let(:transport) { described_class.new(app, server, logger: logger) }
 
   describe '#initialize' do
     it 'initializes with server, app, and options' do
@@ -23,7 +23,7 @@ RSpec.describe MCP::Transports::RackTransport do
 
   describe '#start' do
     it 'starts the transport' do
-      expect(logger).to receive(:info).with(/Starting Rack transport/)
+      expect(logger).to receive(:debug).with(/Starting Rack transport/)
       transport.start
       expect(transport.instance_variable_get(:@running)).to be(true)
     end
@@ -40,7 +40,7 @@ RSpec.describe MCP::Transports::RackTransport do
       transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream } })
       transport.instance_variable_set(:@running, true)
 
-      expect(logger).to receive(:info).with('Stopping Rack transport')
+      expect(logger).to receive(:debug).with('Stopping Rack transport')
       transport.stop
 
       expect(transport.instance_variable_get(:@running)).to be(false)
@@ -57,7 +57,7 @@ RSpec.describe MCP::Transports::RackTransport do
       transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream } })
       transport.instance_variable_set(:@running, true)
 
-      expect(logger).to receive(:info).with('Stopping Rack transport')
+      expect(logger).to receive(:debug).with('Stopping Rack transport')
       expect(logger).to receive(:error).with(/Error closing SSE connection/)
 
       transport.stop
@@ -91,7 +91,7 @@ RSpec.describe MCP::Transports::RackTransport do
                                           'client2' => { stream: client2_stream }
                                         })
 
-        expect(logger).to receive(:info).with(/Broadcasting message to 2 SSE clients/)
+        expect(logger).to receive(:debug).with(/Broadcasting message to 2 SSE clients/)
 
         transport.send_message({ test: 'message' })
       end
@@ -110,7 +110,7 @@ RSpec.describe MCP::Transports::RackTransport do
                                           'client' => { stream: client_stream }
                                         })
 
-        expect(logger).to receive(:info).with(/Broadcasting message to 1 SSE clients/)
+        expect(logger).to receive(:debug).with(/Broadcasting message to 1 SSE clients/)
 
         transport.send_message('test message')
       end
@@ -126,7 +126,7 @@ RSpec.describe MCP::Transports::RackTransport do
 
         transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream } })
 
-        expect(logger).to receive(:info).with(/Broadcasting message to 1 SSE clients/)
+        expect(logger).to receive(:debug).with(/Broadcasting message to 1 SSE clients/)
         expect(logger).to receive(:error).with(/Error sending message to client test-client/)
         expect(logger).to receive(:info).with(/Unregistering SSE client: test-client/)
 
@@ -150,6 +150,8 @@ RSpec.describe MCP::Transports::RackTransport do
     it 'returns 404 for unknown MCP endpoints' do
       env = { 'PATH_INFO' => '/mcp/invalid-endpoint' }
 
+      expect(server).to receive(:transport=).with(transport)
+
       result = transport.call(env)
 
       expect(result[0]).to eq(404)
@@ -166,6 +168,7 @@ RSpec.describe MCP::Transports::RackTransport do
         # The default route handler doesn't have a special case for root requests
         # so we expect a 404 response with "Endpoint not found" message
         env = { 'PATH_INFO' => '/mcp/' }
+        expect(server).to receive(:transport=).with(transport)
 
         result = transport.call(env)
 
@@ -197,8 +200,7 @@ RSpec.describe MCP::Transports::RackTransport do
         env['rack.hijack_io'] = io
         allow(env['rack.hijack']).to receive(:call)
 
-        # Add Thread stub to prevent actual thread creation
-        allow(Thread).to receive(:new).and_yield
+        expect(server).to receive(:transport=).with(transport)
 
         # We can't fully test the SSE connection setup because it involves
         # thread creation and complex IO operations, but we can test the
@@ -219,6 +221,7 @@ RSpec.describe MCP::Transports::RackTransport do
           'PATH_INFO' => '/mcp/sse',
           'REQUEST_METHOD' => 'POST'
         }
+        expect(server).to receive(:transport=).with(transport)
 
         result = transport.call(env)
 
@@ -240,6 +243,7 @@ RSpec.describe MCP::Transports::RackTransport do
           'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
           'CONTENT_TYPE' => 'application/json'
         }
+        expect(server).to receive(:transport=).with(transport)
 
         # Mock the server's handle_json_request method
         expect(server).to receive(:handle_json_request)
@@ -250,7 +254,7 @@ RSpec.describe MCP::Transports::RackTransport do
 
         expect(result[0]).to eq(200)
         expect(result[1]['Content-Type']).to eq('application/json')
-        expect(result[2].first).to eq('{"jsonrpc":"2.0","result":{},"id":1}')
+        expect(result[2]).to eq('{"jsonrpc":"2.0","result":{},"id":1}')
       end
 
       it 'handles errors in JSON-RPC requests' do
@@ -260,6 +264,7 @@ RSpec.describe MCP::Transports::RackTransport do
           'rack.input' => StringIO.new('invalid json'),
           'CONTENT_TYPE' => 'application/json'
         }
+        expect(server).to receive(:transport=).with(transport)
 
         # Mock the behavior to simulate a JSON parse error when processing the message
         allow(transport).to receive(:process_message).and_raise(JSON::ParserError.new('Invalid JSON'))
@@ -280,6 +285,7 @@ RSpec.describe MCP::Transports::RackTransport do
           'PATH_INFO' => '/mcp/messages',
           'REQUEST_METHOD' => 'GET'
         }
+        expect(server).to receive(:transport=).with(transport)
 
         result = transport.call(env)
 

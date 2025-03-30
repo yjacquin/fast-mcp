@@ -5,11 +5,11 @@
 # ================
 #
 # This file demonstrates the different ways to define and use MCP tools.
-# MCP::Tool is designed to be used as a base class that you inherit from to define your tools.
+# FastMcp::Tool is designed to be used as a base class that you inherit from to define your tools.
 #
 # Key concepts demonstrated:
 #
-# 1. Creating a tool by inheriting from MCP::Tool
+# 1. Creating a tool by inheriting from FastMcp::Tool
 # 2. Defining a schema using Dry::Schema to validate inputs
 # 3. Using the arguments DSL to define input schemas
 # 4. Validating arguments with various predicates (type checking, format checking, etc.)
@@ -17,7 +17,7 @@
 # 6. Handling optional arguments
 # 7. Using call_with_schema_validation! to ensure inputs match the schema
 #
-# The preferred way to create tools is to inherit from MCP::Tool and define
+# The preferred way to create tools is to inherit from FastMcp::Tool and define
 # the arguments and call method in your subclass.
 
 $LOAD_PATH.unshift(File.expand_path('../lib', __dir__))
@@ -30,7 +30,7 @@ puts
 # Example 1: Class-based with arguments using Dry::Schema
 puts 'Example 1: Class-based with arguments using Dry::Schema'
 
-class GreetTool < MCP::Tool
+class GreetTool < FastMcp::Tool
   description 'Greet someone by name'
 
   arguments do
@@ -53,7 +53,7 @@ puts
 # Example 2: Class with multiple arguments and validations
 puts 'Example 2: Class with multiple arguments and validations'
 
-class FullNameGreetTool < MCP::Tool
+class FullNameGreetTool < FastMcp::Tool
   description 'Greet someone by their full name'
 
   arguments do
@@ -76,7 +76,7 @@ puts
 # Example 3: Array arguments
 puts 'Example 3: Array arguments'
 
-class GroupGreetingTool < MCP::Tool
+class GroupGreetingTool < FastMcp::Tool
   description 'Greet multiple people at once'
 
   arguments do
@@ -98,7 +98,7 @@ puts
 # Example 4: Calculator with multiple argument types
 puts 'Example 4: Calculator with multiple argument types'
 
-class CalculatorTool < MCP::Tool
+class CalculatorTool < FastMcp::Tool
   description 'Perform a calculation'
 
   arguments do
@@ -134,7 +134,7 @@ puts
 # Example 5: Nested object structures
 puts 'Example 5: Nested object structures'
 
-class UserValidatorTool < MCP::Tool
+class UserValidatorTool < FastMcp::Tool
   description 'Validate user information'
 
   arguments do
@@ -170,7 +170,7 @@ puts
 # Example 6: Optional arguments
 puts 'Example 6: Optional arguments'
 
-class UserProfileTool < MCP::Tool
+class UserProfileTool < FastMcp::Tool
   description 'Create a user profile with optional fields'
 
   arguments do
