@@ -217,7 +217,7 @@ module FastMcp
 
     private
 
-    PROTOCOL_VERSION = '2024-11-05'
+    PROTOCOL_VERSION = '2025-03-26'
 
     def handle_initialize(params, id)
       # Store client capabilities for later use
