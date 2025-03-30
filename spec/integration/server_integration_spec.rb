@@ -3,12 +3,12 @@
 require 'stringio'
 
 RSpec.describe 'MCP Server Integration' do
-  let(:server) { MCP::Server.new(name: 'test-server', version: '1.0.0', logger: Logger.new(nil)) }
-  let(:transport) { MCP::Transports::StdioTransport.new(server) }
+  let(:server) { FastMcp::Server.new(name: 'test-server', version: '1.0.0', logger: Logger.new(nil)) }
+  let(:transport) { FastMcp::Transports::StdioTransport.new(server) }
 
   # Define a test tool class
   let(:greet_tool) do
-    Class.new(MCP::Tool) do
+    Class.new(FastMcp::Tool) do
       def self.name
         'greet'
       end
@@ -29,22 +29,22 @@ RSpec.describe 'MCP Server Integration' do
 
   # Define a test resource class
   let(:counter_resource_class) do
-    Class.new(MCP::Resource) do
+    Class.new(FastMcp::Resource) do
       uri 'test/counter'
       resource_name 'Test Counter'
       description 'A test counter resource'
       mime_type 'application/json'
 
-
-      def default_content
+      def initialize
         @count = 0
+      end
 
+      def content
         JSON.generate({ count: @count })
       end
 
-      def update_content(new_content)
-        data = JSON.parse(new_content)
-        @count = data['count']
+      def update_count(new_count)
+        @count = new_count
       end
     end
   end
@@ -143,10 +143,10 @@ RSpec.describe 'MCP Server Integration' do
       expect(io_as_json['id']).to eq(1)
     end
 
-    it 'updates resources' do
+    it 'notifies subscribers about resource updates' do
       # First update the resource
-      new_content = JSON.generate({ count: 1 })
-      server.update_resource('test/counter', new_content)
+      new_count = 1
+      counter_resource_class.instance.update_count(new_count)
 
       # Then read it to verify the update
       request = { jsonrpc: '2.0', method: 'resources/read', params: { uri: 'test/counter' }, id: 1 }
@@ -155,7 +155,7 @@ RSpec.describe 'MCP Server Integration' do
       io_response.rewind
       io_as_json = JSON.parse(io_response.read)
       expect(io_as_json['jsonrpc']).to eq('2.0')
-      expect(io_as_json['result']['contents'][0]['text']).to eq(new_content)
+      expect(io_as_json['result']['contents'][0]['text']).to eq(JSON.generate({ count: new_count }))
       expect(io_as_json['id']).to eq(1)
     end
 

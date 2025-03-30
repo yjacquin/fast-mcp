@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe MCP::Tool do
+RSpec.describe FastMcp::Tool do
   describe '.tool_name' do
     it 'sets and returns the name' do
       test_class = Class.new(described_class)
@@ -111,12 +111,12 @@ RSpec.describe MCP::Tool do
     it 'raises InvalidArgumentsError when validation fails' do
       expect do
         instance.call_with_schema_validation!(name: 'Test', age: 15)
-      end.to raise_error(MCP::Tool::InvalidArgumentsError)
+      end.to raise_error(FastMcp::Tool::InvalidArgumentsError)
     end
   end
 
   describe 'SchemaCompiler' do
-    let(:compiler) { MCP::SchemaCompiler.new }
+    let(:compiler) { FastMcp::SchemaCompiler.new }
 
     describe '#process' do
       it 'converts a basic schema to JSON format' do
