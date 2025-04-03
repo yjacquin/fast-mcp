@@ -103,7 +103,7 @@ FastMcp.mount_in_rails(
   messages_route: 'messages', # This is the default route for the messages endpoint
   sse_route: 'sse' # This is the default route for the SSE endpoint
   # authenticate: true,       # Uncomment to enable authentication
-  # auth_token: 'your-token', # Required if authenticate: true
+  # auth_token: 'your-token' # Required if authenticate: true
 ) do |server|
   Rails.application.config.after_initialize do
     # FastMcp will automatically discover and register:
