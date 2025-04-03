@@ -36,7 +36,7 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 ## 💎 What Makes FastMCP Great
 ```ruby
 # Define tools for AI models to use
-server = FastMcp::Server.new(name: 'recipe-ai', version: '1.0.0')
+server = FastMcp::Server.new(name: 'popular-users', version: '1.0.0')
 
 # Define a tool by inheriting from FastMcp::Tool
 class CreateUserTool < FastMcp::Tool
@@ -75,13 +75,13 @@ class PopularUsers < FastMcp::Resource
 end
 
 # Register the resource with the server
-server.register_resource(IngredientsResource)
+server.register_resource(PopularUsers)
 
 # Accessing the resource through the server
-server.read_resource(IngredientsResource.uri)
+server.read_resource(PopularUsers.uri)
 
 # Notify the resource content has been updated to clients
-server.notify_resource_updated(IngredientsResource.uri)
+server.notify_resource_updated(PopularUsers.uri)
 ```
 
 ### 🚂 Fast Ruby on Rails implementation
