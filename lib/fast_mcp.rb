@@ -36,6 +36,8 @@ module FastMcp
   # @option options [String] :name The name of the server
   # @option options [String] :version The version of the server
   # @option options [String] :path_prefix The path prefix for the MCP endpoints
+  # @option options [String] :messages_route The route for the messages endpoint
+  # @option options [String] :sse_route The route for the SSE endpoint
   # @option options [Logger] :logger The logger to use
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
@@ -118,6 +120,8 @@ module FastMcp
   # @option options [String] :name The name of the server
   # @option options [String] :version The version of the server
   # @option options [String] :path_prefix The path prefix for the MCP endpoints
+  # @option options [String] :messages_route The route for the messages endpoint
+  # @option options [String] :sse_route The route for the SSE endpoint
   # @option options [Logger] :logger The logger to use
   # @option options [Boolean] :authenticate Whether to use authentication
   # @option options [String] :auth_token The authentication token
@@ -130,6 +134,8 @@ module FastMcp
     version = options.delete(:version) || '1.0.0'
     logger = options[:logger] || Rails.logger
     path_prefix = options.delete(:path_prefix) || '/mcp'
+    messages_route = options.delete(:messages_route) || 'messages'
+    sse_route = options.delete(:sse_route) || 'sse'
     authenticate = options.delete(:authenticate) || false
 
     options[:logger] = logger
@@ -145,7 +151,7 @@ module FastMcp
                                   end
 
     # Insert the middleware in the Rails middleware stack
-    app.middleware.use self.server.transport_klass, self.server, options.merge(path_prefix: path_prefix)
+    app.middleware.use self.server.transport_klass, self.server, options.merge(path_prefix: path_prefix, messages_route: messages_route, sse_route: sse_route)
   end
 
   # Notify the server that a resource has been updated
