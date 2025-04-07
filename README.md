@@ -40,8 +40,7 @@ server = FastMcp::Server.new(name: 'popular-users', version: '1.0.0')
 
 # Define a tool by inheriting from FastMcp::Tool
 class CreateUserTool < FastMcp::Tool
-  description "Find recipes based on ingredients"
-
+  description "Create a user"
     # These arguments will generate the needed JSON to be presented to the MCP Client
     # And they will be validated at run time.
     # The validation is based off Dry-Schema, with the addition of the description.
