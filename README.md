@@ -41,7 +41,6 @@ server = FastMcp::Server.new(name: 'popular-users', version: '1.0.0')
 # Define a tool by inheriting from FastMcp::Tool
 class CreateUserTool < FastMcp::Tool
   description "Create a user"
-  
     # These arguments will generate the needed JSON to be presented to the MCP Client
     # And they will be validated at run time.
     # The validation is based off Dry-Schema, with the addition of the description.
@@ -54,7 +53,7 @@ class CreateUserTool < FastMcp::Tool
       optional(:zipcode).filled(:string)
     end
   end
-  
+
   def call(first_name:, age: nil, address: {})
     User.create!(first_name:, age:, address:)
   end
@@ -68,7 +67,7 @@ class PopularUsers < FastMcp::Resource
   uri "file://popular_users.json"
   resource_name "Popular Users"
   mime_type "application/json"
-  
+
   def content
     JSON.generate(User.popular.limit(5).as_json)
   end
@@ -99,9 +98,11 @@ FastMcp.mount_in_rails(
   Rails.application,
   name: Rails.application.class.module_parent_name.underscore.dasherize,
   version: '1.0.0',
-  path_prefix: '/mcp' # This is the default path prefix
+  path_prefix: '/mcp', # This is the default path prefix
+  messages_route: 'messages', # This is the default route for the messages endpoint
+  sse_route: 'sse' # This is the default route for the SSE endpoint
   # authenticate: true,       # Uncomment to enable authentication
-  # auth_token: 'your-token', # Required if authenticate: true
+  # auth_token: 'your-token' # Required if authenticate: true
 ) do |server|
   Rails.application.config.after_initialize do
     # FastMcp will automatically discover and register:
@@ -136,11 +137,11 @@ These are automatically set up in Rails applications. You can use either naming 
 # Using Rails-style naming:
 class MyTool < ActionTool::Base
   description "My awesome tool"
-  
+
   arguments do
     required(:input).filled(:string)
   end
-  
+
   def call(input:)
     # Your implementation
   end
@@ -182,12 +183,12 @@ server = FastMcp::Server.new(name: 'my-ai-server', version: '1.0.0')
 # Define a tool by inheriting from FastMcp::Tool
 class SummarizeTool < FastMcp::Tool
   description "Summarize a given text"
-  
+
   arguments do
     required(:text).filled(:string).description("Text to summarize")
     optional(:max_length).filled(:integer).description("Maximum length of summary")
   end
-  
+
   def call(text:, max_length: 100)
     # Your summarization logic here
     text.split('.').first(3).join('.') + '...'
@@ -203,7 +204,7 @@ class StatisticsResource < FastMcp::Resource
   resource_name "Usage Statistics"
   description "Current system statistics"
   mime_type "application/json"
-  
+
   def content
     JSON.generate({
       users_online: 120,
