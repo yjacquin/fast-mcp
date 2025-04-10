@@ -152,8 +152,8 @@ module FastMcp
 
     # Insert the middleware in the Rails middleware stack
     app.middleware.use(
-      self.server.transport_klass, 
-      self.server, 
+      self.server.transport_klass,
+      self.server,
       options.merge(path_prefix: path_prefix, messages_route: messages_route, sse_route: sse_route)
     )
   end
