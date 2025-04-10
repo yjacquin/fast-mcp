@@ -12,12 +12,14 @@ module FastMcp
     class RackTransport < BaseTransport
       DEFAULT_PATH_PREFIX = '/mcp'
 
-      attr_reader :app, :path_prefix, :sse_clients
+      attr_reader :app, :path_prefix, :sse_clients, :messages_route, :sse_route
 
       def initialize(app, server, options = {}, &_block)
         super(server, logger: options[:logger])
         @app = app
         @path_prefix = options[:path_prefix] || DEFAULT_PATH_PREFIX
+        @messages_route = options[:messages_route] || 'messages'
+        @sse_route = options[:sse_route] || 'sse'
         @sse_clients = {}
         @running = false
       end
@@ -106,9 +108,9 @@ module FastMcp
         @logger.info("MCP request subpath: '#{subpath.inspect}'")
 
         case subpath
-        when '/sse'
+        when "/#{@sse_route}"
           handle_sse_request(request, env)
-        when '/messages'
+        when "/#{@messages_route}"
           handle_message_request(request)
         else
           @logger.info('Received unknown request')
@@ -300,7 +302,7 @@ module FastMcp
         io.write(": SSE connection established\n\n")
 
         # Send endpoint information as the first message
-        endpoint = "#{@path_prefix}/messages"
+        endpoint = "#{@path_prefix}/#{@messages_route}"
         @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
         io.write("event: endpoint\ndata: #{endpoint}\n\n")
 
