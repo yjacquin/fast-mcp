@@ -275,7 +275,7 @@ module FastMcp
       @client_initialized = true
       @logger.info('Client initialized, beginning normal operation')
 
-      nil
+      send_response(nil)
     end
 
     # Handle tools/list request
