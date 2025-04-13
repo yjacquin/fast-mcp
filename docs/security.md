@@ -34,6 +34,21 @@ FastMcp.rack_middleware(app,
 )
 ```
 
+With the Rails integration, it defaults to `Rails.application.config.hosts`, but you can override this through the initializer:
+
+```ruby
+FastMcp.mount_in_rails(
+  Rails.application,
+  ...
+  # Add allowed origins below, it defaults to Rails.application.config.hosts
+  allowed_origins: ['example.com', /.*\.example\.com/],
+...
+) do |server|
+  ...
+end
+```
+```
+
 The `allowed_origins` parameter accepts an array of strings and regular expressions:
 - Strings are matched exactly against the hostname in the Origin header
 - Regular expressions are matched against the hostname for more flexible matching (e.g., for subdomains)
