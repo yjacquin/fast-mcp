@@ -446,7 +446,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
     end
     
     it 'handles URLs without scheme by adding a dummy scheme' do
-      expect(transport.send(:extract_hostname, 'localhost')).to be_nil
+      expect(transport.send(:extract_hostname, 'localhost')).to eq('localhost')
       expect(transport.send(:extract_hostname, 'example.com')).to eq('example.com')
       expect(transport.send(:extract_hostname, 'sub.example.com:8080')).to eq('sub.example.com')
     end

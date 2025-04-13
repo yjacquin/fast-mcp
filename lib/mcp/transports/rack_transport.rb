@@ -9,7 +9,7 @@ module FastMcp
   module Transports
     # Rack middleware transport for MCP
     # This transport can be mounted in any Rack-compatible web framework
-    class RackTransport < BaseTransport
+    class RackTransport < BaseTransport # rubocop:disable Metrics/ClassLength
       DEFAULT_PATH_PREFIX = '/mcp'
       DEFAULT_ALLOWED_ORIGINS = ['localhost', '127.0.0.1'].freeze
 
@@ -142,20 +142,19 @@ module FastMcp
         return nil if url.nil? || url.empty?
 
         begin
-          uri = URI.parse(url)
-          # Handle cases where the URL might not have a scheme
-          if uri.host.nil? && url.include?('.')
-            # Try parsing with a dummy scheme
-            uri = URI.parse("http://#{url}")
-          end
+          # Check if the URL has a scheme, if not, add http:// as a prefix
+          has_scheme = url.match?(%r{^[a-zA-Z][a-zA-Z0-9+.-]*://})
+          parsing_url = has_scheme ? url : "http://#{url}"
 
-          # Return nil for invalid URLs like 'http://' where host is empty
+          uri = URI.parse(parsing_url)
+
+          # Return nil for invalid URLs where host is empty
           return nil if uri.host.nil? || uri.host.empty?
 
           uri.host
         rescue URI::InvalidURIError
-          # If URL parsing fails, just return the original string
-          url
+          # If standard parsing fails, try to extract host with a regex for host:port format
+          url.split(':').first if url.match?(%r{^([^:/]+)(:\d+)?$})
         end
       end
 

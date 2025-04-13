@@ -140,7 +140,7 @@ module FastMcp
     messages_route = options.delete(:messages_route) || 'messages'
     sse_route = options.delete(:sse_route) || 'sse'
     authenticate = options.delete(:authenticate) || false
-    allowed_origins = options[:allowed_origins] || app.config.hosts
+    allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
 
     options[:logger] = logger
     options[:allowed_origins] = allowed_origins
@@ -162,6 +162,20 @@ module FastMcp
       self.server,
       options.merge(path_prefix: path_prefix, messages_route: messages_route, sse_route: sse_route)
     )
+  end
+
+  def self.default_rails_allowed_origins(rail_app)
+    hosts = rail_app.config.hosts
+
+    hosts.map do |host|
+      if host.is_a?(String) && host.start_with?('.')
+        # Convert .domain to domain and *.domain
+        host_without_dot = host[1..]
+        [host_without_dot, Regexp.new(".*\.#{host_without_dot}")] # rubocop:disable Style/RedundantStringEscape
+      else
+        host
+      end
+    end.flatten.compact
   end
 
   # Notify the server that a resource has been updated
