@@ -95,6 +95,15 @@ RSpec.describe FastMcp::Server do
       end
     end
 
+    context 'with a noticiations/initialized request' do
+      it 'responds with a empty result' do
+        request = { jsonrpc: '2.0', method: 'notifications/initialized' }.to_json
+
+        expect(server).to receive(:send_result).with({}, nil)
+        server.handle_request(request)
+      end
+    end
+
     context 'with an initialize request' do
       it 'responds with the server info' do
         request = { jsonrpc: '2.0', method: 'initialize', id: 1 }.to_json

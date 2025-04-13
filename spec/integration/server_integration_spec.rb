@@ -91,6 +91,17 @@ RSpec.describe 'MCP Server Integration' do
       expect(io_as_json['id']).to eq(1)
     end
 
+    it 'responds to notifications/initialized requests' do
+      request = { jsonrpc: '2.0', method: 'notifications/initialized' }
+      io_response = server.handle_request(JSON.generate(request))
+
+      io_response.rewind
+      io_as_json = JSON.parse(io_response.read)
+      expect(io_as_json['jsonrpc']).to eq('2.0')
+      expect(io_as_json['result']).to be_empty
+      expect(io_as_json['id']).to be_nil
+    end
+
     it 'lists tools' do
       request = { jsonrpc: '2.0', method: 'tools/list', id: 1 }
       io_response = server.handle_request(JSON.generate(request))
