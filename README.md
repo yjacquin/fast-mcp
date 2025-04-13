@@ -308,6 +308,34 @@ Please refer to [configuring_mcp_clients](docs/configuring_mcp_clients.md)
 - 📚 **Interactive Documentation**: Create AI-enhanced API documentation
 - 💬 **Chatbots and Assistants**: Build AI assistants with access to your app's data
 
+## 🔒 Security Features
+
+Fast MCP includes built-in security features to protect your applications:
+
+### DNS Rebinding Protection
+
+The HTTP/SSE transport validates the Origin header on all incoming connections to prevent DNS rebinding attacks, which could allow malicious websites to interact with local MCP servers.
+
+```ruby
+# Configure allowed origins (defaults to ['localhost', '127.0.0.1'])
+FastMcp.rack_middleware(app, 
+  allowed_origins: ['localhost', '127.0.0.1', 'your-domain.com', /.*\.your-domain\.com/],
+  # other options...
+)
+```
+
+### Authentication
+
+Fast MCP supports token-based authentication for all connections:
+
+```ruby
+# Enable authentication
+FastMcp.authenticated_rack_middleware(app,
+  auth_token: 'your-secret-token',
+  # other options...
+)
+```
+
 ## 📖 Documentation
 
 - [🚀 Getting Started Guide](docs/getting_started.md)
@@ -316,6 +344,7 @@ Please refer to [configuring_mcp_clients](docs/configuring_mcp_clients.md)
 - [🌐 Sinatra Integration](docs/sinatra_integration.md)
 - [📚 Resources](docs/resources.md)
 - [🛠️ Tools](docs/tools.md)
+- [🔒 Security](docs/security.md)
 
 ## 💻 Examples
 
