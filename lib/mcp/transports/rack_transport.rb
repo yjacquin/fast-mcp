@@ -9,10 +9,11 @@ module FastMcp
   module Transports
     # Rack middleware transport for MCP
     # This transport can be mounted in any Rack-compatible web framework
-    class RackTransport < BaseTransport
+    class RackTransport < BaseTransport # rubocop:disable Metrics/ClassLength
       DEFAULT_PATH_PREFIX = '/mcp'
+      DEFAULT_ALLOWED_ORIGINS = ['localhost', '127.0.0.1'].freeze
 
-      attr_reader :app, :path_prefix, :sse_clients, :messages_route, :sse_route
+      attr_reader :app, :path_prefix, :sse_clients, :messages_route, :sse_route, :allowed_origins
 
       def initialize(app, server, options = {}, &_block)
         super(server, logger: options[:logger])
@@ -20,6 +21,7 @@ module FastMcp
         @path_prefix = options[:path_prefix] || DEFAULT_PATH_PREFIX
         @messages_route = options[:messages_route] || 'messages'
         @sse_route = options[:sse_route] || 'sse'
+        @allowed_origins = options[:allowed_origins] || DEFAULT_ALLOWED_ORIGINS
         @sse_clients = {}
         @running = false
       end
@@ -27,6 +29,7 @@ module FastMcp
       # Start the transport
       def start
         @logger.debug("Starting Rack transport with path prefix: #{@path_prefix}")
+        @logger.info("DNS rebinding protection enabled. Allowed origins: #{allowed_origins.join(', ')}")
         @running = true
       end
 
@@ -102,8 +105,76 @@ module FastMcp
 
       private
 
+      # Validate the Origin header to prevent DNS rebinding attacks
+      def validate_origin(request, env)
+        origin = env['HTTP_ORIGIN']
+
+        # If no origin header is present, check the referer or host
+        origin = env['HTTP_REFERER'] || request.host if origin.nil? || origin.empty?
+
+        # Extract hostname from the origin
+        hostname = extract_hostname(origin)
+
+        # If we have a hostname and allowed_origins is not empty
+        if hostname && !allowed_origins.empty?
+          @logger.info("Validating origin: #{hostname}")
+
+          # Check if the hostname matches any allowed origin
+          is_allowed = allowed_origins.any? do |allowed|
+            if allowed.is_a?(Regexp)
+              hostname.match?(allowed)
+            else
+              hostname == allowed
+            end
+          end
+
+          unless is_allowed
+            @logger.warn("Blocked request with origin: #{hostname}")
+            return false
+          end
+        end
+
+        true
+      end
+
+      # Extract hostname from a URL
+      def extract_hostname(url)
+        return nil if url.nil? || url.empty?
+
+        begin
+          # Check if the URL has a scheme, if not, add http:// as a prefix
+          has_scheme = url.match?(%r{^[a-zA-Z][a-zA-Z0-9+.-]*://})
+          parsing_url = has_scheme ? url : "http://#{url}"
+
+          uri = URI.parse(parsing_url)
+
+          # Return nil for invalid URLs where host is empty
+          return nil if uri.host.nil? || uri.host.empty?
+
+          uri.host
+        rescue URI::InvalidURIError
+          # If standard parsing fails, try to extract host with a regex for host:port format
+          url.split(':').first if url.match?(%r{^([^:/]+)(:\d+)?$})
+        end
+      end
+
       # Handle MCP-specific requests
       def handle_mcp_request(request, env)
+        # Validate Origin header to prevent DNS rebinding attacks
+        unless validate_origin(request, env)
+          return [403, { 'Content-Type' => 'application/json' },
+                  [JSON.generate(
+                    {
+                      jsonrpc: '2.0',
+                      error: {
+                        code: -32_600,
+                        message: 'Forbidden: Origin validation failed'
+                      },
+                      id: nil
+                    }
+                  )]]
+        end
+
         subpath = request.path[@path_prefix.length..]
         @logger.info("MCP request subpath: '#{subpath.inspect}'")
 

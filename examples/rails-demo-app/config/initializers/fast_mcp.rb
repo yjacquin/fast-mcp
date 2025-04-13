@@ -21,6 +21,8 @@ FastMcp.mount_in_rails(
   path_prefix: '/mcp', # This is the default path prefix
   messages_route: 'messages', # This is the default route for the messages endpoint
   sse_route: 'sse' # This is the default route for the SSE endpoint
+  # Add allowed origins below, it defaults to Rails.application.config.hosts
+  # allowed_origins: ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/],
   # authenticate: true,       # Uncomment to enable authentication
   # auth_token: 'your-token' # Required if authenticate: true
 ) do |server|
