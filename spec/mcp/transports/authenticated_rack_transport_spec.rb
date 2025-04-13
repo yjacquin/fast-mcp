@@ -292,5 +292,76 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
         expect(result).to eq([200, {}, ['OK']])
       end
     end
+
+    context 'with DNS rebinding protection' do
+      let(:allowed_origins) { ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/] }
+      let(:transport) do
+        described_class.new(
+          app,
+          server,
+          logger: logger,
+          auth_token: auth_token,
+          allowed_origins: allowed_origins
+        )
+      end
+      
+      it 'accepts requests with allowed origin when authenticated' do
+        env = { 
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'HTTP_ORIGIN' => 'http://localhost',
+          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+        }
+        
+        expect(server).to receive(:transport=).with(transport)
+        expect(server).to receive(:handle_json_request)
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
+          
+        result = transport.call(env)
+        expect(result[0]).to eq(200)
+      end
+      
+      it 'rejects requests with disallowed origin when authenticated' do
+        env = { 
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'HTTP_ORIGIN' => 'http://evil-site.com',
+          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+        }
+        
+        expect(server).to receive(:transport=).with(transport)
+        # The server should NOT receive handle_json_request for a disallowed origin
+        expect(server).not_to receive(:handle_json_request)
+        
+        result = transport.call(env)
+        expect(result[0]).to eq(403)
+        expect(result[1]['Content-Type']).to eq('application/json')
+        
+        response = JSON.parse(result[2].first)
+        expect(response['jsonrpc']).to eq('2.0')
+        expect(response['error']['code']).to eq(-32_600)
+        expect(response['error']['message']).to include('Origin validation failed')
+      end
+      
+      it 'checks authentication before validating origin' do
+        env = { 
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'HTTP_ORIGIN' => 'http://evil-site.com',
+          'HTTP_AUTHORIZATION' => 'Bearer invalid-token',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+        }
+        
+        # Should not reach the origin validation since auth fails first
+        result = transport.call(env)
+        expect(result[0]).to eq(401) # Unauthorized, not 403 Forbidden
+        
+        response = JSON.parse(result[2].first)
+        expect(response['error']['message']).to include('Unauthorized')
+      end
+    end
   end
 end

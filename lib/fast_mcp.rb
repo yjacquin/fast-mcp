@@ -39,6 +39,7 @@ module FastMcp
   # @option options [String] :messages_route The route for the messages endpoint
   # @option options [String] :sse_route The route for the SSE endpoint
   # @option options [Logger] :logger The logger to use
+  # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
@@ -65,6 +66,7 @@ module FastMcp
   # @option options [String] :name The name of the server
   # @option options [String] :version The version of the server
   # @option options [String] :auth_token The authentication token
+  # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
@@ -125,6 +127,7 @@ module FastMcp
   # @option options [Logger] :logger The logger to use
   # @option options [Boolean] :authenticate Whether to use authentication
   # @option options [String] :auth_token The authentication token
+  # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
@@ -137,8 +140,11 @@ module FastMcp
     messages_route = options.delete(:messages_route) || 'messages'
     sse_route = options.delete(:sse_route) || 'sse'
     authenticate = options.delete(:authenticate) || false
+    allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
 
     options[:logger] = logger
+    options[:allowed_origins] = allowed_origins
+
     # Create or get the server
     self.server = FastMcp::Server.new(name: name, version: version, logger: logger)
     yield self.server if block_given?
@@ -156,6 +162,20 @@ module FastMcp
       self.server,
       options.merge(path_prefix: path_prefix, messages_route: messages_route, sse_route: sse_route)
     )
+  end
+
+  def self.default_rails_allowed_origins(rail_app)
+    hosts = rail_app.config.hosts
+
+    hosts.map do |host|
+      if host.is_a?(String) && host.start_with?('.')
+        # Convert .domain to domain and *.domain
+        host_without_dot = host[1..]
+        [host_without_dot, Regexp.new(".*\.#{host_without_dot}")] # rubocop:disable Style/RedundantStringEscape
+      else
+        host
+      end
+    end.flatten.compact
   end
 
   # Notify the server that a resource has been updated

@@ -147,6 +147,106 @@ RSpec.describe FastMcp::Transports::RackTransport do
       expect(result).to eq([200, {}, ['OK']])
     end
 
+    context 'with DNS rebinding protection' do
+      let(:allowed_origins) { ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/] }
+      let(:transport) { described_class.new(app, server, logger: logger, allowed_origins: allowed_origins) }
+
+      it 'accepts requests with allowed origin' do
+        # Test with a string origin
+        env = { 
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'HTTP_ORIGIN' => 'http://localhost',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+        }
+        
+        expect(server).to receive(:transport=).with(transport)
+        # Mock the behavior for a valid Origin
+        expect(server).to receive(:handle_json_request)
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
+
+        result = transport.call(env)
+        expect(result[0]).to eq(200)
+      end
+
+      it 'accepts requests with origin matching a regex pattern' do
+        # Test with an origin matching a regex
+        env = { 
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'HTTP_ORIGIN' => 'https://sub.example.com',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+        }
+        
+        expect(server).to receive(:transport=).with(transport)
+        # Mock the behavior for a valid Origin
+        expect(server).to receive(:handle_json_request)
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
+
+        result = transport.call(env)
+        expect(result[0]).to eq(200)
+      end
+
+      it 'rejects requests with disallowed origin' do
+        # Test with a disallowed origin
+        env = { 
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'HTTP_ORIGIN' => 'http://evil-site.com',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+        }
+        
+        expect(server).to receive(:transport=).with(transport)
+        # The server should NOT receive handle_json_request for a disallowed origin
+        expect(server).not_to receive(:handle_json_request)
+
+        result = transport.call(env)
+        expect(result[0]).to eq(403)
+        expect(result[1]['Content-Type']).to eq('application/json')
+        
+        response = JSON.parse(result[2].first)
+        expect(response['jsonrpc']).to eq('2.0')
+        expect(response['error']['code']).to eq(-32_600)
+        expect(response['error']['message']).to include('Origin validation failed')
+      end
+
+      it 'falls back to Referer header when Origin is not present' do
+        env = { 
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'HTTP_REFERER' => 'http://localhost/some/path',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+        }
+        
+        expect(server).to receive(:transport=).with(transport)
+        expect(server).to receive(:handle_json_request)
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
+
+        result = transport.call(env)
+        expect(result[0]).to eq(200)
+      end
+
+      it 'falls back to Host header when Origin and Referer are not present' do
+        env = { 
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'HTTP_HOST' => 'localhost:3000',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+        }
+        
+        expect(server).to receive(:transport=).with(transport)
+        expect(server).to receive(:handle_json_request)
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
+
+        result = transport.call(env)
+        expect(result[0]).to eq(200)
+      end
+    end
+
     it 'returns 404 for unknown MCP endpoints' do
       env = { 'PATH_INFO' => '/mcp/invalid-endpoint' }
 
@@ -296,6 +396,69 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(response['error']['code']).to eq(-32_601)
         expect(response['error']['message']).to include('Method not allowed')
       end
+    end
+  end
+
+  # Tests for private methods
+  describe '#validate_origin (private)' do
+    let(:allowed_origins) { ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/] }
+    let(:transport) { described_class.new(app, server, logger: logger, allowed_origins: allowed_origins) }
+    
+    it 'validates origins correctly' do
+      request = instance_double('Rack::Request', host: 'localhost:3000')
+      
+      # Test allowed origins
+      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'http://localhost'})).to be true
+      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'http://127.0.0.1'})).to be true
+      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'https://example.com'})).to be true
+      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'https://sub.example.com'})).to be true
+      
+      # Test disallowed origins
+      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'http://evil.com'})).to be false
+      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'http://sub.evil.com'})).to be false
+    end
+    
+    it 'falls back to referer when origin is missing' do
+      request = instance_double('Rack::Request', host: 'localhost:3000')
+      
+      # Test with referer only
+      expect(transport.send(:validate_origin, request, {'HTTP_REFERER' => 'http://localhost/path'})).to be true
+      expect(transport.send(:validate_origin, request, {'HTTP_REFERER' => 'http://evil.com/path'})).to be false
+    end
+    
+    it 'falls back to host when origin and referer are missing' do
+      # Test with host only (from request)
+      request = instance_double('Rack::Request', host: 'localhost:3000')
+      expect(transport.send(:validate_origin, request, {})).to be true
+      
+      request = instance_double('Rack::Request', host: 'evil.com:3000')
+      expect(transport.send(:validate_origin, request, {})).to be false
+    end
+  end
+  
+  describe '#extract_hostname (private)' do
+    let(:transport) { described_class.new(app, server, logger: logger) }
+    
+    it 'extracts hostname from URLs correctly' do
+      expect(transport.send(:extract_hostname, 'http://localhost')).to eq('localhost')
+      expect(transport.send(:extract_hostname, 'https://example.com')).to eq('example.com')
+      expect(transport.send(:extract_hostname, 'http://sub.domain.example.com:8080/path')).to eq('sub.domain.example.com')
+    end
+    
+    it 'handles URLs without scheme by adding a dummy scheme' do
+      expect(transport.send(:extract_hostname, 'localhost')).to eq('localhost')
+      expect(transport.send(:extract_hostname, 'example.com')).to eq('example.com')
+      expect(transport.send(:extract_hostname, 'sub.example.com:8080')).to eq('sub.example.com')
+    end
+    
+    it 'returns nil for empty or nil URLs' do
+      expect(transport.send(:extract_hostname, nil)).to be_nil
+      expect(transport.send(:extract_hostname, '')).to be_nil
+    end
+    
+    it 'gracefully handles invalid URLs' do
+      expect(transport.send(:extract_hostname, 'not a url')).to eq('not a url')
+      expect(transport.send(:extract_hostname, 'http://')).to be_nil
     end
   end
 end
