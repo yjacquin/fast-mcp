@@ -14,9 +14,7 @@ module FastMcp
         @auth_enabled = !@auth_token.nil?
       end
 
-      def call(env)
-        request = Rack::Request.new(env)
-
+      def handle_mcp_request(request, env)
         if auth_enabled? && !exempt_from_auth?(request.path)
           auth_header = request.env["HTTP_#{@auth_header_name.upcase.gsub('-', '_')}"]
           token = auth_header&.gsub('Bearer ', '')
@@ -42,6 +40,7 @@ module FastMcp
       end
 
       def unauthorized_response(request)
+        @logger.error('Unauthorized request: Invalid or missing authentication token')
         body = JSON.generate(
           {
             jsonrpc: '2.0',
