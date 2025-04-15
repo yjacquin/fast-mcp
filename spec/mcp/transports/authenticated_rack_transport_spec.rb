@@ -5,26 +5,50 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
   let(:app) { ->(_env) { [200, { 'Content-Type' => 'text/plain' }, ['OK']] } }
   let(:logger) { Logger.new(nil) }
   let(:auth_token) { 'valid-token-123' }
-  let(:auth_header_name) { 'Authorization' }
+  let(:authenticate) { true }
+  let(:auth_strategy) { :token }
+  let(:auth_header) { 'Authorization' }
   let(:auth_exempt_paths) { ['/public', '/mcp/health'] }
+  let(:auth_options) do
+    {
+      auth_strategy: auth_strategy,
+      auth_header: auth_header,
+      auth_token: auth_token,
+      auth_exempt_paths: auth_exempt_paths,
+    }
+  end
 
   let(:transport) do
     described_class.new(
       app,
       server,
       logger: logger,
-      auth_token: auth_token,
-      auth_header_name: auth_header_name,
-      auth_exempt_paths: auth_exempt_paths
+      authenticate: true,
+      auth_options: auth_options,
     )
+  end
+
+  around do |ex|
+    env_variables = %w[MCP_AUTH_HEADER MCP_AUTH_TOKEN MCP_AUTH_USER MCP_AUTH_PASSWORD]
+    original = env_variables.map { |k| [k, ENV[k]] }.to_h
+
+    ex.run
+
+    original.each { |k, v| ENV[k] = v }
   end
 
   describe '#initialize' do
     it 'initializes with authentication options' do
-      expect(transport.instance_variable_get(:@auth_token)).to eq(auth_token)
-      expect(transport.instance_variable_get(:@auth_header_name)).to eq(auth_header_name)
+      expect(transport.instance_variable_get(:@auth_enabled)).to be(true)
+      expect(transport.instance_variable_get(:@auth_strategy)).to eq(:token)
+      expect(transport.instance_variable_get(:@auth_options)).to eq(auth_options)
       expect(transport.instance_variable_get(:@auth_exempt_paths)).to eq(auth_exempt_paths)
       expect(transport.instance_variable_get(:@auth_enabled)).to be(true)
+    end
+
+    it 'sets default authentication strategy to token' do
+      auth_transport = described_class.new(app, server, authenticate: true, logger: logger)
+      expect(auth_transport.instance_variable_get(:@auth_strategy)).to eq(:token)
     end
 
     it 'disables authentication when no token is provided' do
@@ -32,9 +56,9 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
       expect(no_auth_transport.instance_variable_get(:@auth_enabled)).to be(false)
     end
 
-    it 'uses default header name when not specified' do
-      custom_transport = described_class.new(server, app, auth_token: auth_token, logger: logger)
-      expect(custom_transport.instance_variable_get(:@auth_header_name)).to eq('Authorization')
+    it 'enables authentication when explicitly set to true' do
+      explicit_auth_transport = described_class.new(app, server, authenticate: true, logger: logger)
+      expect(explicit_auth_transport.instance_variable_get(:@auth_enabled)).to be(true)
     end
 
     it 'uses default empty array for exempt paths when not specified' do
@@ -44,7 +68,7 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
   end
 
   describe '#call' do
-    context 'with valid authentication' do
+    context 'with valid token authentication' do
       it 'passes the request to parent when token is valid for non-MCP paths' do
         env = {
           'PATH_INFO' => '/not-mcp',
@@ -53,6 +77,19 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
 
         expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
         result = transport.call(env)
+        expect(result).to eq([200, {}, ['OK']])
+      end
+
+      it 'defaults the authentication header to Authorization with ENV token fetching' do
+        env = {
+          'PATH_INFO' => '/not-mcp',
+          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}"
+        }
+        default_transport = described_class.new(app, server, authenticate: true, logger: logger)
+        ENV['MCP_AUTH_TOKEN'] = auth_token
+
+        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
+        result = default_transport.call(env)
         expect(result).to eq([200, {}, ['OK']])
       end
 
@@ -183,7 +220,7 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
     end
 
     context 'with custom header name' do
-      let(:auth_header_name) { 'X-Api-Key' }
+      let(:auth_header) { 'X-Api-Key' }
 
       it 'accepts token from custom header' do
         env = {
@@ -214,8 +251,11 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           app,
           server,
           logger: logger,
-          auth_token: auth_token,
-          auth_header_name: 'X-Custom-Auth'
+          authenticate: true,
+          auth_options: {
+            auth_token: auth_token,
+            auth_header: 'X-Custom-Auth'
+          }
         )
 
         env = {
@@ -233,8 +273,11 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           app,
           server,
           logger: logger,
-          auth_token: auth_token,
-          auth_header_name: 'X-Custom-Auth-Token'
+          authenticate: true,
+          auth_options: {
+            auth_token: auth_token,
+            auth_header: 'X-Custom-Auth-Token'
+          }
         )
 
         env = {
@@ -300,66 +343,142 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           app,
           server,
           logger: logger,
-          auth_token: auth_token,
-          allowed_origins: allowed_origins
+          allowed_origins: allowed_origins,
+          authenticate: true,
+          auth_options: {
+            auth_token: auth_token
+          }
         )
       end
-      
+
       it 'accepts requests with allowed origin when authenticated' do
-        env = { 
+        env = {
           'PATH_INFO' => '/mcp/messages',
           'REQUEST_METHOD' => 'POST',
           'HTTP_ORIGIN' => 'http://localhost',
           'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
           'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
         }
-        
+
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
           .with('{"jsonrpc":"2.0","method":"ping","id":1}')
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
-          
+
         result = transport.call(env)
         expect(result[0]).to eq(200)
       end
-      
+
       it 'rejects requests with disallowed origin when authenticated' do
-        env = { 
+        env = {
           'PATH_INFO' => '/mcp/messages',
           'REQUEST_METHOD' => 'POST',
           'HTTP_ORIGIN' => 'http://evil-site.com',
           'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
           'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
         }
-        
+
         expect(server).to receive(:transport=).with(transport)
         # The server should NOT receive handle_json_request for a disallowed origin
         expect(server).not_to receive(:handle_json_request)
-        
+
         result = transport.call(env)
         expect(result[0]).to eq(403)
         expect(result[1]['Content-Type']).to eq('application/json')
-        
+
         response = JSON.parse(result[2].first)
         expect(response['jsonrpc']).to eq('2.0')
         expect(response['error']['code']).to eq(-32_600)
         expect(response['error']['message']).to include('Origin validation failed')
       end
-      
+
       it 'checks authentication before validating origin' do
-        env = { 
+        env = {
           'PATH_INFO' => '/mcp/messages',
           'REQUEST_METHOD' => 'POST',
           'HTTP_ORIGIN' => 'http://evil-site.com',
           'HTTP_AUTHORIZATION' => 'Bearer invalid-token',
           'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
         }
-        
+
         # Should not reach the origin validation since auth fails first
         result = transport.call(env)
         expect(result[0]).to eq(401) # Unauthorized, not 403 Forbidden
-        
+
         response = JSON.parse(result[2].first)
+        expect(response['error']['message']).to include('Unauthorized')
+      end
+    end
+
+    context 'with custom proc authentication strategy' do
+      let(:auth_strategy) do
+        proc { |request| request.get_header('HTTP_CUSTOM_AUTH') == 'valid' }
+      end
+      let(:transport) do
+        described_class.new(
+          app,
+          server,
+          logger: logger,
+          authenticate: true,
+          auth_options: {
+            auth_strategy: auth_strategy
+          }
+        )
+      end
+
+      it 'authenticates using the custom proc' do
+        env = {
+          'PATH_INFO' => '/not-mcp',
+          'HTTP_CUSTOM_AUTH' => 'valid'
+        }
+
+        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
+        result = transport.call(env)
+        expect(result).to eq([200, {}, ['OK']])
+      end
+    end
+
+    context 'with http_basic authentication strategy' do
+      let(:transport) do
+        described_class.new(
+          app,
+          server,
+          logger: logger,
+          authenticate: true,
+          auth_options: {
+            auth_strategy: :http_basic,
+            auth_user: 'admin',
+            auth_password: 'password'
+          }
+        )
+      end
+
+      it 'authenticates using HTTP Basic Auth' do
+        authorization = "Basic #{Base64.strict_encode64('admin:password')}"
+        env = {
+          'PATH_INFO' => '/not-mcp',
+          'HTTP_AUTHORIZATION' => authorization
+        }
+
+        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
+        result = transport.call(env)
+        expect(result).to eq([200, {}, ['OK']])
+      end
+
+      it 'rejects requests with invalid HTTP Basic Auth' do
+        invalid = "Basic #{Base64.strict_encode64('admin:wrongpassword')}"
+        env = {
+          'PATH_INFO' => '/not-mcp',
+          'HTTP_AUTHORIZATION' => invalid
+        }
+
+        result = transport.call(env)
+        expect(result[0]).to eq(401)
+        expect(result[1]['Content-Type']).to eq('application/json')
+
+        response = JSON.parse(result[2].first)
+        expect(response['jsonrpc']).to eq('2.0')
+        expect(response['error']['code']).to eq(-32_000)
         expect(response['error']['message']).to include('Unauthorized')
       end
     end
