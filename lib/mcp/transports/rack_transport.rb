@@ -405,13 +405,11 @@ module FastMcp
         @logger.info("Starting keep-alive loop for SSE connection #{client_id}")
         ping_count = 0
         ping_interval = 1 # Send a ping every 1 second
-        max_ping_count = 30 # Reset connection after 30 pings (about 30 seconds)
         @running = true
 
         while @running && !io.closed?
           begin
-            ping_count = send_keep_alive_ping(io, client_id, ping_count, max_ping_count)
-            break if ping_count >= max_ping_count
+            ping_count = send_keep_alive_ping(io, client_id, ping_count)
 
             sleep ping_interval
           rescue Errno::EPIPE, IOError => e
@@ -423,7 +421,7 @@ module FastMcp
       end
 
       # Send a keep-alive ping and return the updated ping count
-      def send_keep_alive_ping(io, client_id, ping_count, max_ping_count)
+      def send_keep_alive_ping(io, client_id, ping_count)
         ping_count += 1
 
         # Send a comment before each ping to keep the connection alive
@@ -436,12 +434,6 @@ module FastMcp
           send_ping_event(io)
         end
 
-        # If we've reached the max ping count, force a reconnection
-        if ping_count >= max_ping_count
-          @logger.debug("Reached max ping count (#{max_ping_count}) for client #{client_id}, forcing reconnection")
-          send_reconnect_event(io)
-        end
-
         ping_count
       end
 
@@ -450,15 +442,9 @@ module FastMcp
         ping_message = {
           jsonrpc: '2.0',
           method: 'ping',
-          id: SecureRandom.uuid
+          id: rand(1_000_000)
         }
         io.write("event: ping\ndata: #{JSON.generate(ping_message)}\n\n")
-        io.flush
-      end
-
-      # Send a reconnect event
-      def send_reconnect_event(io)
-        io.write("event: reconnect\ndata: {\"reason\":\"timeout prevention\"}\n\n")
         io.flush
       end
 
