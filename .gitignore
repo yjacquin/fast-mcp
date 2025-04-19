@@ -1,6 +1,8 @@
-
 # Ignore RSpec status file
 /.rspec_status
 
 # Ignore gem files
 *.gem
+
+# Ignore docs-dev
+docs-dev

@@ -79,7 +79,19 @@ module FastMcp
       end
 
       def tool_name(name = nil)
-        return @name || self.name if name.nil?
+        if name.nil?
+          return @name if @name
+          
+          # For anonymous classes, return nil
+          return nil if self.name.nil?
+          
+          # Get the actual class name without namespace
+          class_name = self.name.to_s.split('::').last
+          
+          # For backward compatibility with tests, return the class name as is
+          # This is different from prompt_name which automatically converts to snake_case
+          return class_name
+        end
 
         @name = name
       end
