@@ -33,6 +33,84 @@ RSpec.describe FastMcp::Server do
     end
   end
 
+  describe '#register_prompt' do
+    it 'registers a prompt with the server' do
+      test_prompt_class = Class.new(FastMcp::Prompt) do
+        def self.name
+          'TestPrompt'
+        end
+
+        prompt_name 'test_prompt'
+        description 'A test prompt'
+
+        def call(**_args)
+          messages(user: 'Hello, World!')
+        end
+      end
+
+      server.register_prompt(test_prompt_class)
+
+      expect(server.instance_variable_get(:@prompts)['test_prompt']).to eq(test_prompt_class)
+      expect(test_prompt_class.server).to eq(server)
+    end
+
+    it 'derives prompt name from class name if not explicitly set' do
+      test_prompt_class = Class.new(FastMcp::Prompt) do
+        def self.name
+          'TestAutoPrompt'
+        end
+
+        description 'A test prompt with auto-derived name'
+
+        def call(**_args)
+          messages(user: 'Hello, World!')
+        end
+      end
+
+      server.register_prompt(test_prompt_class)
+
+      expect(server.instance_variable_get(:@prompts)['test_auto']).to eq(test_prompt_class)
+    end
+  end
+
+  describe '#register_prompts' do
+    it 'registers multiple prompts at once' do
+      test_prompt_class1 = Class.new(FastMcp::Prompt) do
+        def self.name
+          'TestPrompt1'
+        end
+
+        prompt_name 'test_prompt_1'
+        description 'First test prompt'
+
+        def call(**_args)
+          messages(user: 'Hello from prompt 1!')
+        end
+      end
+
+      test_prompt_class2 = Class.new(FastMcp::Prompt) do
+        def self.name
+          'TestPrompt2'
+        end
+
+        prompt_name 'test_prompt_2'
+        description 'Second test prompt'
+
+        def call(**_args)
+          messages(user: 'Hello from prompt 2!')
+        end
+      end
+
+      server.register_prompts(test_prompt_class1, test_prompt_class2)
+
+      prompts = server.instance_variable_get(:@prompts)
+      expect(prompts['test_prompt_1']).to eq(test_prompt_class1)
+      expect(prompts['test_prompt_2']).to eq(test_prompt_class2)
+      expect(test_prompt_class1.server).to eq(server)
+      expect(test_prompt_class2.server).to eq(server)
+    end
+  end
+
   describe '#handle_request' do
     let(:test_tool_class) do
       Class.new(FastMcp::Tool) do

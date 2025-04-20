@@ -14,6 +14,7 @@ end
 require_relative 'mcp/tool'
 require_relative 'mcp/server'
 require_relative 'mcp/resource'
+require_relative 'mcp/prompt'
 require_relative 'mcp/railtie' if defined?(Rails::Railtie)
 
 # Load generators if Rails is available
@@ -114,6 +115,22 @@ module FastMcp
   def self.register_resources(*resources)
     self.server ||= FastMcp::Server.new(name: 'mcp-server', version: '1.0.0')
     self.server.register_resources(*resources)
+  end
+
+  # Register a prompt with the MCP server
+  # @param prompt [FastMcp::Prompt] The prompt to register
+  # @return [FastMcp::Prompt] The registered prompt
+  def self.register_prompt(prompt)
+    self.server ||= FastMcp::Server.new(name: 'mcp-server', version: '1.0.0')
+    self.server.register_prompt(prompt)
+  end
+
+  # Register multiple prompts at once
+  # @param prompts [Array<FastMcp::Prompt>] The prompts to register
+  # @return [Array<FastMcp::Prompt>] The registered prompts
+  def self.register_prompts(*prompts)
+    self.server ||= FastMcp::Server.new(name: 'mcp-server', version: '1.0.0')
+    self.server.register_prompts(*prompts)
   end
 
   # Mount the MCP middleware in a Rails application
