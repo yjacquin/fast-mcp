@@ -23,8 +23,45 @@ FastMcp.mount_in_rails(
   sse_route: 'sse' # This is the default route for the SSE endpoint
   # Add allowed origins below, it defaults to Rails.application.config.hosts
   # allowed_origins: ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/],
-  # authenticate: true,       # Uncomment to enable authentication
-  # auth_token: 'your-token', # Required if authenticate: true
+
+  # Authentication Configuration
+  # --------------------------
+  # authenticate: true,  # Uncomment to enable authentication
+  # auth_options: {
+  #   # Choose one of the authentication strategies below:
+  #
+  #   # 1. Token-based authentication (default)
+  #   auth_strategy: :token,
+  #   auth_token: 'your-secret-token',
+  #   # auth_header: 'Authorization',  # Optional, defaults to 'Authorization'
+  #   # Using X-API-Key instead of Authorization header:
+  #   # auth_header: 'X-API-Key',  # Clients should send 'X-API-Key: your-secret-token'
+  #
+  #   # 2. Proc-based authentication
+  #   # auth_strategy: :proc,
+  #   # auth_proc: ->(request) {
+  #   #   # Your custom authentication logic here
+  #   #   # The entire request object is available
+  #   #   token = request.get_header('HTTP_AUTHORIZATION')&.gsub(/^Bearer\s+/i, '')
+  #   #   User.find_by(api_token: token).present?
+  #   # },
+  #
+  #   # 3. HTTP Basic Authentication
+  #   # auth_strategy: :http_basic,
+  #   # auth_user: 'admin',
+  #   # auth_password: 'secret',
+  #
+  #   # Additional Authentication Options
+  #   # auth_exempt_paths: ['/health-check', '/mcp/public'],  # Paths that don't require authentication
+  # },
+
+  # Environment Variables for Authentication
+  # ---------------------------------------
+  # Instead of hardcoding authentication details, you can use environment variables:
+  # - MCP_AUTH_TOKEN: The token for token-based authentication
+  # - MCP_AUTH_HEADER: The header name for token-based auth (defaults to 'Authorization')
+  # - MCP_AUTH_USER: The username for HTTP Basic authentication
+  # - MCP_AUTH_PASSWORD: The password for HTTP Basic authentication
 ) do |server|
   Rails.application.config.after_initialize do
     # FastMcp will automatically discover and register:

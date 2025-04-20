@@ -65,7 +65,15 @@ module FastMcp
   # @param options [Hash] Options for the middleware
   # @option options [String] :name The name of the server
   # @option options [String] :version The version of the server
+  # @option options [Boolean] :authenticate Whether to enable authentication
+  # @option options [Symbol] :authentication_strategy The authentication strategy to use (:token, :proc, or :http_basic)
   # @option options [String] :auth_token The authentication token
+  # @option options [Proc] :auth_proc A proc for custom authentication with behavior dependent on the strategy:
+  #   - For :token strategy: proc takes (token, request) and returns a boolean
+  #   - For :proc strategy: proc takes (token, request) and returns a boolean
+  #   - For :http_basic strategy: proc takes (username, password, request) and returns a boolean
+  # @option options [String] :auth_header_name Custom header name for authentication (default: 'Authorization')
+  # @option options [Array<String>] :auth_exempt_paths Paths that don't require authentication
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
@@ -125,8 +133,15 @@ module FastMcp
   # @option options [String] :messages_route The route for the messages endpoint
   # @option options [String] :sse_route The route for the SSE endpoint
   # @option options [Logger] :logger The logger to use
-  # @option options [Boolean] :authenticate Whether to use authentication
+  # @option options [Boolean] :authenticate Whether to enable authentication
+  # @option options [Symbol] :authentication_strategy The authentication strategy to use (:token, :proc, or :http_basic)
   # @option options [String] :auth_token The authentication token
+  # @option options [Proc] :auth_proc A proc for custom authentication with behavior dependent on the strategy:
+  #   - For :token strategy: proc takes (token, request) and returns a boolean
+  #   - For :proc strategy: proc takes (token, request) and returns a boolean
+  #   - For :http_basic strategy: proc takes (username, password, request) and returns a boolean
+  # @option options [String] :auth_header_name Custom header name for authentication (default: 'Authorization')
+  # @option options [Array<String>] :auth_exempt_paths Paths that don't require authentication
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
@@ -144,6 +159,7 @@ module FastMcp
 
     options[:logger] = logger
     options[:allowed_origins] = allowed_origins
+    options[:authenticate] = authenticate # Ensure authenticate flag is passed to middleware
 
     # Create or get the server
     self.server = FastMcp::Server.new(name: name, version: version, logger: logger)
