@@ -141,7 +141,10 @@ module FastMcp
     sse_route = options.delete(:sse_route) || 'sse'
     authenticate = options.delete(:authenticate) || false
     allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
+    allowed_ips = options[:allowed_ips] || FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_IPS
 
+    options[:localhost_only] = Rails.env.local? if options[:localhost_only].nil?
+    options[:allowed_ips] = allowed_ips
     options[:logger] = logger
     options[:allowed_origins] = allowed_origins
 
