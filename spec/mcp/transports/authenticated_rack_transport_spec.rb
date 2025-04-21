@@ -119,6 +119,7 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           'HTTP_AUTHORIZATION' => 'Bearer invalid-token'
         }
 
+        expect(server).to receive(:transport=).with(transport)
         result = transport.call(env)
         expect(result[0]).to eq(401)
         expect(result[1]['Content-Type']).to eq('application/json')
@@ -132,6 +133,7 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
       it 'returns 401 when token is missing' do
         env = { 'PATH_INFO' => '/mcp/messages' }
 
+        expect(server).to receive(:transport=).with(transport)
         result = transport.call(env)
         expect(result[0]).to eq(401)
         expect(result[1]['Content-Type']).to eq('application/json')
@@ -261,6 +263,7 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           'rack.input' => StringIO.new(request_body)
         }
 
+        expect(server).to receive(:transport=).with(transport)
         result = transport.call(env)
         expect(result[0]).to eq(401)
 
@@ -276,6 +279,7 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           'rack.input' => StringIO.new('invalid-json')
         }
 
+        expect(server).to receive(:transport=).with(transport)
         result = transport.call(env)
         expect(result[0]).to eq(401)
 
@@ -383,6 +387,8 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           'HTTP_AUTHORIZATION' => 'Bearer invalid-token',
           'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
         }
+
+        expect(server).to receive(:transport=).with(transport)
 
         # Should not reach the origin validation since auth fails first
         result = transport.call(env)
