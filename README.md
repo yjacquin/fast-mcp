@@ -103,6 +103,9 @@ FastMcp.mount_in_rails(
   sse_route: 'sse', # This is the default route for the SSE endpoint
   # Add allowed origins below, it defaults to Rails.application.config.hosts
   # allowed_origins: ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/],
+  # localhost_only: true, # Set to false to allow connections from other hosts
+  # whitelist specific ips to if you want to run on localhost and allow connections from other IPs
+  # allowed_ips: ['127.0.0.1', '::1']
   # authenticate: true,       # Uncomment to enable authentication
   # auth_token: 'your-token' # Required if authenticate: true
 ) do |server|
@@ -320,8 +323,10 @@ The HTTP/SSE transport validates the Origin header on all incoming connections t
 
 ```ruby
 # Configure allowed origins (defaults to ['localhost', '127.0.0.1'])
-FastMcp.rack_middleware(app, 
+FastMcp.rack_middleware(app,
   allowed_origins: ['localhost', '127.0.0.1', 'your-domain.com', /.*\.your-domain\.com/],
+  localhost_only: false,
+  allowed_ips: ['192.168.1.1', '10.0.0.1'],
   # other options...
 )
 ```

@@ -11,9 +11,10 @@ module FastMcp
     # This transport can be mounted in any Rack-compatible web framework
     class RackTransport < BaseTransport # rubocop:disable Metrics/ClassLength
       DEFAULT_PATH_PREFIX = '/mcp'
-      DEFAULT_ALLOWED_ORIGINS = ['localhost', '127.0.0.1'].freeze
-
-      attr_reader :app, :path_prefix, :sse_clients, :messages_route, :sse_route, :allowed_origins
+      DEFAULT_ALLOWED_ORIGINS = ['localhost', '127.0.0.1', '[::1]'].freeze
+      DEFAULT_ALLOWED_IPS = ['127.0.0.1', '::1'].freeze
+      attr_reader :app, :path_prefix, :sse_clients, :messages_route, :sse_route, :allowed_origins, :localhost_only,
+                  :allowed_ips
 
       def initialize(app, server, options = {}, &_block)
         super(server, logger: options[:logger])
@@ -22,6 +23,8 @@ module FastMcp
         @messages_route = options[:messages_route] || 'messages'
         @sse_route = options[:sse_route] || 'sse'
         @allowed_origins = options[:allowed_origins] || DEFAULT_ALLOWED_ORIGINS
+        @localhost_only = options.fetch(:localhost_only, true) # Default to localhost-only mode
+        @allowed_ips = options[:allowed_ips] || DEFAULT_ALLOWED_IPS
         @sse_clients = {}
         @running = false
       end
@@ -105,6 +108,18 @@ module FastMcp
 
       private
 
+      def validate_client_ip(request)
+        client_ip = request.ip
+
+        # Check if we're in localhost-only mode
+        if @localhost_only && !@allowed_ips.include?(client_ip)
+          @logger.warn("Blocked connection from non-localhost IP: #{client_ip}")
+          return false
+        end
+
+        true
+      end
+
       # Validate the Origin header to prevent DNS rebinding attacks
       def validate_origin(request, env)
         origin = env['HTTP_ORIGIN']
@@ -117,7 +132,7 @@ module FastMcp
 
         # If we have a hostname and allowed_origins is not empty
         if hostname && !allowed_origins.empty?
-          @logger.info("Validating origin: #{hostname}")
+          @logger.debug("Validating origin: #{hostname}")
 
           # Check if the hostname matches any allowed origin
           is_allowed = allowed_origins.any? do |allowed|
@@ -160,20 +175,11 @@ module FastMcp
 
       # Handle MCP-specific requests
       def handle_mcp_request(request, env)
+        # Validate client IP to ensure it's connecting from allowed sources
+        return forbidden_response('Forbidden: Remote IP not allowed') unless validate_client_ip(request)
+
         # Validate Origin header to prevent DNS rebinding attacks
-        unless validate_origin(request, env)
-          return [403, { 'Content-Type' => 'application/json' },
-                  [JSON.generate(
-                    {
-                      jsonrpc: '2.0',
-                      error: {
-                        code: -32_600,
-                        message: 'Forbidden: Origin validation failed'
-                      },
-                      id: nil
-                    }
-                  )]]
-        end
+        return forbidden_response('Forbidden: Origin validation failed') unless validate_origin(request, env)
 
         subpath = request.path[@path_prefix.length..]
         @logger.info("MCP request subpath: '#{subpath.inspect}'")
@@ -188,6 +194,20 @@ module FastMcp
           # Return 404 for unknown MCP endpoints
           endpoint_not_found_response
         end
+      end
+
+      def forbidden_response(message)
+        [403, { 'Content-Type' => 'application/json' },
+         [JSON.generate(
+           {
+             jsonrpc: '2.0',
+             error: {
+               code: -32_600,
+               message: message
+             },
+             id: nil
+           }
+         )]]
       end
 
       # Return a 404 endpoint not found response
@@ -286,9 +306,6 @@ module FastMcp
         browser_type = detect_browser_type(user_agent)
         @logger.info("Client connection from: #{user_agent} (#{browser_type})")
 
-        # Handle MCP inspector with fixed client ID
-        @logger.info("MCP Inspector detected, using fixed client ID: #{client_id}") if mcp_inspector?(user_agent, env)
-
         # Handle reconnection
         if client_id && @sse_clients.key?(client_id)
           handle_client_reconnection(client_id, browser_type)
@@ -319,11 +336,6 @@ module FastMcp
         else
           'Other browser'
         end
-      end
-
-      # Check if client is MCP inspector
-      def mcp_inspector?(user_agent, env)
-        user_agent.include?('mcp-inspector') || (env['mcp.client_name'] == 'mcp-inspector')
       end
 
       # Handle client reconnection
