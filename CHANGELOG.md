@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - UNRELEASED
+### Added
+- Security enhancement: Bing only to localhost by default [#44 @yjacquin](https://github.com/yjacquin/fast-mcp/pull/44)
+- Prevent AuthenticatedRackMiddleware from blocking other rails routes[#35 @JulianPasquale](https://github.com/yjacquin/fast-mcp/pull/35)
+- Stop Forcing reconnections after 30 pings [#42 @zoedsoupe](https://github.com/yjacquin/fast-mcp/pull/42)
+
+
 ## [1.1.0] - 2025-04-13
 ### Added
 - Security enhancement: Added DNS rebinding protection by validating Origin headers [#32 @yjacquin](https://github.com/yjacquin/fast-mcp/pull/32/files)
@@ -60,5 +67,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resource management with subscription capabilities
 - Binary resource support
 - Examples with STDIO Transport, HTTP & SSE, Rack app
-- Initialize lifecycle with capabilities 
+- Initialize lifecycle with capabilities
 - Comprehensive test suite with RSpec
