@@ -7,7 +7,9 @@ module FastMcp
                     :enabled_in_console,
                     :enabled_in_sidekiq,
                     :enabled_in_test,
-                    :auto_derive_active_record_methods
+                    :auto_derive_active_record_methods,
+                    :read_only_mode,
+                    :autoregister
 
       def initialize
         @enabled_in_web = true
@@ -15,6 +17,8 @@ module FastMcp
         @enabled_in_sidekiq = false
         @enabled_in_test = false
         @auto_derive_active_record_methods = [:find, :limit, :sample]
+        @read_only_mode = false
+        @autoregister = true
       end
     end
   end

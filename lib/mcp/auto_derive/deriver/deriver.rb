@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-require_relative '../adapters/model_method_adapter'
-require_relative '../adapters/active_record_method_adapter'
-require_relative '../adapters/controller_method_adapter'
-require_relative '../controller_auto_derive'
-require_relative '../auto_derive'
-require_relative '../auto_derive_configuration'
-require_relative 'register_methods'
+# require_relative '../adapters/model_method_adapter'
+# require_relative '../adapters/controller_method_adapter'
+# require_relative '../controller_auto_derive'
+# require_relative '../auto_derive'
+# require_relative '../auto_derive_configuration'
+# require_relative 'derive_methods'
+# require_relative '../adapters/auto_derive_adapter'
 
 module FastMcp
   module AutoDerive
@@ -14,30 +14,26 @@ module FastMcp
     module Tools
     end
 
-    class AutoDeriveRegistry
-      def self.generate_tools
+    class Deriver
+      def self.derive_tools(options: {})
         unless tools_enabled_in_current_environment?
           puts "Skipping tool generation in #{current_environment} environment"
           return []
         end
-
         tools = []
 
         begin
           ensure_auto_derive_modules_included
 
-          puts 'Eager loading Rails application'
           Rails.application.eager_load!
 
-          tools.concat(generate_model_tools)
+          tools.concat(generate_model_tools(options: options))
 
           tools.concat(generate_controller_tools)
         rescue StandardError => e
           puts "Error in generate_tools: #{e.message}"
           puts e.backtrace.join("\n")
         end
-
-        puts "Tools: #{tools.inspect}"
         tools
       end
 
@@ -112,22 +108,24 @@ module FastMcp
         puts e.backtrace.join("\n")
       end
 
-      def self.generate_model_tools
+      def self.generate_model_tools(options: {})
         tools = []
+
+        unified_ar_tools = FastMcp::AutoDerive::AutoDeriveAdapter.derive_active_record_tools(options: options)
+        tools.concat(unified_ar_tools)
 
         ActiveRecord::Base.descendants.each do |model|
           next if model.abstract_class?
+          next if options[:exclusions][:models].include?(model.name)
+          next if options[:exclusions][:namespaces].include?(model.name.split('::').first)
 
           has_exposed_methods = model.respond_to?(:mcp_exposed_methods) && !model.mcp_exposed_methods.empty?
 
           if has_exposed_methods
             model.mcp_exposed_methods.each do |tool_name, metadata|
-              tools << register_model_method(model, tool_name, metadata)
+              tools << derive_model_method(model, tool_name, metadata)
             end
           end
-
-          ar_tools = register_activerecord_methods(model)
-          tools.concat(ar_tools)
         rescue StandardError => e
           puts "Error processing model #{model.name}: #{e.message}"
           puts e.backtrace.join("\n")
@@ -146,7 +144,7 @@ module FastMcp
 
           if has_exposed_actions
             controller.mcp_exposed_actions.each do |tool_name, metadata|
-              tools << register_controller_action(controller, tool_name, metadata)
+              tools << derive_controller_action(controller, tool_name, metadata)
             end
           end
         rescue StandardError => e

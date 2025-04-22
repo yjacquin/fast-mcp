@@ -3,98 +3,103 @@
 module FastMcp
   module AutoDerive
     module Adapters
-      class ControllerMethodAdapter < AutoDeriveAdapter
-        # Factory method to create controller action-specific adapter classes
-        def self.for_action(controller, metadata)
-          puts "  Creating ControllerMethodAdapter for controller: #{controller.name}, action: #{metadata[:action_name]}"
+      class ControllerMethodAdapter < FastMcp::AutoDerive::AutoDeriveAdapter
+        def self.derive_controller_action(controller, metadata)
+          param_definitions = define_parameters(metadata)
 
-          # Get parameter definitions for the Tool class
+          create_subclass(**subclass_params(controller, metadata, param_definitions)).tap do |klass|
+            klass.define_singleton_method(:controller_class) { controller }
+            klass.define_singleton_method(:metadata) { metadata }
+            klass.define_singleton_method(:action_name) { metadata[:action_name] }
+
+            klass.define_method(:call) do |**params|
+              handle_errors do
+                controller_class = self.class.controller_class
+                action_name = self.class.action_name
+
+                controller = if controller_class.is_a?(Class)
+                               controller_class.new
+                             else
+                               controller_class.class.new
+                             end
+
+                setup_minimal_context(controller, params)
+
+                controller.send(action_name)
+
+                serialize_result(controller.response)
+              end
+            end
+          end
+        end
+
+        def self.define_parameters(metadata)
           param_definitions = {}
 
           if metadata[:parameters].present?
             metadata[:parameters].each do |param_name, param_details|
-              # Ensure param_details is a hash with required keys
               param_details = param_details.is_a?(Hash) ? param_details.dup : { description: param_details.to_s }
 
-              # Set defaults
               param_details[:type] ||= :string
               param_details[:description] ||= "#{param_name} parameter"
-              param_details[:required] = !(param_details[:optional] == true)
+              param_details[:required] = param_details[:optional] != true
 
               param_definitions[param_name.to_sym] = param_details
             end
           end
 
-          # Create a new subclass with the provided configuration
-          create_subclass(
+          param_definitions
+        end
+
+        def self.subclass_params(controller, metadata, param_definitions)
+          annotations = metadata[:annotations] || begin
+            {
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: false,
+              openWorldHint: false
+            }
+          end
+
+          {
             name: metadata[:tool_name] || "#{controller.name.underscore.gsub('_controller',
                                                                              '')}_#{metadata[:action_name]}",
             class_name: controller.name,
             method_name: metadata[:action_name],
             description: metadata[:description],
             parameters: param_definitions,
-            read_only: metadata[:read_only] || true,
-            finder_key: nil
-          ).tap do |klass|
-            # Store additional metadata on the class
-            klass.define_singleton_method(:controller_class) { controller }
-            klass.define_singleton_method(:metadata) { metadata }
-            klass.define_singleton_method(:action_name) { metadata[:action_name] }
-
-            # Define the call method that will be used to invoke the controller action
-            klass.define_method(:call) do |params|
-              controller_class = self.class.controller_class
-              action_name = self.class.action_name
-
-              # Create a controller instance
-              controller = controller_class.new
-
-              # Set up the controller context
-              setup_controller_context(controller, params)
-
-              # Call the action
-              result = controller.send(action_name)
-
-              # Extract the response data
-              serialize_result(controller.response)
-            end
-          end
+            finder_key: nil,
+            title: metadata[:title],
+            annotations: annotations
+          }
         end
 
         private
 
-        # Set up the controller with request parameters and environment
-        def setup_controller_context(controller, params)
-          # Create a mock request with the provided parameters
-          params = ActionController::Parameters.new(params)
+        def setup_minimal_context(controller, params)
+          params_hash = params.transform_keys(&:to_s)
 
-          # Set up the request and response objects
-          request = ActionDispatch::Request.new({
-                                                  'rack.input' => StringIO.new,
-                                                  'CONTENT_TYPE' => 'application/json',
-                                                  'REQUEST_METHOD' => 'GET' # Default to GET, could be overridden
-                                                })
+          env = {
+            'rack.input' => StringIO.new,
+            'action_dispatch.request.request_parameters' => params_hash
+          }
 
-          # Set the parameters on the request
-          request.parameters.merge!(params)
+          request = ActionDispatch::Request.new(env)
+          response = ActionDispatch::Response.new
 
-          # Set up the controller with our request
           controller.request = request
-          controller.response = ActionDispatch::Response.new
-          controller.params = params
+          controller.response = response
+          controller.params = ActionController::Parameters.new(params_hash)
         end
 
-        # Helper method to serialize controller response
         def serialize_result(response)
-          # If the response body is JSON, parse it
           if response.content_type == 'application/json'
             begin
-              JSON.parse(response.body.first)
+              JSON.parse(response.body)
             rescue StandardError
               response.body
             end
           else
-            # Return the raw response body for other content types
             response.body
           end
         end
