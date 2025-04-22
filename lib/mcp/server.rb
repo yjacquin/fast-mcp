@@ -48,9 +48,16 @@ module FastMcp
     # Register multiple tools at once
     # @param tools [Array<Tool>] Tools to register
     def register_tools(*tools)
+      @logger.info("Registering tools: #{tools.inspect}")
       tools.each do |tool|
         register_tool(tool)
       end
+    end
+
+    def register_auto_derived_tools
+      derived_tools = FastMcp::AutoDerive::AutoDeriveRegistry.generate_tools
+      @logger.info("AutoDerive TOOLS: #{derived_tools.inspect}")
+      register_tools(*derived_tools)
     end
 
     # Register a tool with the server

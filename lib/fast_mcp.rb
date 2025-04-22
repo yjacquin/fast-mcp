@@ -56,7 +56,6 @@ module FastMcp
 
     # Store the server in the FastMcp module
     self.server = server
-
     server.start_rack(app, options)
   end
 
@@ -80,7 +79,6 @@ module FastMcp
 
     # Store the server in the FastMcp module
     self.server = server
-
     server.start_authenticated_rack(app, options)
   end
 
@@ -128,6 +126,7 @@ module FastMcp
   # @option options [Boolean] :authenticate Whether to use authentication
   # @option options [String] :auth_token The authentication token
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
+  # @option options [Boolean] :auto_register_tools Whether to register tools derived from ActiveRecord models
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
@@ -142,7 +141,7 @@ module FastMcp
     authenticate = options.delete(:authenticate) || false
     allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
     allowed_ips = options[:allowed_ips] || FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_IPS
-
+    auto_register_tools = options.delete(:auto_register_tools) || false
     options[:localhost_only] = Rails.env.local? if options[:localhost_only].nil?
     options[:allowed_ips] = allowed_ips
     options[:logger] = logger
@@ -165,6 +164,12 @@ module FastMcp
       self.server,
       options.merge(path_prefix: path_prefix, messages_route: messages_route, sse_route: sse_route)
     )
+
+    return unless auto_register_tools
+
+    app.config.after_initialize do
+      self.server.register_auto_derived_tools
+    end
   end
 
   def self.default_rails_allowed_origins(rail_app)
