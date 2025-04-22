@@ -3,13 +3,11 @@
 module FastMcp
   module AutoDerive
     module Adapters
-      class ModelMethodAdapter < AutoDeriveAdapter
-        def self.for_method(model, method_name, metadata)
-          puts "  Creating ModelMethodAdapter for model: #{model.name}, method: #{method_name}"
-
+      class ModelMethodAdapter < FastMcp::AutoDerive::AutoDeriveAdapter
+        def self.derive_model_method(model, method_name, metadata)
           param_definitions = {}
 
-          if metadata[:parameters].present?
+          unless metadata[:parameters].empty?
             metadata[:parameters].each do |param_name, param_details|
               param_details = param_details.is_a?(Hash) ? param_details.dup : { description: param_details.to_s }
 
@@ -36,8 +34,14 @@ module FastMcp
             method_name: method_name,
             description: metadata[:description],
             parameters: param_definitions,
-            read_only: metadata[:read_only] || true,
-            finder_key: finder_key
+            finder_key: finder_key,
+            title: metadata[:title],
+            annotations: {
+              readOnlyHint: metadata[:read_only],
+              destructiveHint: metadata[:destructive],
+              idempotentHint: metadata[:idempotent],
+              openWorldHint: metadata[:open_world]
+            }
           ).tap do |klass|
             klass.define_singleton_method(:model_class) { model }
             klass.define_singleton_method(:metadata) { metadata }
@@ -56,13 +60,15 @@ module FastMcp
                 method_params = params.except(finder_key)
 
                 if method_params.empty?
-                  record.public_send(method_name)
+                  result = record.public_send(method_name)
                 else
-                  record.public_send(method_name, **method_params)
+                  result = record.public_send(method_name, **method_params)
                 end
               else
-                model_class.public_send(method_name, **params)
+                result = model_class.public_send(method_name, **params)
               end
+
+              serialize_result(result)
             end
           end
         end

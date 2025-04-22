@@ -17,18 +17,25 @@ module FastMcp
         # @param parameters [Hash] Description of parameters (optional)
         # @param read_only [Boolean] Whether this action modifies data (default: true)
         # @param tool_name [String] Custom name for the tool (optional)
-        def expose_action_to_mcp(action_name, description:, parameters: {}, read_only: true, tool_name: nil)
-          # Generate a tool name if not provided
+        # @param title [String] Human-readable title for the tool (optional)
+        # @param destructive [Boolean] If true, the tool performs destructive updates (default: !read_only)
+        # @param idempotent [Boolean] If true, calling repeatedly with same args has same effect (default: false)
+        # @param open_world [Boolean] If true, the tool interacts with external systems (default: true)
+        def expose_action_to_mcp(action_name, description:, parameters: {}, read_only: true, tool_name: nil,
+                                 title: nil, destructive: nil, idempotent: false, open_world: true)
           tool_name ||= "#{name.underscore.gsub('_controller', '')}_#{action_name}"
 
-          # Store the action metadata
           self.mcp_exposed_actions = mcp_exposed_actions.merge(
             tool_name => {
               action_name: action_name,
               description: description,
               parameters: parameters,
               read_only: read_only,
-              class_name: name
+              class_name: name,
+              title: title,
+              destructive: destructive,
+              idempotent: idempotent,
+              open_world: open_world
             }
           )
         end
