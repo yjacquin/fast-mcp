@@ -33,6 +33,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'dry-schema', '~> 1.14'
   spec.add_dependency 'json', '~> 2.0'
   spec.add_dependency 'mime-types', '~> 3.4'
+  spec.add_dependency 'rack', '~> 3.1'
 
   # Development dependencies are specified in the Gemfile
 end
