@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-04-28
+### Added
+- Added automatic forwarding of query params from to the messages endpoint [@yjacquin](https://github.com/yjacquin/fast-mcp/commit/011d968ac982d0b0084f7753dcac5789f66339ee)
+
+### Fixed
+- Declare rack as an explicit dependency [#49 @subelsky](https://github.com/yjacquin/fast-mcp/pull/49)
+- Fix notifications/initialized response [#51 @yjacquin](https://github.com/yjacquin/fast-mcp/pull/51)
+
 ## [1.2.0] - 2025-04-21
 ### Added
 - Security enhancement: Bing only to localhost by default [#44 @yjacquin](https://github.com/yjacquin/fast-mcp/pull/44)
