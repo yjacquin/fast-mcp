@@ -13,6 +13,21 @@ module FastMcp
       DEFAULT_PATH_PREFIX = '/mcp'
       DEFAULT_ALLOWED_ORIGINS = ['localhost', '127.0.0.1', '[::1]'].freeze
       DEFAULT_ALLOWED_IPS = ['127.0.0.1', '::1'].freeze
+
+      SSE_HEADERS = {
+        'Content-Type' => 'text/event-stream',
+        'Cache-Control' => 'no-cache, no-store, must-revalidate',
+        'Connection' => 'keep-alive',
+        'X-Accel-Buffering' => 'no', # For Nginx
+        'Access-Control-Allow-Origin' => '*', # Allow CORS
+        'Access-Control-Allow-Methods' => 'GET, OPTIONS',
+        'Access-Control-Allow-Headers' => 'Content-Type',
+        'Access-Control-Max-Age' => '86400', # 24 hours
+        'Keep-Alive' => 'timeout=600', # 10 minutes timeout
+        'Pragma' => 'no-cache',
+        'Expires' => '0'
+      }.freeze
+
       attr_reader :app, :path_prefix, :sse_clients, :messages_route, :sse_route, :allowed_origins, :localhost_only,
                   :allowed_ips
 
@@ -232,24 +247,21 @@ module FastMcp
 
         return method_not_allowed_response unless request.get?
 
-        # Set up SSE headers
-        headers = setup_sse_headers
-
         # Handle streaming based on the framework
-        handle_streaming(env, headers)
+        handle_streaming(env)
       end
 
       # Handle streaming based on the framework
-      def handle_streaming(env, headers)
+      def handle_streaming(env)
         @logger.info("Handling streaming for env: #{env['HTTP_USER_AGENT']}")
         if env['rack.hijack']
           # Rack hijacking (e.g., Puma)
           @logger.info('Handling rack hijack SSE')
-          handle_rack_hijack_sse(env, headers)
+          handle_rack_hijack_sse(env)
         elsif rails_live_streaming?(env)
           # Rails ActionController::Live
           @logger.info('Handling rails live streaming SSE')
-          handle_rails_sse(env, headers)
+          handle_rails_sse(env)
         else
           # Fallback for servers that don't support streaming
           @logger.info('Falling back to default SSE')
@@ -262,23 +274,6 @@ module FastMcp
         defined?(ActionController::Live) &&
           env['action_controller.instance'].respond_to?(:response) &&
           env['action_controller.instance'].response.respond_to?(:stream)
-      end
-
-      # Set up headers for SSE connection
-      def setup_sse_headers
-        {
-          'Content-Type' => 'text/event-stream',
-          'Cache-Control' => 'no-cache, no-store, must-revalidate',
-          'Connection' => 'keep-alive',
-          'X-Accel-Buffering' => 'no', # For Nginx
-          'Access-Control-Allow-Origin' => '*', # Allow CORS
-          'Access-Control-Allow-Methods' => 'GET, OPTIONS',
-          'Access-Control-Allow-Headers' => 'Content-Type',
-          'Access-Control-Max-Age' => '86400', # 24 hours
-          'Keep-Alive' => 'timeout=600', # 10 minutes timeout
-          'Pragma' => 'no-cache',
-          'Expires' => '0'
-        }
       end
 
       # Set up CORS headers for preflight requests
@@ -354,7 +349,7 @@ module FastMcp
       end
 
       # Handle SSE with Rack hijacking (e.g., Puma)
-      def handle_rack_hijack_sse(env, headers)
+      def handle_rack_hijack_sse(env)
         client_id = extract_client_id(env)
         @logger.debug("Setting up Rack hijack SSE connection for client #{client_id}")
 
@@ -362,7 +357,7 @@ module FastMcp
         io = env['rack.hijack_io']
         @logger.debug("Obtained hijack IO for client #{client_id}")
 
-        setup_sse_connection(client_id, io, headers)
+        setup_sse_connection(client_id, io, env)
         start_keep_alive_thread(client_id, io)
 
         # Return async response
@@ -370,11 +365,11 @@ module FastMcp
       end
 
       # Set up the SSE connection
-      def setup_sse_connection(client_id, io, headers)
+      def setup_sse_connection(client_id, io, env)
         # Send headers
         @logger.debug("Sending HTTP headers for SSE connection #{client_id}")
         io.write("HTTP/1.1 200 OK\r\n")
-        headers.each { |k, v| io.write("#{k}: #{v}\r\n") }
+        SSE_HEADERS.each { |k, v| io.write("#{k}: #{v}\r\n") }
         io.write("\r\n")
         io.flush
 
@@ -384,8 +379,12 @@ module FastMcp
         # Send an initial comment to keep the connection alive
         io.write(": SSE connection established\n\n")
 
-        # Send endpoint information as the first message
+        # Extract query parameters from the request
+        query_string = env['QUERY_STRING']
+
+        # Send endpoint information as the first message with query parameters
         endpoint = "#{@path_prefix}/#{@messages_route}"
+        endpoint += "?#{query_string}" if query_string
         @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
         io.write("event: endpoint\ndata: #{endpoint}\n\n")
 
@@ -473,7 +472,7 @@ module FastMcp
       end
 
       # Handle SSE with Rails ActionController::Live
-      def handle_rails_sse(env, headers)
+      def handle_rails_sse(env)
         client_id = extract_client_id(env)
         controller = env['action_controller.instance']
         stream = controller.response.stream
@@ -482,7 +481,7 @@ module FastMcp
         register_sse_client(client_id, stream)
 
         # The controller will handle the streaming
-        [200, headers, []]
+        [200, SSE_HEADERS, []]
       end
 
       # Handle message POST request
