@@ -390,7 +390,8 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'REQUEST_METHOD' => 'GET',
           'rack.hijack?' => true,
           'rack.hijack' => -> {},
-          'REMOTE_ADDR' => '127.0.0.1'
+          'REMOTE_ADDR' => '127.0.0.1',
+          'QUERY_STRING' => 'foo=example&bar=baz'
         }
 
         # Mock the hijack IO
