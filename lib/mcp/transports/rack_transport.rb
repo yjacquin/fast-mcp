@@ -455,7 +455,7 @@ module FastMcp
           method: 'ping',
           id: rand(1_000_000)
         }
-        io.write("event: ping\ndata: #{JSON.generate(ping_message)}\n\n")
+        io.write("event: message\ndata: #{JSON.generate(ping_message)}\n\n")
         io.flush
       end
 
