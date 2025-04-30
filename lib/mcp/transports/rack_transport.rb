@@ -12,7 +12,7 @@ module FastMcp
     class RackTransport < BaseTransport # rubocop:disable Metrics/ClassLength
       DEFAULT_PATH_PREFIX = '/mcp'
       DEFAULT_ALLOWED_ORIGINS = ['localhost', '127.0.0.1', '[::1]'].freeze
-      DEFAULT_ALLOWED_IPS = ['127.0.0.1', '::1'].freeze
+      DEFAULT_ALLOWED_IPS = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].freeze
 
       SSE_HEADERS = {
         'Content-Type' => 'text/event-stream',
