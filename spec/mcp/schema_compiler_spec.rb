@@ -83,7 +83,8 @@ RSpec.describe FastMcp::SchemaCompiler do
         result = compiler.process(schema)
 
         expect(result[:properties][:tags][:type]).to eq('array')
-        # NOTE: This test might need adjustment based on how array items are handled
+        # NOTE: This test might need adjustment to refine the array items
+        expect(result[:properties][:tags][:items]).to eq({})
       end
     end
 

@@ -382,6 +382,7 @@ module FastMcp
       case predicate_name
       when :array?
         property[:type] = 'array'
+        property[:items] = {}
       when :bool?
         property[:type] = 'boolean'
       when :int?, :decimal?, :float?
