@@ -52,7 +52,7 @@ module FastMcp
     # Register a tool with the server
     def register_tool(tool)
       @tools[tool.tool_name] = tool
-      @logger.info("Registered tool: #{tool.tool_name}")
+      @logger.debug("Registered tool: #{tool.tool_name}")
       tool.server = self
     end
 
@@ -67,7 +67,7 @@ module FastMcp
     # Register a resource with the server
     def register_resource(resource)
       @resources[resource.uri] = resource
-      @logger.info("Registered resource: #{resource.name} (#{resource.uri})")
+      @logger.debug("Registered resource: #{resource.name} (#{resource.uri})")
       resource.server = self
       # Notify subscribers about the list change
       notify_resource_list_changed if @transport
@@ -79,7 +79,7 @@ module FastMcp
     def remove_resource(uri)
       if @resources.key?(uri)
         resource = @resources.delete(uri)
-        @logger.info("Removed resource: #{resource.name} (#{uri})")
+        @logger.debug("Removed resource: #{resource.name} (#{uri})")
 
         # Notify subscribers about the list change
         notify_resource_list_changed if @transport
@@ -435,7 +435,7 @@ module FastMcp
     # Send a JSON-RPC response
     def send_response(response)
       if @transport
-        @logger.info("Sending response: #{response.inspect}")
+        @logger.debug("Sending response: #{response.inspect}")
         @transport.send_message(response)
       else
         @logger.warn("No transport available to send response: #{response.inspect}")

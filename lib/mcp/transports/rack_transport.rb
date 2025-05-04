@@ -47,7 +47,7 @@ module FastMcp
       # Start the transport
       def start
         @logger.debug("Starting Rack transport with path prefix: #{@path_prefix}")
-        @logger.info("DNS rebinding protection enabled. Allowed origins: #{allowed_origins.join(', ')}")
+        @logger.debug("DNS rebinding protection enabled. Allowed origins: #{allowed_origins.join(', ')}")
         @running = true
       end
 
@@ -197,7 +197,7 @@ module FastMcp
         return forbidden_response('Forbidden: Origin validation failed') unless validate_origin(request, env)
 
         subpath = request.path[@path_prefix.length..]
-        @logger.info("MCP request subpath: '#{subpath.inspect}'")
+        @logger.debug("MCP request subpath: '#{subpath.inspect}'")
 
         case subpath
         when "/#{@sse_route}"
@@ -205,7 +205,7 @@ module FastMcp
         when "/#{@messages_route}"
           handle_message_request(request)
         else
-          @logger.info('Received unknown request')
+          @logger.error('Received unknown request')
           # Return 404 for unknown MCP endpoints
           endpoint_not_found_response
         end
