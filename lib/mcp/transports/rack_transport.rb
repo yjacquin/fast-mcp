@@ -503,7 +503,7 @@ module FastMcp
         # Parse the request body
         body = request.body.read
 
-        response = process_message(body) || ''
+        response = process_message(body) || []
         @logger.info("Response: #{response}")
 
         [200, { 'Content-Type' => 'application/json' }, response]
