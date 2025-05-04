@@ -26,6 +26,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
   describe '#start' do
     it 'starts the transport' do
       expect(logger).to receive(:debug).with(/Starting Rack transport/)
+      expect(logger).to receive(:debug).with(/DNS rebinding protection enabled/)
       transport.start
       expect(transport.instance_variable_get(:@running)).to be(true)
     end
