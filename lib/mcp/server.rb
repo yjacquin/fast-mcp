@@ -180,7 +180,16 @@ module FastMcp
 
     # Handle a JSON-RPC request and return the response as a JSON string
     def handle_json_request(request)
-      # Process the request
+      req = request.is_a?(String) ? JSON.parse(request) : request
+
+      # Check if this is a response to our ping
+      if req.key?('result') && req.key?('id') && req['jsonrpc'] == '2.0'
+        @logger.debug("Received response to request ID #{req['id']}")
+        # Handle the response - for ping we can just ignore it
+        return nil # Return nil to indicate no response needed
+      end
+
+      # Process as a normal request
       if request.is_a?(String)
         handle_request(request)
       else
