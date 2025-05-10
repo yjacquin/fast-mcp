@@ -674,9 +674,8 @@ module FastMcp
       extract_predicates(rule, key)
 
       # Add description if available
-      if @metadata.dig(key.to_s, :description)
-        @json_schema[:properties][key][:description] = @metadata.dig(key.to_s, :description)
-      end
+      description = @metadata.dig(key.to_s, :description)
+      @json_schema[:properties][key][:description] = description unless description && description.empty?
 
       # Check if this is a hash type
       is_hash = hash_type?(rule)
@@ -723,9 +722,9 @@ module FastMcp
 
       # Add description if available for nested property
       nested_key_path = "#{key}.#{nested_key}"
-      if @metadata.dig(nested_key_path, :description)
-        @json_schema[:properties][key][:properties][nested_key][:description] =
-          @metadata.dig(nested_key_path, :description)
+      description = @metadata.dig(nested_key_path, :description)
+      unless description && description.empty?
+        @json_schema[:properties][key][:properties][nested_key][:description] = description
       end
 
       # Special case for the test with person.first_name and person.last_name
