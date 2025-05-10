@@ -11,9 +11,7 @@ Tools are a core concept in the Model Context Protocol (MCP). They allow you to 
   - [Argument Types](#argument-types)
   - [Argument Validation](#argument-validation)
   - [Default Values](#default-values)
-- [Calling Tools](#calling-tools)
-  - [From a Client](#from-a-client)
-  - [From Another Tool](#from-another-tool)
+- [Calling Tools From Another Tool](#calling-tools-from-another-tool)
 - [Advanced Tool Features](#advanced-tool-features)
   - [Tool Categories](#tool-categories)
   - [Tool Metadata](#tool-metadata)
@@ -43,7 +41,7 @@ To define a tool, create a class that inherits from `FastMcp::Tool`:
 ```ruby
 class HelloTool < FastMcp::Tool
   description "Say hello to someone"
-  
+
   def call(**_args)
     "Hello, world!"
   end
@@ -69,11 +67,11 @@ To define arguments for a tool, use the `arguments` class method with a block us
 ```ruby
 class GreetTool < FastMcp::Tool
   description "Greet a person"
-  
+
   arguments do
     required(:name).filled(:string).description("Name of the person")
   end
-  
+
   def call(name:)
     "Hello, #{name}!"
   end
@@ -106,7 +104,7 @@ Example with different types:
 ```ruby
 class ProcessDataTool < FastMcp::Tool
   description "Process various types of data"
-  
+
   arguments do
     required(:text).filled(:string).description("Text to process")
     optional(:count).filled(:integer).description("Number of times to process")
@@ -115,12 +113,12 @@ class ProcessDataTool < FastMcp::Tool
     optional(:tags).array(:string).description("Tags to apply")
     optional(:metadata).hash.description("Additional metadata")
   end
-  
+
   def call(text:, count: 1, factor: 1.0, verbose: false, tags: [], metadata: {})
     # Implementation
     result = text * count
     result = result * factor if factor != 1.0
-    
+
     if verbose
       {
         result: result,
@@ -143,16 +141,16 @@ You can also add custom validation in the `call` method:
 ```ruby
 class DivideTool < FastMcp::Tool
   description "Divide two numbers"
-  
+
   arguments do
     required(:dividend).filled(:float).description("Number to be divided")
     required(:divisor).filled(:float).description("Number to divide by")
   end
-  
+
   def call(dividend:, divisor:)
     # Custom validation
     raise "Cannot divide by zero" if divisor == 0
-    
+
     dividend / divisor
   end
 end
@@ -165,76 +163,54 @@ You can specify default values in the method parameters of the `call` method:
 ```ruby
 class RepeatTool < FastMcp::Tool
   description "Repeat a string multiple times"
-  
+
   arguments do
     required(:text).filled(:string).description("Text to repeat")
     optional(:count).filled(:integer).description("Number of times to repeat")
   end
-  
+
   def call(text:, count: 3)
     text * count
   end
 end
 ```
 
-## Calling Tools
-
-### From a Client
-
-To call a tool from a client:
+## Calling Tools From Another Tool
+Tools can call other tools:
 
 ```ruby
-client = FastMcp::Client.new(name: 'example-client', version: '1.0.0')
-client.connect('ruby server.rb')
 
-# Call a tool with arguments
-result = client.call_tool('greet', { name: 'Alice' })
-puts result  # Outputs: Hello, Alice!
+class GreetTool < FastMcp::Tool
+  description 'Greet one person'
 
-# Call a tool with no arguments
-result = client.call_tool('hello')
-puts result  # Outputs: Hello, world!
-```
-
-### From Another Tool
-
-Tools can call other tools through the server instance:
-
-```ruby
-class GreetMultipleTool < FastMcp::Tool
-  description "Greet multiple people"
-  
-  # Class variable to hold server instance
-  @server = nil
-
-  # Class methods to get and set server instance
-  class << self
-    attr_accessor :server
-  end
-  
   arguments do
-    required(:names).array(:string).description("Names of people to greet")
+    required(:names).array(:string).description("Name of person to greet")
   end
-  
-  def call(names:)
-    raise "Server not set" unless self.class.server
-    
-    results = names.map do |name|
-      # Get the tool instance
-      greet_tool = self.class.server.tools["greet"].new
-      # Call the tool
-      greet_tool.call(name: name)
-    end
-    
-    results.join("\n")
+
+  def call(name:)
+    "Hey #{name}"
   end
 end
 
-# Set the server reference
-GreetMultipleTool.server = server
+class GreetMultipleTool < FastMcp::Tool
+  description "Greet multiple people"
 
-# Register the tool
-server.register_tool(GreetMultipleTool)
+  arguments do
+    required(:names).array(:string).description("Names of people to greet")
+  end
+
+  def call(names:)
+    raise "Server not set" unless self.class.server
+
+    greet_tool = GreetTool.new
+    results = names.map do |name|
+      # Call the tool
+      greet_tool.call(name: name)
+    end
+
+    results.join("\n")
+  end
+end
 ```
 
 ## Advanced Tool Features
@@ -246,18 +222,18 @@ You can organize tools into categories using instance variables or metadata:
 ```ruby
 class AddTool < FastMcp::Tool
   description "Add two numbers"
-  
+
   class << self
     attr_accessor :category
   end
-  
+
   self.category = "Math"
-  
+
   arguments do
     required(:a).filled(:float).description("First number")
     required(:b).filled(:float).description("Second number")
   end
-  
+
   def call(a:, b:)
     a + b
   end
@@ -265,18 +241,18 @@ end
 
 class SubtractTool < FastMcp::Tool
   description "Subtract two numbers"
-  
+
   class << self
     attr_accessor :category
   end
-  
+
   self.category = "Math"
-  
+
   arguments do
     required(:a).filled(:float).description("First number")
     required(:b).filled(:float).description("Second number")
   end
-  
+
   def call(a:, b:)
     a - b
   end
@@ -287,27 +263,23 @@ end
 
 You can add metadata to tools using class methods:
 
+### Metadata
+MCP specifies that we can declare metadata in the tool call result. For this, we have a _meta attr_accessor in all tools. We kept the _meta original naming to avoid collisions with arguments that could be named "metadata". It is a hash that accepts modifications and will be returned to the tool call response whenever it has been modified.
+
 ```ruby
-class WeatherTool < FastMcp::Tool
-  description "Get the weather for a location"
-  
-  class << self
-    attr_accessor :metadata
-  end
-  
-  self.metadata = {
-    author: "John Doe",
-    version: "1.0.0",
-    tags: ["weather", "forecast"]
-  }
-  
+class RepeatTool < FastMcp::Tool
+  description "Repeat a string multiple times"
+
   arguments do
-    required(:location).filled(:string).description("Location to get weather for")
+    required(:text).filled(:string).description("Text to repeat")
+    optional(:count).filled(:integer).description("Number of times to repeat")
   end
-  
-  def call(location:)
-    # Implementation
-    { location: location, temperature: rand(0..30), condition: ["Sunny", "Cloudy", "Rainy"].sample }
+
+  def call(text:, count: 3)
+    _meta[:foo] = 'bar'
+    _meta[:some_key] = 'some value'
+
+    text * count
   end
 end
 ```
@@ -319,22 +291,22 @@ You can implement permission checks:
 ```ruby
 class AdminActionTool < FastMcp::Tool
   description "Perform an admin action"
-  
+
   class << self
     attr_accessor :required_permission
   end
-  
+
   self.required_permission = :admin
-  
+
   arguments do
     required(:action).filled(:string).description("Action to perform")
     required(:user_role).filled(:string).description("Role of the user making the request")
   end
-  
+
   def call(action:, user_role:)
     # Check permissions
     raise "Permission denied: admin role required" unless user_role == "admin"
-    
+
     # Perform the action
     "Admin action '#{action}' performed successfully"
   end
@@ -361,7 +333,7 @@ Here's a more complex example of a tool that interacts with resources:
 ```ruby
 class IncrementCounterTool < FastMcp::Tool
   description "Increment a counter resource"
-  
+
   # Class variable to hold server instance
   @server = nil
 
@@ -369,27 +341,27 @@ class IncrementCounterTool < FastMcp::Tool
   class << self
     attr_accessor :server
   end
-  
+
   arguments do
     optional(:amount).filled(:integer).description("Amount to increment by")
   end
-  
+
   def call(amount: 1)
     raise "Server not set" unless self.class.server
-    
+
     # Get the counter resource
     counter_resource = self.class.server.resources["counter"]
     raise "Counter resource not found" unless counter_resource
-    
+
     # Parse the current value
     current_value = counter_resource.content.to_i
-    
+
     # Increment the counter
     new_value = current_value + amount
-    
+
     # Update the resource
     counter_resource.update_content(new_value.to_s)
-    
+
     # Return the new value
     { previous_value: current_value, new_value: new_value, amount: amount }
   end
@@ -402,4 +374,4 @@ IncrementCounterTool.server = server
 server.register_tool(IncrementCounterTool)
 ```
 
-This tool increments a counter resource by a specified amount (or by 1 by default) and returns the previous and new values. 
+This tool increments a counter resource by a specified amount (or by 1 by default) and returns the previous and new values.
