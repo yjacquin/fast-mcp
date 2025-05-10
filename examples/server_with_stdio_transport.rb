@@ -102,9 +102,14 @@ class AddUserTool < FastMcp::Tool
   arguments do
     required(:name).filled(:string).description("User's name")
     required(:email).filled(:string).description("User's email")
+    optional(:admin).maybe(:bool).hidden
+    required(:address).hash do
+      required(:street).filled(:string)
+      required(:city).filled(:string)
+    end
   end
 
-  def call(name:, email:)
+  def call(name:, email:, address:, admin: nil)
     # Get the current users
     users_resource = UsersResource.instance
     users = users_resource.users
@@ -113,7 +118,9 @@ class AddUserTool < FastMcp::Tool
     new_id = users.map { |u| u[:id] }.max + 1
 
     # Create the new user
-    new_user = { id: new_id, name: name, email: email }
+    new_user = { id: new_id, name: name, email: email, address: address }
+
+    new_user[:admin] = admin if admin
 
     # Add the user to the list
     users << new_user

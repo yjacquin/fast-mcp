@@ -9,9 +9,10 @@ RSpec.describe FastMcp::SchemaCompiler do
     context 'with simple schema' do
       let(:schema) do
         Dry::Schema.JSON do
-          required(:name).filled(:string)
+          required(:name).filled(:string).description('the name')
           required(:age).filled(:integer)
           required(:email).filled(:string)
+          optional(:admin).maybe(:bool).hidden
         end
       end
 
@@ -20,7 +21,10 @@ RSpec.describe FastMcp::SchemaCompiler do
 
         expect(result[:type]).to eq('object')
         expect(result[:properties]).to include(
-          name: { type: 'string' },
+          name: {
+            type: 'string',
+            description: 'the name'
+          },
           age: { type: 'number' },
           email: { type: 'string' }
         )
@@ -56,6 +60,7 @@ RSpec.describe FastMcp::SchemaCompiler do
           required(:metadata).hash do
             required(:address).filled(:string)
             required(:phone).filled(:string)
+            optional(:secret).maybe(:string).hidden
           end
         end
       end

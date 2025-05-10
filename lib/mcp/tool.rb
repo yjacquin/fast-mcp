@@ -11,6 +11,14 @@ module Dry
         def description(text)
           key_name = name.to_sym
           schema_dsl.meta(key_name, :description, text)
+
+          self
+        end
+
+        def hidden(hidden = true) # rubocop:disable Style/OptionalBooleanParameter
+          key_name = name.to_sym
+          schema_dsl.meta(key_name, :hidden, hidden)
+
           self
         end
       end
@@ -20,6 +28,14 @@ module Dry
         def description(text)
           key_name = name.to_sym
           schema_dsl.meta(key_name, :description, text)
+
+          self
+        end
+
+        def hidden(hidden = true) # rubocop:disable Style/OptionalBooleanParameter
+          key_name = name.to_sym
+          schema_dsl.meta(key_name, :hidden, hidden)
+
           self
         end
       end
@@ -29,6 +45,14 @@ module Dry
         def description(text)
           key_name = name.to_sym
           schema_dsl.meta(key_name, :description, text)
+
+          self
+        end
+
+        def hidden(hidden = true) # rubocop:disable Style/OptionalBooleanParameter
+          key_name = name.to_sym
+          schema_dsl.meta(key_name, :hidden, hidden)
+
           self
         end
       end
@@ -122,102 +146,87 @@ module FastMcp
     end
   end
 
-  # Module for handling schema descriptions
-  module SchemaDescriptionExtractor
-    # Extract descriptions from a schema
-    def extract_descriptions_from_schema(schema)
-      descriptions = {}
+  # Module for handling schema metadata
+  module SchemaMetadataExtractor
+    # Extract metadata from a schema
+    def extract_metadata_from_schema(schema)
+      # a deeply-assignable hash, the default value of a key is {}
+      metadata = Hash.new { |h, k| h[k] = Hash.new(&h.default_proc) }
 
       # Extract descriptions from the top-level schema
       if schema.respond_to?(:schema_dsl) && schema.schema_dsl.respond_to?(:meta_data)
         schema.schema_dsl.meta_data.each do |key, meta|
-          descriptions[key.to_s] = meta[:description] if meta[:description]
+          metadata[key.to_s][:description] = meta[:description] if meta[:description]
+          metadata[key.to_s][:hidden] = meta[:hidden]
         end
       end
 
-      # Extract descriptions from nested schemas using AST
+      # Extract metadata from nested schemas using AST
       schema.rules.each_value do |rule|
         next unless rule.respond_to?(:ast)
 
-        extract_descriptions_from_ast(rule.ast, descriptions)
+        extract_metadata_from_ast(rule.ast, metadata)
       end
 
-      # Special case for the nested properties test
-      handle_special_case_for_person(schema, descriptions)
-
-      descriptions
+      metadata
     end
 
-    # Handle special case for person schema in tests
-    def handle_special_case_for_person(schema, descriptions)
-      return unless schema.rules.key?(:person) &&
-                    schema.rules[:person].respond_to?(:rule) &&
-                    schema.rules[:person].rule.is_a?(Dry::Logic::Operations::And)
-
-      # Check if this is the test schema with person.first_name and person.last_name
-      person_rule = schema.rules[:person]
-      return unless person_rule.rule.rules.any? { |r| r.is_a?(Dry::Logic::Operations::Set) }
-
-      descriptions['person.first_name'] = 'First name of the person'
-      descriptions['person.last_name'] = 'Last name of the person'
-    end
-
-    # Extract descriptions from AST
-    def extract_descriptions_from_ast(ast, descriptions, parent_key = nil)
+    # Extract metadata from AST
+    def extract_metadata_from_ast(ast, metadata, parent_key = nil)
       return unless ast.is_a?(Array)
 
-      process_key_node(ast, descriptions, parent_key) if ast[0] == :key
-      process_set_node(ast, descriptions, parent_key) if ast[0] == :set
-      process_and_node(ast, descriptions, parent_key) if ast[0] == :and
+      process_key_node(ast, metadata, parent_key) if ast[0] == :key
+      process_set_node(ast, metadata, parent_key) if ast[0] == :set
+      process_and_node(ast, metadata, parent_key) if ast[0] == :and
     end
 
     # Process a key node in the AST
-    def process_key_node(ast, descriptions, parent_key)
+    def process_key_node(ast, metadata, parent_key)
       return unless ast[1].is_a?(Array) && ast[1].size >= 2
 
       key = ast[1][0]
       full_key = parent_key ? "#{parent_key}.#{key}" : key.to_s
 
       # Process nested AST
-      extract_descriptions_from_ast(ast[1][1], descriptions, full_key) if ast[1][1].is_a?(Array)
+      extract_metadata_from_ast(ast[1][1], metadata, full_key) if ast[1][1].is_a?(Array)
     end
 
     # Process a set node in the AST
-    def process_set_node(ast, descriptions, parent_key)
+    def process_set_node(ast, metadata, parent_key)
       return unless ast[1].is_a?(Array)
 
       ast[1].each do |set_node|
-        extract_descriptions_from_ast(set_node, descriptions, parent_key)
+        extract_metadata_from_ast(set_node, metadata, parent_key)
       end
     end
 
     # Process an and node in the AST
-    def process_and_node(ast, descriptions, parent_key)
+    def process_and_node(ast, metadata, parent_key)
       return unless ast[1].is_a?(Array)
 
       # Process each child node
       ast[1].each do |and_node|
-        extract_descriptions_from_ast(and_node, descriptions, parent_key)
+        extract_metadata_from_ast(and_node, metadata, parent_key)
       end
 
       # Process nested properties
-      process_nested_properties(ast, descriptions, parent_key)
+      process_nested_properties(ast, metadata, parent_key)
     end
 
     # Process nested properties in an and node
-    def process_nested_properties(ast, descriptions, parent_key)
+    def process_nested_properties(ast, metadata, parent_key)
       ast[1].each do |node|
         next unless node[0] == :key && node[1].is_a?(Array) && node[1][1].is_a?(Array) && node[1][1][0] == :and
 
         key_name = node[1][0]
         nested_key = parent_key ? "#{parent_key}.#{key_name}" : key_name.to_s
 
-        process_nested_schema_ast(node[1][1], descriptions, nested_key)
+        process_nested_schema_ast(node[1][1], metadata, nested_key)
       end
     end
 
     # Process a nested schema
-    def process_nested_schema_ast(ast, descriptions, nested_key)
+    def process_nested_schema_ast(ast, metadata, nested_key)
       return unless ast[1].is_a?(Array)
 
       ast[1].each do |subnode|
@@ -226,31 +235,31 @@ module FastMcp
         subnode[1].each do |set_node|
           next unless set_node[0] == :and && set_node[1].is_a?(Array)
 
-          process_nested_keys(set_node, descriptions, nested_key)
+          process_nested_keys(set_node, metadata, nested_key)
         end
       end
     end
 
     # Process nested keys in a schema
-    def process_nested_keys(set_node, descriptions, nested_key)
+    def process_nested_keys(set_node, metadata, nested_key)
       set_node[1].each do |and_node|
         next unless and_node[0] == :key && and_node[1].is_a?(Array) && and_node[1].size >= 2
 
         nested_field = and_node[1][0]
         nested_path = "#{nested_key}.#{nested_field}"
 
-        extract_meta_description(and_node, descriptions, nested_path)
+        extract_metadata(and_node, metadata, nested_path)
       end
     end
 
-    # Extract meta description from a node
-    def extract_meta_description(and_node, descriptions, nested_path)
+    # Extract metadata from a node
+    def extract_metadata(and_node, metadata, nested_path)
       return unless and_node[1][1].is_a?(Array) && and_node[1][1][1].is_a?(Array)
 
       and_node[1][1][1].each do |meta_node|
         next unless meta_node[0] == :meta && meta_node[1].is_a?(Hash) && meta_node[1][:description]
 
-        descriptions[nested_path] = meta_node[1][:description]
+        metadata[nested_path] = meta_node[1][:description]
       end
     end
   end
@@ -259,9 +268,7 @@ module FastMcp
   module RuleTypeDetector
     # Check if a rule is for a hash type
     def hash_type?(rule)
-      return true if direct_hash_predicate?(rule)
-      return true if nested_hash_predicate?(rule)
-      return true if special_case_hash?(rule)
+      return true if direct_hash_predicate?(rule) || nested_hash_predicate?(rule)
 
       false
     end
@@ -282,28 +289,6 @@ module FastMcp
       if rule.respond_to?(:right) && rule.right.is_a?(Dry::Logic::Operations::Key) &&
          rule.right.rule.is_a?(Dry::Logic::Operations::And)
         return rule.right.rule.rules.any? { |r| r.respond_to?(:name) && r.name == :hash? }
-      end
-
-      false
-    end
-
-    # Check for special case hash
-    def special_case_hash?(rule)
-      # Special case for schema_compiler_spec.rb tests
-      return true if rule.respond_to?(:path) && [:metadata, :user].include?(rule.path)
-
-      # Special case for person hash in the test
-      return false unless rule.respond_to?(:ast)
-
-      ast = rule.ast
-      return false unless ast[0] == :and && ast[1].is_a?(Array)
-
-      ast[1].each do |node|
-        next unless node[0] == :key && node[1].is_a?(Array) && node[1][1].is_a?(Array) && node[1][1][0] == :and
-
-        node[1][1][1].each do |subnode|
-          return true if subnode[0] == :predicate && subnode[1].is_a?(Array) && subnode[1][0] == :hash?
-        end
       end
 
       false
@@ -633,7 +618,7 @@ module FastMcp
 
   # SchemaCompiler class for converting Dry::Schema to JSON Schema
   class SchemaCompiler
-    include SchemaDescriptionExtractor
+    include SchemaMetadataExtractor
     include RuleTypeDetector
     include PredicateHandler
     include BasicTypePredicateHandler
@@ -661,8 +646,8 @@ module FastMcp
       # Store the schema for later use
       @schema = schema
 
-      # Extract descriptions from the schema
-      @descriptions = extract_descriptions_from_schema(schema)
+      # Extract metadata from the schema
+      @metadata = extract_metadata_from_schema(schema)
 
       # Process each rule in the schema
       schema.rules.each do |key, rule|
@@ -676,6 +661,9 @@ module FastMcp
     end
 
     def process_rule(key, rule)
+      # Skip if this property is hidden
+      return if @metadata.dig(key.to_s, :hidden) == true
+
       # Initialize property if it doesn't exist
       @json_schema[:properties][key] ||= {}
 
@@ -686,7 +674,8 @@ module FastMcp
       extract_predicates(rule, key)
 
       # Add description if available
-      @json_schema[:properties][key][:description] = @descriptions[key.to_s] if @descriptions.key?(key.to_s)
+      description = @metadata.dig(key.to_s, :description)
+      @json_schema[:properties][key][:description] = description unless description && description.empty?
 
       # Check if this is a hash type
       is_hash = hash_type?(rule)
@@ -733,8 +722,9 @@ module FastMcp
 
       # Add description if available for nested property
       nested_key_path = "#{key}.#{nested_key}"
-      if @descriptions.key?(nested_key_path)
-        @json_schema[:properties][key][:properties][nested_key][:description] = @descriptions[nested_key_path]
+      description = @metadata.dig(nested_key_path, :description)
+      unless description && description.empty?
+        @json_schema[:properties][key][:properties][nested_key][:description] = description
       end
 
       # Special case for the test with person.first_name and person.last_name
