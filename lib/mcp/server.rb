@@ -304,10 +304,10 @@ module FastMcp
       begin
         # Convert string keys to symbols for Ruby
         symbolized_args = symbolize_keys(arguments)
-        result = tool.new.call_with_schema_validation!(**symbolized_args)
+        result, metadata = tool.new.call_with_schema_validation!(**symbolized_args)
 
         # Format and send the result
-        send_formatted_result(result, id)
+        send_formatted_result(result, id, metadata)
       rescue FastMcp::Tool::InvalidArgumentsError => e
         @logger.error("Invalid arguments for tool #{tool_name}: #{e.message}")
         send_error_result(e.message, id)
@@ -318,18 +318,18 @@ module FastMcp
     end
 
     # Format and send successful result
-    def send_formatted_result(result, id)
+    def send_formatted_result(result, id, metadata)
       # Check if the result is already in the expected format
       if result.is_a?(Hash) && result.key?(:content)
-        # Result is already in the correct format
-        send_result(result, id)
+        send_result(result, id, metadata: metadata)
       else
         # Format the result according to the MCP specification
         formatted_result = {
           content: [{ type: 'text', text: result.to_s }],
           isError: false
         }
-        send_result(formatted_result, id)
+
+        send_result(formatted_result, id, metadata: metadata)
       end
     end
 
@@ -340,6 +340,7 @@ module FastMcp
         content: [{ type: 'text', text: "Error: #{message}" }],
         isError: true
       }
+
       send_result(error_result, id)
     end
 
@@ -408,7 +409,9 @@ module FastMcp
     end
 
     # Send a JSON-RPC result response
-    def send_result(result, id)
+    def send_result(result, id, metadata: {})
+      result[:_meta] = metadata if metadata.is_a?(Hash) && !metadata.empty?
+
       response = {
         jsonrpc: '2.0',
         id: id,
@@ -429,6 +432,7 @@ module FastMcp
         },
         id: id
       }
+
       send_response(response)
     end
 

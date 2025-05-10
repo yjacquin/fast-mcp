@@ -102,6 +102,12 @@ module FastMcp
       end
     end
 
+    def initialize
+      @_meta = {}
+    end
+
+    attr_accessor :_meta
+
     def notify_resource_updated(uri)
       self.class.server.notify_resource_updated(uri)
     end
@@ -110,7 +116,9 @@ module FastMcp
       arg_validation = self.class.input_schema.call(args)
       raise InvalidArgumentsError, arg_validation.errors.to_h.to_json if arg_validation.errors.any?
 
-      call(**args)
+      # When calling the tool, its metadata can be altered to be returned in response.
+      # We return the altered metadata with the tool's result
+      [call(**args), _meta]
     end
   end
 
