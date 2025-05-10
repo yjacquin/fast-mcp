@@ -105,13 +105,35 @@ RSpec.describe FastMcp::Tool do
 
     it 'validates arguments against the schema and calls the method' do
       result = instance.call_with_schema_validation!(name: 'Test', age: 25)
-      expect(result).to eq('Hello, Test! You are 25 years old.')
+      expect(result).to eq(['Hello, Test! You are 25 years old.', {}])
     end
 
     it 'raises InvalidArgumentsError when validation fails' do
       expect do
         instance.call_with_schema_validation!(name: 'Test', age: 15)
       end.to raise_error(FastMcp::Tool::InvalidArgumentsError)
+    end
+
+    context 'with metadata' do
+      let(:test_class) do
+        Class.new(described_class) do
+          arguments do
+            required(:name).filled(:string)
+            required(:age).filled(:integer, gt?: 18)
+          end
+
+          def call(**args)
+            _meta[:something] = "hey"
+
+            "Hello, #{args[:name]}! You are #{args[:age]} years old."
+          end
+        end
+      end
+
+      it 'returns the modified metadata' do
+        result = instance.call_with_schema_validation!(name: 'Test', age: 25)
+        expect(result).to eq(['Hello, Test! You are 25 years old.', { something: 'hey' }])
+      end
     end
   end
 

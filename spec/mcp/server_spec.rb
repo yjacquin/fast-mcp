@@ -161,7 +161,9 @@ RSpec.describe FastMcp::Server do
         }.to_json
 
         expect(server).to receive(:send_result).with(
-          { content: [{ text: 'Hello, World!', type: 'text' }], isError: false }, 1
+          { content: [{ text: 'Hello, World!', type: 'text' }], isError: false },
+          1,
+          metadata: {}
         )
         server.handle_request(request)
       end
@@ -182,8 +184,11 @@ RSpec.describe FastMcp::Server do
           id: 1
         }.to_json
 
-        expect(server).to receive(:send_result).with({ content: [{ text: 'John Doe', type: 'text' }], isError: false },
-                                                     1)
+        expect(server).to receive(:send_result).with(
+          { content: [{ text: 'John Doe', type: 'text' }], isError: false },
+          1,
+          metadata: {}
+        )
         server.handle_request(request)
       end
 
