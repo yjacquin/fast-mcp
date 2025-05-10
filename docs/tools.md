@@ -13,10 +13,10 @@ Tools are a core concept in the Model Context Protocol (MCP). They allow you to 
   - [Default Values](#default-values)
 - [Calling Tools From Another Tool](#calling-tools-from-another-tool)
 - [Advanced Tool Features](#advanced-tool-features)
+  - [Tool Hidden Arguments](#tool-hidden-arguments)
   - [Tool Categories](#tool-categories)
   - [Tool Metadata](#tool-metadata)
   - [Tool Permissions](#tool-permissions)
-  - [Tool Callbacks](#tool-callbacks)
 - [Best Practices](#best-practices)
 - [Examples](#examples)
 
@@ -214,6 +214,54 @@ end
 ```
 
 ## Advanced Tool Features
+
+### Tool hidden arguments
+If need be, we can register arguments that won't show up in the tools/list call but can still be used in the tool when provided.
+This might be useful when calling from another tool, or when the client is made aware of this argument from the context.
+
+```ruby
+class AddUserTool < FastMcp::Tool
+  description 'Add a new user'
+  tool_name 'add_user'
+  arguments do
+    required(:name).filled(:string).description("User's name")
+    required(:email).filled(:string).description("User's email")
+    optional(:admin).maybe(:bool).hidden
+  end
+
+  def call(name:, email:, admin: nil)
+    # Create the new user
+    new_user = { name: name, email: email }
+
+    new_user[:admin] = admin if admin
+
+    new_user
+  end
+end
+```
+
+The .hidden predicate takes a boolean value as argument, meaning that it can be variabilized depending on your custom logic. Useful for feature-flagging arguments.
+
+```ruby
+class AddUserTool < FastMcp::Tool
+  description 'Add a new user'
+  tool_name 'add_user'
+  arguments do
+    required(:name).filled(:string).description("User's name")
+    required(:email).filled(:string).description("User's email")
+    optional(:admin).maybe(:bool).hidden(!ENV['FEATURE_FLAG'] == 'true')
+  end
+
+  def call(name:, email:, admin: nil)
+    # Create the new user
+    new_user = { name: name, email: email }
+
+    new_user[:admin] = admin if admin
+
+    new_user
+  end
+end
+```
 
 ### Tool Categories
 
