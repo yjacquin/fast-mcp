@@ -11,6 +11,14 @@ module Dry
         def description(text)
           key_name = name.to_sym
           schema_dsl.meta(key_name, :description, text)
+
+          self
+        end
+
+        def hidden(hidden = true) # rubocop:disable Style/OptionalBooleanParameter
+          key_name = name.to_sym
+          schema_dsl.meta(key_name, :hidden, hidden)
+
           self
         end
       end
@@ -20,6 +28,14 @@ module Dry
         def description(text)
           key_name = name.to_sym
           schema_dsl.meta(key_name, :description, text)
+
+          self
+        end
+
+        def hidden(hidden = true) # rubocop:disable Style/OptionalBooleanParameter
+          key_name = name.to_sym
+          schema_dsl.meta(key_name, :hidden, hidden)
+
           self
         end
       end
@@ -29,6 +45,14 @@ module Dry
         def description(text)
           key_name = name.to_sym
           schema_dsl.meta(key_name, :description, text)
+
+          self
+        end
+
+        def hidden(hidden = true) # rubocop:disable Style/OptionalBooleanParameter
+          key_name = name.to_sym
+          schema_dsl.meta(key_name, :hidden, hidden)
+
           self
         end
       end
@@ -259,9 +283,7 @@ module FastMcp
   module RuleTypeDetector
     # Check if a rule is for a hash type
     def hash_type?(rule)
-      return true if direct_hash_predicate?(rule)
-      return true if nested_hash_predicate?(rule)
-      return true if special_case_hash?(rule)
+      return true if direct_hash_predicate?(rule) || nested_hash_predicate?(rule)
 
       false
     end
@@ -282,28 +304,6 @@ module FastMcp
       if rule.respond_to?(:right) && rule.right.is_a?(Dry::Logic::Operations::Key) &&
          rule.right.rule.is_a?(Dry::Logic::Operations::And)
         return rule.right.rule.rules.any? { |r| r.respond_to?(:name) && r.name == :hash? }
-      end
-
-      false
-    end
-
-    # Check for special case hash
-    def special_case_hash?(rule)
-      # Special case for schema_compiler_spec.rb tests
-      return true if rule.respond_to?(:path) && [:metadata, :user].include?(rule.path)
-
-      # Special case for person hash in the test
-      return false unless rule.respond_to?(:ast)
-
-      ast = rule.ast
-      return false unless ast[0] == :and && ast[1].is_a?(Array)
-
-      ast[1].each do |node|
-        next unless node[0] == :key && node[1].is_a?(Array) && node[1][1].is_a?(Array) && node[1][1][0] == :and
-
-        node[1][1][1].each do |subnode|
-          return true if subnode[0] == :predicate && subnode[1].is_a?(Array) && subnode[1][0] == :hash?
-        end
       end
 
       false
