@@ -20,7 +20,13 @@ FastMcp.mount_in_rails(
   version: '1.0.0',
   path_prefix: '/mcp', # This is the default path prefix
   messages_route: 'messages', # This is the default route for the messages endpoint
-  sse_route: 'sse' # This is the default route for the SSE endpoint
+  sse_route: 'sse', # This is the default route for the SSE endpoint
+  auto_register_tools: true, # Automatically register a set of tools - Find, Where, Update, Create, Destroy, and Random
+  read_only: true, # Prevents tools that could write to the database from being registered, e.g. create/update/destroy
+  excluded_namespaces: [ # Exclude these namespace from auto-derived tools (Find, etc)
+    "ActionText",
+    "ActionMailbox",
+  ]
   # Add allowed origins below, it defaults to Rails.application.config.hosts
   # allowed_origins: ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/],
   # authenticate: true,       # Uncomment to enable authentication
