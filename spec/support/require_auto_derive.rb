@@ -1,0 +1,7 @@
+require 'mcp/auto_derive/auto_derive'
+require 'mcp/auto_derive/auto_derive_configuration'
+require 'mcp/auto_derive/base_adapter'
+require 'mcp/auto_derive/auto_include'
+require 'mcp/auto_derive/controller_auto_derive'
+require 'mcp/auto_derive/tools'
+require 'mcp/auto_derive/adapters/auto_derive_adapter'
