@@ -343,7 +343,6 @@ module FastMcp
       begin
         # Convert string keys to symbols for Ruby
         symbolized_args = symbolize_keys(arguments)
-<<<<<<< HEAD
 
         tool_instance = tool.new(headers: headers)
         authorized = tool_instance.authorized?(**symbolized_args)
@@ -351,10 +350,6 @@ module FastMcp
         return send_error(-32_602, 'Unauthorized', id) unless authorized
 
         result, metadata = tool_instance.call_with_schema_validation!(**symbolized_args)
-=======
-        @logger.info("Symbolized arguments: #{symbolized_args.inspect}")
-        result, metadata = tool.new.call_with_schema_validation!(**symbolized_args)
->>>>>>> 7f89cad (create a default set of tools - where, find, update, random, and destroy; specs)
 
         # Format and send the result
         send_formatted_result(result, id, metadata)
