@@ -10,7 +10,7 @@
   <a href="https://github.com/yjacquin/fast-mcp/workflows/CI/badge.svg"><img src="https://github.com/yjacquin/fast-mcp/workflows/CI/badge.svg" alt="CI Status" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
   <a href="code_of_conduct.md"><img src="https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg" alt="Contributor Covenant" /></a>
-  <a href="https://discord.gg/ayu8ZKvz"><img src = "https://dcbadge.limes.pink/api/server/https://discord.gg/ayu8ZKvz?style=flat" alt="Discord invite link" /></a>
+  <a href="https://discord.gg/9HHfAtY3HF"><img src = "https://dcbadge.limes.pink/api/server/https://discord.gg/9HHfAtY3HF?style=flat" alt="Discord invite link" /></a>
 </p>
 
 ## 🌟 Interface your Servers with LLMs in minutes !
