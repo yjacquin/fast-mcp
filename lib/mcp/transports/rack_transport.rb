@@ -453,7 +453,7 @@ module FastMcp
         ping_message = {
           jsonrpc: '2.0',
           method: 'ping',
-          id: rand(1_000_000)
+          id: "fast-mcp-ping-#{rand(1_000_000)}"
         }
         io.write("event: message\ndata: #{JSON.generate(ping_message)}\n\n")
         io.flush
