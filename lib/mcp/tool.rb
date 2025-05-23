@@ -115,7 +115,8 @@ module FastMcp
       end
 
       def authorize(&block)
-        @authorization_block = block
+        @authorization_blocks ||= []
+        @authorization_blocks.push block
       end
 
       def call(**args)
@@ -136,10 +137,10 @@ module FastMcp
     end
 
     def authorized?(**args)
-      auth_checks = [self.class, *self.class.ancestors].filter_map do |ancestor|
+      auth_checks = self.class.ancestors.filter_map do |ancestor|
         ancestor.ancestors.include?(FastMcp::Tool) &&
-          ancestor.instance_variable_get(:@authorization_block)
-      end
+          ancestor.instance_variable_get(:@authorization_blocks)
+      end.flatten
 
       return true if auth_checks.empty?
 

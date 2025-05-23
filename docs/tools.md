@@ -18,6 +18,7 @@ Tools are a core concept in the Model Context Protocol (MCP). They allow you to 
   - [Tool Metadata](#tool-metadata)
   - [Tool Permissions](#tool-permissions)
   - [Request Headers](#request-headers)
+  - [Composing Tool Authentication](#composing-tool-authentication)
 - [Best Practices](#best-practices)
 - [Examples](#examples)
 
@@ -178,19 +179,7 @@ end
 
 ### Authentication and Authorization
 
-When using the Rack transports, you can access HTTP headers from the request with the `headers` method in tools:
-
-```ruby
-class ExampleTool < FastMcp::Tool
-  description "Is an example tool"
-
-  def call
-    "Host header is #{headers["HOST"]}"
-  end
-end
-```
-
-This can be used to identify a user by authentication details passed in headers:
+Using [the `headers` method](#request-headers), you can access headers passed to the tool call. This can be used to identify a user by authentication details passed in headers:
 ```ruby
 class CurrentUserTool < FastMcp::Tool
   description "Gets the current user details"
@@ -443,6 +432,52 @@ class MyTool < FastMcp::Tool
   def call
     "Host header is #{headers["HOST"]}"
   end
+end
+```
+
+### Composing Tool Authentication
+
+It can be useful to extract authentication into modules to share functionality without having to bake logic into your tool's ancestor chain.
+
+```ruby
+# This module adds a current_user method to tools which include it, and requires that the user is present
+module UserAuthenticator
+  def self.included(tool)
+    tool.authorize do
+      not current_user.nil?
+    end
+  end
+
+  def current_user
+    # Get current user
+    # ...
+  end
+end
+
+# This module ensures that the THIRD_PARTY_API_KEY header is set
+module ThirdPartyApiKeyRequired
+  def self.included(tool)
+    tool.authorize do
+      not headers['THIRD_PARTY_API_KEY'].nil?
+    end
+  end
+end
+
+class MyTool < FastMcp::Tool
+  # Extra authentications are executed in the order they appear in the tool.
+  # In this case:
+  # - Any authorizations from ancestor classes
+  # - UserAuthenticator
+  # - This tool's authorize call
+  # - ThirdParyApiKeyRequired
+  include UserAuthenticator
+
+  authorize do
+    # My custom auth for this tool
+    # ...
+  end
+
+  include ThirdPartyApiKeyRequired
 end
 ```
 
