@@ -389,7 +389,10 @@ module FastMcp
 
         # Send endpoint information as the first message with query parameters
         endpoint = "#{@path_prefix}/#{@messages_route}"
-        endpoint += "?#{query_string}" if query_string
+        params = []
+        params << query_string if query_string && !query_string.empty?
+        params << "client_id=#{client_id}"
+        endpoint += "?#{params.join('&')}" unless params.empty?
         @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
         io.write("event: endpoint\ndata: #{endpoint}\n\n")
 
