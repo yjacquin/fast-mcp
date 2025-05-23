@@ -57,6 +57,18 @@ RSpec.describe FastMcp::Tool do
     end
   end
 
+  describe '.authorize' do
+    it 'records an authorization block' do
+      authorization_block = Proc.new { true }
+
+      test_class = Class.new(described_class) do
+        authorize(&authorization_block)
+      end
+
+      expect(test_class.instance_variable_get('@authorization_block')).to be(authorization_block)
+    end
+  end
+
   describe '.input_schema_to_json' do
     it 'returns nil when no input schema is defined' do
       test_class = Class.new(described_class)
@@ -157,6 +169,216 @@ RSpec.describe FastMcp::Tool do
     it 'can read headers' do
       tool = test_class.new(headers: { 'ENTITY' => 'World' })
       expect(tool.call).to eq('Hello, World!')
+    end
+  end
+
+  describe '#authorized?' do
+    context 'without authorization' do
+      let(:open_tool_class) do
+        Class.new(described_class) do
+          def self.name
+            'open-tool'
+          end
+
+          def self.description
+            'An open tool'
+          end
+
+          def call(**_args)
+            'Hello, World!'
+          end
+        end
+      end
+
+      it 'returns true' do
+        tool = open_tool_class.new
+        expect(tool.authorized?).to be true
+      end
+    end
+
+    context 'with authorization' do
+      context 'without arguments' do
+        let(:token) { 'valid_token' }
+        let(:authorized_tool_class) do
+          valid_token = token
+          Class.new(described_class) do
+            def self.name
+              'authorized-tool'
+            end
+
+            def self.description
+              'An authorized tool'
+            end
+
+            authorize do
+              headers['AUTHORIZATION'] == valid_token
+            end
+
+            def call(**_args)
+              'Hello, Admin!'
+            end
+          end
+        end
+
+        it 'returns true when authorized' do
+          tool = authorized_tool_class.new(headers: {
+            'AUTHORIZATION' => token
+          })
+
+          expect(tool.authorized?).to be true
+        end
+
+        it 'returns false when not authorized' do
+          tool = authorized_tool_class.new(headers: {
+            'AUTHORIZATION' => 'invalid_token'
+          })
+
+          expect(tool.authorized?).to be false
+        end
+      end
+
+      context 'with arguments' do
+        let(:token) { 'valid_token' }
+        let(:authorized_tool_class) do
+          valid_token = token
+          Class.new(described_class) do
+            def self.name
+              'authorized-tool'
+            end
+
+            def self.description
+              'An authorized tool'
+            end
+
+            arguments do
+              required(:name).filled(:string)
+            end
+
+            authorize do |args|
+              headers['AUTHORIZATION'] == valid_token && args[:name] == 'admin'
+            end
+
+            def call(**_args)
+              'Hello, Admin!'
+            end
+          end
+        end
+
+        it 'returns true when authorized' do
+          tool = authorized_tool_class.new(headers: {
+            'AUTHORIZATION' => token
+          })
+
+          expect(tool.authorized?(name: 'admin')).to be true
+        end
+
+        it 'returns false when not authorized' do
+          tool = authorized_tool_class.new(headers: {
+            'AUTHORIZATION' => token
+          })
+
+          expect(tool.authorized?(name: 'user')).to be false
+        end
+      end
+
+      context 'with inherited authorization' do
+        let(:token) { 'valid_token' }
+        let(:root_authorized_tool_class) do
+          valid_token = token
+          Class.new(described_class) do
+            def self.name
+              'root-authorized-tool'
+            end
+
+            def self.description
+              'A root authorized tool'
+            end
+
+            authorize do
+              headers['AUTHORIZATION'] == valid_token
+            end
+
+            def call(**_args)
+              'Hello, Admin!'
+            end
+          end
+        end
+        context 'with own authorization' do
+          let(:child_authorized_tool_class) do
+            Class.new(root_authorized_tool_class) do
+              def self.name
+                'child-authorized-tool'
+              end
+
+              def self.description
+                'A child authorized tool'
+              end
+
+              authorize do
+                headers['OTHER_HEADER'] == 'other_value'
+              end
+
+              def call(**_args)
+                'Hello, Child Admin!'
+              end
+            end
+          end
+
+          it 'returns true when fully authorized' do
+            tool = child_authorized_tool_class.new(headers: {
+              'AUTHORIZATION' => token,
+              'OTHER_HEADER' => 'other_value'
+            })
+            expect(tool.authorized?).to be true
+          end
+
+          it 'returns false when failing parent authorization' do
+            tool = child_authorized_tool_class.new(headers: {
+              'OTHER_HEADER' => 'other_value'
+            })
+            expect(tool.authorized?).to be false
+          end
+
+          it 'returns false when failing child authorization' do
+            tool = child_authorized_tool_class.new(headers: {
+              'AUTHORIZATION' => token
+            })
+            expect(tool.authorized?).to be false
+          end
+        end
+
+        context 'without own authorization' do
+          let(:child_tool_class) do
+            Class.new(root_authorized_tool_class) do
+              def self.name
+                'child-tool'
+              end
+
+              def self.description
+                'A child tool'
+              end
+
+              def call(**_args)
+                'Hello, Child!'
+              end
+            end
+          end
+
+          it 'returns true when authorized' do
+            tool = child_tool_class.new(headers: {
+              'AUTHORIZATION' => token
+            })
+            expect(tool.authorized?).to be true
+          end
+
+          it 'returns false when not authorized' do
+            tool = child_tool_class.new(headers: {
+              'AUTHORIZATION' => 'invalid_token'
+            })
+            expect(tool.authorized?).to be false
+          end
+        end
+      end
     end
   end
 
