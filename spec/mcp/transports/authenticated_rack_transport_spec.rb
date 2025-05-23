@@ -71,7 +71,7 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
 
         # The RackTransport class will call server.handle_json_request with the message
         json_response = '{"jsonrpc":"2.0","result":{},"id":1}'
-        expect(server).to receive(:handle_json_request).with(json_message).and_return(json_response)
+        expect(server).to receive(:handle_json_request).with(json_message, headers: { 'AUTHORIZATION' => env['HTTP_AUTHORIZATION'] }).and_return(json_response)
 
         # For MCP paths, we don't expect app.call to be invoked
         expect(app).not_to receive(:call)
@@ -324,7 +324,7 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: { 'ORIGIN' => env['HTTP_ORIGIN'], 'AUTHORIZATION' => env['HTTP_AUTHORIZATION'] })
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)

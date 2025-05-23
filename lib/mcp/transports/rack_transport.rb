@@ -503,7 +503,15 @@ module FastMcp
         # Parse the request body
         body = request.body.read
 
-        response = process_message(body) || []
+        # Assemble HTTP headers
+        headers = request.each_header.filter_map do |key, value|
+          if (match = /^HTTP_(?<name>.*)/.match(key))
+            header_name = match[:name]
+            [header_name, value]
+          end
+        end.to_h
+
+        response = process_message(body, headers: headers) || []
         @logger.info("Response: #{response}")
 
         [200, { 'Content-Type' => 'application/json' }, response]
