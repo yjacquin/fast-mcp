@@ -508,9 +508,8 @@ module FastMcp
         # Parse the request body
         body = request.body.read
 
-        context = extract_context_from_env(env)
-        context[:client_id] = extract_client_id(env)
-        response = process_message(body) || []
+        context = { client_id: extract_client_id(request.env) }
+        response = process_message(body, context) || []
         @logger.info("Response: #{response}")
 
         [200, { 'Content-Type' => 'application/json' }, response]
