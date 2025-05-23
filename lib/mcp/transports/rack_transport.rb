@@ -72,24 +72,29 @@ module FastMcp
 
         clients_to_remove = []
 
-        @sse_clients.each do |client_id, client|
-          stream = client[:stream]
-          next if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
-
-          stream.write("data: #{json_message}\n\n")
-          stream.flush if stream.respond_to?(:flush)
-        rescue Errno::EPIPE, IOError => e
-          # Broken pipe or IO error - client disconnected
-          @logger.info("Client #{client_id} disconnected: #{e.message}")
-          clients_to_remove << client_id
+        @sse_clients.each_key do |client_id|
+          send_message_to(client_id, message)
         rescue StandardError => e
           @logger.error("Error sending message to client #{client_id}: #{e.message}")
-          # Remove the client if we can't send to it
           clients_to_remove << client_id
         end
 
         # Remove disconnected clients outside the loop to avoid modifying the hash during iteration
         clients_to_remove.each { |client_id| unregister_sse_client(client_id) }
+      end
+
+      # Send a message to a specific SSE client
+      def send_message_to(client_id, message)
+        client = @sse_clients[client_id]
+        return unless client
+
+        stream = client[:stream]
+        return if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
+
+        @logger.info("Client: #{client_id}, SSE Message: #{message}")
+        stream.write("data: #{JSON.generate(message)}\n\n")
+        stream.flush if stream.respond_to?(:flush)
+        nil
       end
 
       # Register a new SSE client
@@ -503,6 +508,8 @@ module FastMcp
         # Parse the request body
         body = request.body.read
 
+        context = extract_context_from_env(env)
+        context[:client_id] = extract_client_id(env)
         response = process_message(body) || []
         @logger.info("Response: #{response}")
 
