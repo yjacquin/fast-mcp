@@ -58,14 +58,18 @@ RSpec.describe FastMcp::Tool do
   end
 
   describe '.authorize' do
-    it 'records an authorization block' do
-      authorization_block = Proc.new { true }
+    it 'records authorization blocks' do
+      authorization_block_1 = Proc.new { true }
+      authorization_block_2 = Proc.new { true }
 
       test_class = Class.new(described_class) do
-        authorize(&authorization_block)
+        authorize(&authorization_block_1)
+        authorize(&authorization_block_2)
       end
 
-      expect(test_class.instance_variable_get('@authorization_block')).to be(authorization_block)
+      expect(test_class.instance_variable_get('@authorization_blocks')).to be_an(Array)
+      expect(test_class.instance_variable_get('@authorization_blocks').first).to be(authorization_block_1)
+      expect(test_class.instance_variable_get('@authorization_blocks').last).to be(authorization_block_2)
     end
   end
 
@@ -377,6 +381,90 @@ RSpec.describe FastMcp::Tool do
             })
             expect(tool.authorized?).to be false
           end
+        end
+      end
+
+      context 'with composed authorization' do
+        let(:current_user_module) do
+          Module.new do
+            def self.included(base)
+              base.authorize do
+                not current_user.nil?
+              end
+            end
+
+            def current_user
+              @current_user ||= headers['CURRENT_USER']
+            end
+          end
+        end
+
+        let(:token_module) do
+          Module.new do
+            def self.included(base)
+              base.authorize do
+                headers['AUTHORIZATION'] == 'valid_token'
+              end
+            end
+          end
+        end
+
+        let(:composed_tool_class) do
+          current_user_auth = current_user_module
+          token_auth = token_module
+          Class.new(described_class) do
+            include current_user_auth
+            include token_auth
+
+            def self.name
+              'composed-tool'
+            end
+
+            def self.description
+              'A composed tool'
+            end
+
+            arguments do
+              required(:name).filled(:string)
+            end
+
+            authorize do |name:|
+              name.start_with?('Bob')
+            end
+
+            def call(**_args)
+              "Hello, #{current_user}!"
+            end
+          end
+        end
+
+        it 'returns true when authorized by both modules' do
+          tool = composed_tool_class.new(headers: {
+            'AUTHORIZATION' => 'valid_token',
+            'CURRENT_USER' => 'admin'
+          })
+          expect(tool.authorized?(name: "Bob")).to be true
+        end
+
+        it 'returns false when not authorized by one of the modules' do
+          headers = [
+            { 'AUTHORIZATION' => 'valid_token', 'CURRENT_USER' => nil },
+            { 'AUTHORIZATION' => 'invalid_token', 'CURRENT_USER' => 'admin' },
+          ]
+
+          headers.each do |header|
+            tool = composed_tool_class.new(headers: header)
+            expect(tool.authorized?(name: "Bob")).to be false
+          end
+        end
+
+        it 'returns false when not authorized by the tool' do
+          tool = composed_tool_class.new(headers: {
+            'AUTHORIZATION' => 'valid_token',
+            'CURRENT_USER' => 'admin'
+          })
+
+          expect(tool.authorized?(name: "Alice")).to be false
         end
       end
     end
