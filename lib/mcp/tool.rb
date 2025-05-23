@@ -91,6 +91,8 @@ module FastMcp
   class Tool
     class InvalidArgumentsError < StandardError; end
 
+    attr_accessor :context
+
     class << self
       attr_accessor :server
 
@@ -128,6 +130,7 @@ module FastMcp
 
     def initialize
       @_meta = {}
+      @context = nil
     end
 
     attr_accessor :_meta

@@ -18,11 +18,11 @@ module FastMcp
         if auth_enabled? && !exempt_from_auth?(request.path)
           auth_header = request.env["HTTP_#{@auth_header_name.upcase.gsub('-', '_')}"]
           token = auth_header&.gsub('Bearer ', '')
-
-          return unauthorized_response(request) unless valid_token?(token)
+          auth_results = auth_check(token, request, env)
+          return auth_results if auth_results
         end
 
-        super
+        super(request, env)
       end
 
       private
@@ -35,18 +35,24 @@ module FastMcp
         @auth_exempt_paths.any? { |exempt_path| path.start_with?(exempt_path) }
       end
 
+      # Override this method to implement custom authentication logic.
+      # Store auth data in env
+      def auth_check(token, request, env)
+        valid_token?(token) ? nil : unauthorized_response(request, 'Unauthorized: Invalid or missing authentication token')
+      end
+
       def valid_token?(token)
         token == @auth_token
       end
 
-      def unauthorized_response(request)
-        @logger.error('Unauthorized request: Invalid or missing authentication token')
+      def unauthorized_response(request, message = 'Unauthorized')
+        @logger.error("Unauthorized request: #{message}")
         body = JSON.generate(
           {
             jsonrpc: '2.0',
             error: {
               code: -32_000,
-              message: 'Unauthorized: Invalid or missing authentication token'
+              message: message
             },
             id: extract_request_id(request)
           }

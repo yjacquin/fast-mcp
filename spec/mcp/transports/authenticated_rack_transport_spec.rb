@@ -71,7 +71,7 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
 
         # The RackTransport class will call server.handle_json_request with the message
         json_response = '{"jsonrpc":"2.0","result":{},"id":1}'
-        expect(server).to receive(:handle_json_request).with(json_message).and_return(json_response)
+        expect(server).to receive(:handle_json_request).with(json_message, {}).and_return(json_response)
 
         # For MCP paths, we don't expect app.call to be invoked
         expect(app).not_to receive(:call)
@@ -324,7 +324,7 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', {})
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -396,6 +396,126 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
 
         response = JSON.parse(result[2].first)
         expect(response['error']['message']).to include('Unauthorized')
+      end
+    end
+  end
+
+  describe 'Custom transport class example' do
+    # Example of a custom transport that extends AuthenticatedRackTransport
+    class CustomAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
+      def initialize(app, server, options = {})
+        super(app, server, options.merge(auth_enabled: true))
+        @required_role = options[:required_role]
+      end
+
+      private
+
+      def auth_check(token, request, env)
+        # Custom auth logic that checks both token and role
+        return unauthorized_response(request, 'Invalid token') unless valid_token?(token)
+        
+        # Simulate role check - in real implementation this would check against a user's roles
+        user_role = extract_role_from_token(token)
+        return unauthorized_response(request, 'Insufficient permissions') unless user_role == @required_role
+
+        # Store user info in env for context
+        env['mcp.user_role'] = user_role
+        env['mcp.user_id'] = extract_user_id_from_token(token)
+        nil
+      end
+
+      def valid_token?(token)
+        token == 'admin-token' || token == 'user-token'
+      end
+
+      def extract_context_from_env(env)
+        {
+          user_role: env['mcp.user_role'],
+          user_id: env['mcp.user_id']
+        }
+      end
+
+      # Mock methods for token parsing
+      def extract_role_from_token(token)
+        return 'admin' if token == 'admin-token'
+        return 'user' if token == 'user-token'
+        nil
+      end
+
+      def extract_user_id_from_token(token)
+        return '123' if token == 'admin-token'
+        return '456' if token == 'user-token'
+        nil
+      end
+    end
+
+    let(:custom_transport) do
+      CustomAuthTransport.new(
+        app,
+        server,
+        logger: logger,
+        auth_token: 'valid-token',
+        required_role: 'admin'
+      )
+    end
+
+    context 'with custom authorization' do
+      it 'allows requests with valid token and required role' do
+        json_message = '{"jsonrpc":"2.0","method":"test","id":1}'
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'CONTENT_TYPE' => 'application/json',
+          'REMOTE_ADDR' => '127.0.0.1',
+          'rack.input' => StringIO.new(json_message),
+          'HTTP_AUTHORIZATION' => 'Bearer admin-token'
+        }
+
+        expect(server).to receive(:transport=).with(custom_transport)
+        expect(server).to receive(:handle_json_request)
+          .with(json_message, { user_role: 'admin', user_id: '123' })
+          .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
+
+        result = custom_transport.call(env)
+        expect(result[0]).to eq(200)
+      end
+
+      it 'rejects requests with valid token but insufficient role' do
+        json_message = '{"jsonrpc":"2.0","method":"test","id":1}'
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'CONTENT_TYPE' => 'application/json',
+          'REMOTE_ADDR' => '127.0.0.1',
+          'rack.input' => StringIO.new(json_message),
+          'HTTP_AUTHORIZATION' => 'Bearer user-token'
+        }
+
+        expect(server).to receive(:transport=).with(custom_transport)
+        result = custom_transport.call(env)
+        expect(result[0]).to eq(401)
+        
+        response = JSON.parse(result[2].first)
+        expect(response['error']['message']).to include('Insufficient permissions')
+      end
+
+      it 'rejects requests with invalid token' do
+        json_message = '{"jsonrpc":"2.0","method":"test","id":1}'
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'CONTENT_TYPE' => 'application/json',
+          'REMOTE_ADDR' => '127.0.0.1',
+          'rack.input' => StringIO.new(json_message),
+          'HTTP_AUTHORIZATION' => 'Bearer invalid-token'
+        }
+
+        expect(server).to receive(:transport=).with(custom_transport)
+        result = custom_transport.call(env)
+        expect(result[0]).to eq(401)
+        
+        response = JSON.parse(result[2].first)
+        expect(response['error']['message']).to include('Invalid token')
       end
     end
   end

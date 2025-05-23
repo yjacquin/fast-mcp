@@ -203,7 +203,7 @@ module FastMcp
         when "/#{@sse_route}"
           handle_sse_request(request, env)
         when "/#{@messages_route}"
-          handle_message_request(request)
+          handle_message_request(request, env)
         else
           @logger.error('Received unknown request')
           # Return 404 for unknown MCP endpoints
@@ -485,12 +485,12 @@ module FastMcp
       end
 
       # Handle message POST request
-      def handle_message_request(request)
+      def handle_message_request(request, env)
         @logger.debug('Received message request')
         return method_not_allowed_response unless request.post?
 
         begin
-          process_json_request(request)
+          process_json_request(request, env)
         rescue JSON::ParserError => e
           handle_parse_error(e)
         rescue StandardError => e
@@ -499,14 +499,22 @@ module FastMcp
       end
 
       # Process a JSON-RPC request
-      def process_json_request(request)
+      def process_json_request(request, env)
         # Parse the request body
         body = request.body.read
 
-        response = process_message(body) || []
+        # Extract context from env
+        context = extract_context_from_env(env)
+
+        response = process_message(body, context) || []
         @logger.info("Response: #{response}")
 
         [200, { 'Content-Type' => 'application/json' }, response]
+      end
+
+      # Extract context from rack env. Override in subclass to add custom context.
+      def extract_context_from_env(env)
+        {}
       end
 
       # Return a method not allowed error response
