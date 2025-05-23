@@ -176,6 +176,78 @@ class RepeatTool < FastMcp::Tool
 end
 ```
 
+### Authentication and Authorization
+
+When using the Rack transports, you can access HTTP headers from the request with the `headers` method in tools:
+
+```ruby
+class ExampleTool < FastMcp::Tool
+  description "Is an example tool"
+
+  def call
+    "Host header is #{headers["HOST"]}"
+  end
+end
+```
+
+This can be used to identify a user by authentication details passed in headers:
+```ruby
+class CurrentUserTool < FastMcp::Tool
+  description "Gets the current user details"
+
+  def call
+    JSON.generate current_user
+  end
+
+  private
+
+  def current_user
+    token = headers["AUTHORIZATION"]
+
+    # Validate token
+    # ...
+
+    user
+  end
+end
+```
+
+This can be combined with the `authorize` method to ensure a user is authorized before allowing them to use the tool:
+
+```ruby
+class PerformAuthenticatedActionTool < FastMcp::Tool
+  description "Perform an action which requires an authenticated user"
+
+  arguments do
+    required(:item_id).filled(:integer).description('ID of item to affect')
+  end
+
+  authorize do |item_id:|
+    current_user&.is_admin? &&
+      get_item(item_id).user_id == current_user.id
+  end
+
+  def call(item_id:)
+    # Perform action
+    # ...
+  end
+
+  private
+
+  def current_user
+    # Get current user
+    # ...
+  end
+
+  def get_item(id)
+    # Get item
+    # ...
+  end
+end
+```
+
+You can also implement this in a parent class and the authorization will be inherited by all children. Children may also define their own authorization - in this case, _all_ authorization checks must pass for a caller to be allowed access to the tool.
+
 ## Calling Tools From Another Tool
 Tools can call other tools:
 

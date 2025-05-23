@@ -114,6 +114,10 @@ module FastMcp
         @description = description
       end
 
+      def authorize(&block)
+        @authorization_block = block
+      end
+
       def call(**args)
         raise NotImplementedError, 'Subclasses must implement the call method'
       end
@@ -129,6 +133,26 @@ module FastMcp
     def initialize(headers: {})
       @_meta = {}
       @headers = headers
+    end
+
+    def authorized?(**args)
+      auth_checks = [self.class, *self.class.ancestors].filter_map do |ancestor|
+        ancestor.ancestors.include?(FastMcp::Tool) &&
+          ancestor.instance_variable_get(:@authorization_block)
+      end
+
+      return true if auth_checks.empty?
+
+      arg_validation = self.class.input_schema.call(args)
+      raise InvalidArgumentsError, arg_validation.errors.to_h.to_json if arg_validation.errors.any?
+
+      auth_checks.all? do |auth_check|
+        if auth_check.parameters.empty?
+          instance_exec(&auth_check)
+        else
+          instance_exec(**args, &auth_check)
+        end
+      end
     end
 
     attr_accessor :_meta
