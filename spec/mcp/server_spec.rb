@@ -191,6 +191,31 @@ RSpec.describe FastMcp::Server do
         )
         server.handle_request(request)
       end
+      
+      it 'calls a tool with context' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: {
+            name: 'test-tool',
+            arguments: {
+              name: 'username'
+            }
+          },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result).with(
+          { content: [{ text: 'Hello, username!', type: 'text' }], isError: false },
+          1,
+          metadata: {}
+        )
+
+        context = { user_role: 'admin', user_id: '123' }
+        expect_any_instance_of(test_tool_class).to receive(:context=).with(context)
+        
+        server.handle_request(request, context)
+      end
 
       it "returns an error if the tool doesn't exist" do
         request = {

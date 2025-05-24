@@ -126,6 +126,7 @@ module FastMcp
   # @option options [String] :sse_route The route for the SSE endpoint
   # @option options [Logger] :logger The logger to use
   # @option options [Boolean] :authenticate Whether to use authentication
+  # @option options [Class] :authentication_klass The authentication class to use
   # @option options [String] :auth_token The authentication token
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
@@ -154,7 +155,7 @@ module FastMcp
 
     # Choose the right middleware based on authentication
     self.server.transport_klass = if authenticate
-                                    FastMcp::Transports::AuthenticatedRackTransport
+                                    authentication_klass
                                   else
                                     FastMcp::Transports::RackTransport
                                   end

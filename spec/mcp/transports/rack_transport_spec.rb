@@ -186,7 +186,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', {})
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -280,7 +280,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(server).to receive(:transport=).with(transport)
         # Mock the behavior for a valid Origin
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', {})
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -322,7 +322,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', {})
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -340,7 +340,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', {})
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -453,7 +453,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         # Mock the server's handle_json_request method
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', {})
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -567,6 +567,54 @@ RSpec.describe FastMcp::Transports::RackTransport do
     it 'gracefully handles invalid URLs' do
       expect(transport.send(:extract_hostname, 'not a url')).to eq('not a url')
       expect(transport.send(:extract_hostname, 'http://')).to be_nil
+    end
+  end
+
+  describe '#extract_context_from_env (private)' do
+    let(:transport) { described_class.new(app, server, logger: logger) }
+
+    it 'is empty by default, should be overridden by subclasses' do
+      env = { 'current_user' => { id: 1, name: 'test' } }
+      context = transport.send(:extract_context_from_env, env)
+      expect(context).to eq({ })
+    end
+
+    context 'with a subclass implementation' do
+      # Define a test subclass that injects context
+      class TestRackTransport < FastMcp::Transports::RackTransport
+        def extract_context_from_env(env)
+          context = {}
+          context[:current_user] = env['current_user'] if env['current_user']
+          context[:request_id] = env['HTTP_X_REQUEST_ID'] if env['HTTP_X_REQUEST_ID']
+          context
+        end
+      end
+
+      let(:test_transport) { TestRackTransport.new(app, server, logger: logger) }
+
+      it 'allows subclasses to inject custom context' do
+        env = {
+          'current_user' => { id: 1, name: 'test' },
+          'HTTP_X_REQUEST_ID' => 'abc-123'
+        }
+        
+        context = test_transport.send(:extract_context_from_env, env)
+        
+        expect(context).to eq({
+          current_user: { id: 1, name: 'test' },
+          request_id: 'abc-123'
+        })
+      end
+
+      it 'handles missing context values gracefully' do
+        env = { 'HTTP_X_REQUEST_ID' => 'abc-123' }
+        
+        context = test_transport.send(:extract_context_from_env, env)
+        
+        expect(context).to eq({
+          request_id: 'abc-123'
+        })
+      end
     end
   end
 end
