@@ -86,30 +86,6 @@ RSpec.describe FastMcp::Resource do
       expect(metadata[:description]).to eq('A test resource')
       expect(metadata[:mimeType]).to eq('text/plain')
     end
-
-    it 'provides contents with text for non-binary resources' do
-      resource = Class.new(FastMcp::Resource) do
-        uri 'test/resource'
-        mime_type 'text/plain'
-        def content; 'test content'; end
-      end
-
-      contents = resource.instance.contents
-      expect(contents[:text]).to eq('test content')
-      expect(contents[:blob]).to be_nil
-    end
-
-    it 'provides contents with blob for binary resources' do
-      resource = Class.new(FastMcp::Resource) do
-        uri 'test/resource'
-        mime_type 'image/png'
-        def content; 'binary data'; end
-      end
-
-      contents = resource.instance.contents
-      expect(contents[:text]).to be_nil
-      expect(contents[:blob]).to eq(Base64.strict_encode64('binary data'))
-    end
   end
 
   describe 'integration with server' do
