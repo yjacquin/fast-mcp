@@ -28,6 +28,7 @@ module FastMcp
       @version = version
       @tools = {}
       @resources = {}
+      @templated_resources = []
       @resource_subscriptions = {}
       @logger = logger
       @logger.level = Logger::INFO
@@ -66,8 +67,15 @@ module FastMcp
 
     # Register a resource with the server
     def register_resource(resource)
-      @resources[resource.uri] = resource
-      @logger.debug("Registered resource: #{resource.name} (#{resource.uri})")
+      # Store templated resources separately for URI matching
+      if resource.templated?
+        @templated_resources ||= []
+        @templated_resources << resource
+      else
+        @resources[resource.uri] = resource
+      end
+
+      @logger.debug("Registered resource: #{resource.resource_name} (#{resource.uri})")
       resource.server = self
       # Notify subscribers about the list change
       notify_resource_list_changed if @transport
@@ -164,6 +172,8 @@ module FastMcp
         handle_tools_call(params, headers, id)
       when 'resources/list'
         handle_resources_list(id)
+      when 'resources/templates/list'
+        handle_resources_templates_list(id)
       when 'resources/read'
         handle_resources_read(params, id)
       when 'resources/subscribe'
@@ -191,6 +201,30 @@ module FastMcp
     # Read a resource directly
     def read_resource(uri)
       resource = @resources[uri]
+
+      if !resource && @templated_resources && !@templated_resources.empty?
+        @logger.debug('Resource not found in direct mapping, checking templated resources')
+        @templated_resources.each do |template_resource|
+          next unless template_resource.uri_pattern
+
+          @logger.debug("Testing pattern: #{template_resource.uri_pattern.inspect} against URI: #{uri}")
+
+          next unless match = template_resource.uri_pattern.match(uri)
+
+          @logger.debug("Pattern matched: #{match.inspect}")
+
+          params = {}
+          template_resource.template_params.each_with_index do |param, i|
+            params[param.to_sym] = match[i + 1]
+          end
+          @logger.debug("Extracted params: #{params.inspect}")
+
+          resource = template_resource.with_params(params)
+          @logger.debug("Created resource with params: #{resource.inspect}")
+          break
+        end
+      end
+
       raise "Resource not found: #{uri}" unless resource
 
       resource
@@ -249,24 +283,33 @@ module FastMcp
 
       return send_error(-32_602, 'Invalid params: missing resource URI', id) unless uri
 
-      resource = @resources[uri]
-      return send_error(-32_602, "Resource not found: #{uri}", id) unless resource
+      @logger.debug("Looking for resource with URI: #{uri}")
 
-      base_content = { uri: resource.uri }
-      base_content[:mimeType] = resource.mime_type if resource.mime_type
-      resource_instance = resource.instance
-      # Format the response according to the MCP specification
-      result = if resource_instance.binary?
-                 {
-                   contents: [base_content.merge(blob: Base64.strict_encode64(resource_instance.content))]
-                 }
-               else
-                 {
-                   contents: [base_content.merge(text: resource_instance.content)]
-                 }
-               end
+      begin
+        resource = read_resource(uri)
+        @logger.debug("Found resource: #{resource.resource_name}, templated: #{resource.templated?}")
 
-      send_result(result, id)
+        base_content = { uri: uri }
+        base_content[:mimeType] = resource.mime_type if resource.mime_type
+        resource_instance = resource.instance
+        @logger.debug("Resource instance params: #{resource_instance.params.inspect}")
+
+        result = if resource_instance.binary?
+                   {
+                     contents: [base_content.merge(blob: Base64.strict_encode64(resource_instance.content))]
+                   }
+                 else
+                   {
+                     contents: [base_content.merge(text: resource_instance.content)]
+                   }
+                 end
+
+        send_result(result, id)
+      rescue StandardError => e
+        @logger.error("Error reading resource: #{e.message}")
+        @logger.error(e.backtrace.join("\n"))
+        send_error(-32_602, "Resource not found: #{uri}", id)
+      end
     end
 
     def handle_initialized_notification
@@ -355,6 +398,14 @@ module FastMcp
       resources_list = @resources.values.map(&:metadata)
 
       send_result({ resources: resources_list }, id)
+    end
+
+    # Handle resources/templates/list request
+    def handle_resources_templates_list(id)
+      # Collect templated resources
+      templated_resources_list = (@templated_resources || []).map(&:metadata)
+
+      send_result({ resourceTemplates: templated_resources_list }, id)
     end
 
     # Handle resources/subscribe request

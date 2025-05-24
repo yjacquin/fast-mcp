@@ -49,12 +49,35 @@ RSpec.describe 'MCP Server Integration' do
     end
   end
 
+  # Define a test templated resource class
+  let(:templated_resource_class) do
+    Class.new(FastMcp::Resource) do
+      uri 'test/counter/{id}'
+      resource_name 'Test Counter with ID'
+      description 'A test counter resource with ID parameter'
+      mime_type 'application/json'
+
+      def initialize
+        @count = 0
+      end
+
+      def content
+        JSON.generate({ count: @count, id: params[:id] })
+      end
+
+      def update_count(new_count)
+        @count = new_count
+      end
+    end
+  end
+
   before do
     # Register the test tool
     server.register_tool(greet_tool)
 
-    # Register the test resource
+    # Register the test resources
     server.register_resource(counter_resource_class)
+    server.register_resource(templated_resource_class)
 
     # Set the transport
     server.instance_variable_set(:@transport, transport)
@@ -130,8 +153,25 @@ RSpec.describe 'MCP Server Integration' do
       io_as_json = JSON.parse(io_response.read)
       expect(io_as_json['jsonrpc']).to eq('2.0')
       expect(io_as_json['result']['resources']).to be_an(Array)
-      expect(io_as_json['result']['resources'].length).to eq(1)
-      expect(io_as_json['result']['resources'][0]['uri']).to eq('test/counter')
+      expect(io_as_json['result']['resources'].length).to eq(1)  # Only non-templated resources
+
+      # Check for regular resource
+      expect(io_as_json['result']['resources'].map { |r| r['uri'] }).to include('test/counter')
+      expect(io_as_json['id']).to eq(1)
+    end
+
+    it 'lists resource templates' do
+      request = { jsonrpc: '2.0', method: 'resources/templates/list', id: 1 }
+      io_response = server.handle_request(JSON.generate(request))
+
+      io_response.rewind
+      io_as_json = JSON.parse(io_response.read)
+      expect(io_as_json['jsonrpc']).to eq('2.0')
+      expect(io_as_json['result']['resourceTemplates']).to be_an(Array)
+      expect(io_as_json['result']['resourceTemplates'].length).to eq(1)
+
+      # Check for templated resource
+      expect(io_as_json['result']['resourceTemplates'].first['uriTemplate']).to eq('test/counter/{id}')
       expect(io_as_json['id']).to eq(1)
     end
 
@@ -199,6 +239,64 @@ RSpec.describe 'MCP Server Integration' do
       expect(io_as_json['jsonrpc']).to eq('2.0')
       expect(io_as_json['error']['code']).to eq(-32_600)
       expect(io_as_json['error']['message']).to eq('Invalid Request')
+      expect(io_as_json['id']).to eq(1)
+    end
+  end
+
+  describe 'templated resources' do
+    let(:debug_logger) { Logger.new($stderr) }
+
+    it 'registers and lists templated resources' do
+      # Debug output of available resources
+      resources = server.instance_variable_get(:@resources)
+      templated_resources = server.instance_variable_get(:@templated_resources)
+
+      expect(resources.keys).to include('test/counter')
+      expect(templated_resources).to be_an(Array)
+      expect(templated_resources.length).to eq(1)
+      expect(templated_resources.first.uri).to eq('test/counter/{id}')
+      expect(templated_resources.first.template_params).to eq(['id'])
+      expect(templated_resources.first.uri_pattern).to be_a(Regexp)
+    end
+
+    it 'reads templated resources with parameters' do
+      # Enable more detailed logging for this test
+      logger = Logger.new($stderr)
+      original_logger = server.logger
+      server.logger = logger
+
+      request = { jsonrpc: '2.0', method: 'resources/read', params: { uri: 'test/counter/123' }, id: 1 }
+
+      # Print request JSON for debugging
+      logger.debug("Request JSON: #{JSON.generate(request)}")
+
+      # Print template resource pattern check
+      pattern = server.instance_variable_get(:@templated_resources).first.uri_pattern
+      test_uri = 'test/counter/123'
+      match_result = pattern.match(test_uri)
+      logger.debug("Pattern: #{pattern.inspect}, URI: #{test_uri}, Match: #{match_result.inspect}")
+
+      # Handle the request
+      io_response = server.handle_request(JSON.generate(request))
+
+      # Reset logger
+      server.logger = original_logger
+
+      # Continue with the test
+      io_response.rewind
+      io_as_json = JSON.parse(io_response.read)
+
+      expect(io_as_json['jsonrpc']).to eq('2.0')
+      expect(io_as_json).to have_key('result')
+      expect(io_as_json['result']).to have_key('contents')
+      expect(io_as_json['result']['contents']).to be_an(Array)
+      expect(io_as_json['result']['contents'].length).to eq(1)
+      expect(io_as_json['result']['contents'][0]['uri']).to eq('test/counter/123')
+      expect(io_as_json['result']['contents'][0]['mimeType']).to eq('application/json')
+
+      content = JSON.parse(io_as_json['result']['contents'][0]['text'])
+      expect(content['count']).to eq(0)
+      expect(content['id']).to eq('123')
       expect(io_as_json['id']).to eq(1)
     end
   end
