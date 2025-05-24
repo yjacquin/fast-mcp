@@ -86,7 +86,10 @@ module FastMcp
       # Send a message to a specific SSE client
       def send_message_to(client_id, message)
         client = @sse_clients[client_id]
-        return unless client
+        if client.nil?
+          @logger.info("Client #{client_id} not found, skipping message")
+          return
+        end
 
         stream = client[:stream]
         return if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
@@ -99,12 +102,30 @@ module FastMcp
 
       # Register a new SSE client
       def register_sse_client(client_id, stream)
+        existing_client = @sse_clients[client_id]
+
+        if existing_client
+          @logger.info("Client #{client_id} already registered")
+
+          if existing_client[:stream] != stream
+            @logger.info("New stream detected for client #{client_id}")
+            unregister_sse_client(client_id)
+          end
+        end
+
         @logger.info("Registering SSE client: #{client_id}")
         @sse_clients[client_id] = { stream: stream, connected_at: Time.now }
       end
 
       # Unregister an SSE client
       def unregister_sse_client(client_id)
+        existing_client = @sse_clients[client_id]
+        return unless existing_client
+
+        if existing_client[:stream].respond_to?(:close) && !existing_client[:stream].closed?
+          existing_client[:stream].close
+        end
+
         @logger.info("Unregistering SSE client: #{client_id}")
         @sse_clients.delete(client_id)
       end
@@ -307,11 +328,9 @@ module FastMcp
         @logger.info("Client connection from: #{user_agent} (#{browser_type})")
 
         # Handle reconnection
-        if client_id && @sse_clients.key?(client_id)
-          handle_client_reconnection(client_id, browser_type)
-        else
+        unless client_id
           # Generate a new client ID if none was provided
-          client_id ||= SecureRandom.uuid
+          client_id = SecureRandom.uuid
           @logger.info("New client connection: #{client_id} (#{browser_type})")
         end
 
