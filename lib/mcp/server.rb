@@ -133,7 +133,7 @@ module FastMcp
     end
 
     # Handle incoming JSON-RPC request
-    def handle_request(json_str) # rubocop:disable Metrics/MethodLength
+    def handle_request(json_str, headers: {}) # rubocop:disable Metrics/MethodLength
       begin
         request = JSON.parse(json_str)
       rescue JSON::ParserError, TypeError
@@ -161,7 +161,7 @@ module FastMcp
       when 'tools/list'
         handle_tools_list(id)
       when 'tools/call'
-        handle_tools_call(params, id)
+        handle_tools_call(params, headers, id)
       when 'resources/list'
         handle_resources_list(id)
       when 'resources/read'
@@ -179,12 +179,12 @@ module FastMcp
     end
 
     # Handle a JSON-RPC request and return the response as a JSON string
-    def handle_json_request(request)
+    def handle_json_request(request, headers: {})
       # Process the request
       if request.is_a?(String)
-        handle_request(request)
+        handle_request(request, headers: headers)
       else
-        handle_request(JSON.generate(request))
+        handle_request(JSON.generate(request), headers: headers)
       end
     end
 
@@ -292,7 +292,7 @@ module FastMcp
     end
 
     # Handle tools/call request
-    def handle_tools_call(params, id)
+    def handle_tools_call(params, headers, id)
       tool_name = params['name']
       arguments = params['arguments'] || {}
 
@@ -304,7 +304,7 @@ module FastMcp
       begin
         # Convert string keys to symbols for Ruby
         symbolized_args = symbolize_keys(arguments)
-        result, metadata = tool.new.call_with_schema_validation!(**symbolized_args)
+        result, metadata = tool.new(headers: headers).call_with_schema_validation!(**symbolized_args)
 
         # Format and send the result
         send_formatted_result(result, id, metadata)

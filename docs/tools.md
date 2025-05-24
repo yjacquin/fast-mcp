@@ -17,6 +17,7 @@ Tools are a core concept in the Model Context Protocol (MCP). They allow you to 
   - [Tool Categories](#tool-categories)
   - [Tool Metadata](#tool-metadata)
   - [Tool Permissions](#tool-permissions)
+  - [Request Headers](#request-headers)
 - [Best Practices](#best-practices)
 - [Examples](#examples)
 
@@ -357,6 +358,18 @@ class AdminActionTool < FastMcp::Tool
 
     # Perform the action
     "Admin action '#{action}' performed successfully"
+  end
+end
+```
+
+### Request Headers
+
+When using the Rack transport, HTTP headers from tool call requests are exposed to tools via the `headers` method:
+
+```ruby
+class MyTool < FastMcp::Tool
+  def call
+    "Host header is #{headers["HOST"]}"
   end
 end
 ```

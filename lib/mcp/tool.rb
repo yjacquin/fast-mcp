@@ -126,11 +126,13 @@ module FastMcp
       end
     end
 
-    def initialize
+    def initialize(headers: {})
       @_meta = {}
+      @headers = headers
     end
 
     attr_accessor :_meta
+    attr_reader :headers
 
     def notify_resource_updated(uri)
       self.class.server.notify_resource_updated(uri)
