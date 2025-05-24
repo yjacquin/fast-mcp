@@ -29,6 +29,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Runtime dependencies
+  spec.add_dependency 'addressable', '~> 2.8'
   spec.add_dependency 'base64'
   spec.add_dependency 'dry-schema', '~> 1.14'
   spec.add_dependency 'json', '~> 2.0'

@@ -50,17 +50,23 @@ RSpec.describe FastMcp::Resource do
 
   describe 'instance methods' do
     it 'requires implementing content method in subclasses' do
-      resource_class = Class.new(FastMcp::Resource)
+      resource_class = Class.new(FastMcp::Resource) do 
+        uri 'test/text'
+        mime_type 'text/plain'
+      end
+
       expect { resource_class.instance.content }.to raise_error(NotImplementedError)
     end
 
     it 'determines if content is binary based on mime_type' do
       text_resource = Class.new(FastMcp::Resource) do
+        uri 'test/text'
         mime_type 'text/plain'
         def content; 'text'; end
       end
 
       binary_resource = Class.new(FastMcp::Resource) do
+        uri 'test/binary'
         mime_type 'image/png'
         def content; 'binary data'; end
       end
@@ -119,11 +125,11 @@ RSpec.describe FastMcp::Resource do
     end
 
     it 'registers a resource instance' do
-      expect(server.resources).not_to have_key('file://counter.txt')
+      expect(server.resources.map(&:uri)).not_to include('file://counter.txt')
       server.register_resource(counter_resource_class)
-      expect(server.resources).to have_key('file://counter.txt')
+      expect(server.resources.map(&:uri)).to include('file://counter.txt')
       
-      resource = server.resources['file://counter.txt']
+      resource = server.resources.find { |r| r.uri == 'file://counter.txt' }
       expect(resource.ancestors).to include(FastMcp::Resource)
       expect(resource.uri).to eq('file://counter.txt')
       expect(resource.resource_name).to eq('Counter')
@@ -136,7 +142,7 @@ RSpec.describe FastMcp::Resource do
       expect(server.resources).to be_empty
       server.register_resources(counter_resource_class, users_resource_class)
       
-      expect(server.resources.keys).to contain_exactly('file://counter.txt', 'file://users.json')
+      expect(server.resources.map(&:uri)).to contain_exactly('file://counter.txt', 'file://users.json')
     end
 
     it 'allows reading registered resources through the server' do

@@ -249,14 +249,9 @@ RSpec.describe 'MCP Server Integration' do
     it 'registers and lists templated resources' do
       # Debug output of available resources
       resources = server.instance_variable_get(:@resources)
-      templated_resources = server.instance_variable_get(:@templated_resources)
 
-      expect(resources.keys).to include('test/counter')
-      expect(templated_resources).to be_an(Array)
-      expect(templated_resources.length).to eq(1)
-      expect(templated_resources.first.uri).to eq('test/counter/{id}')
-      expect(templated_resources.first.template_params).to eq(['id'])
-      expect(templated_resources.first.uri_pattern).to be_a(Regexp)
+      expect(resources.map(&:uri)).to include('test/counter')
+      expect(resources.map(&:uri)).to include('test/counter/{id}')
     end
 
     it 'reads templated resources with parameters' do
@@ -271,7 +266,7 @@ RSpec.describe 'MCP Server Integration' do
       logger.debug("Request JSON: #{JSON.generate(request)}")
 
       # Print template resource pattern check
-      pattern = server.instance_variable_get(:@templated_resources).first.uri_pattern
+      pattern = templated_resource_class.addressable_template
       test_uri = 'test/counter/123'
       match_result = pattern.match(test_uri)
       logger.debug("Pattern: #{pattern.inspect}, URI: #{test_uri}, Match: #{match_result.inspect}")
