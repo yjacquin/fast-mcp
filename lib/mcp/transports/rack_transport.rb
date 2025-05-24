@@ -72,19 +72,10 @@ module FastMcp
 
         clients_to_remove = []
 
-        @sse_clients.each do |client_id, client|
-          stream = client[:stream]
-          next if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
-
-          stream.write("data: #{json_message}\n\n")
-          stream.flush if stream.respond_to?(:flush)
-        rescue Errno::EPIPE, IOError => e
-          # Broken pipe or IO error - client disconnected
-          @logger.info("Client #{client_id} disconnected: #{e.message}")
-          clients_to_remove << client_id
+        @sse_clients.each_key do |client_id|
+          send_message_to(client_id, message)
         rescue StandardError => e
           @logger.error("Error sending message to client #{client_id}: #{e.message}")
-          # Remove the client if we can't send to it
           clients_to_remove << client_id
         end
 
@@ -92,14 +83,49 @@ module FastMcp
         clients_to_remove.each { |client_id| unregister_sse_client(client_id) }
       end
 
+      # Send a message to a specific SSE client
+      def send_message_to(client_id, message)
+        client = @sse_clients[client_id]
+        if client.nil?
+          @logger.info("Client #{client_id} not found, skipping message")
+          return
+        end
+
+        stream = client[:stream]
+        return if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
+
+        @logger.info("Client: #{client_id}, SSE Message: #{message}")
+        stream.write("data: #{JSON.generate(message)}\n\n")
+        stream.flush if stream.respond_to?(:flush)
+        nil
+      end
+
       # Register a new SSE client
       def register_sse_client(client_id, stream)
+        existing_client = @sse_clients[client_id]
+
+        if existing_client
+          @logger.info("Client #{client_id} already registered")
+
+          if existing_client[:stream] != stream
+            @logger.info("New stream detected for client #{client_id}")
+            unregister_sse_client(client_id)
+          end
+        end
+
         @logger.info("Registering SSE client: #{client_id}")
         @sse_clients[client_id] = { stream: stream, connected_at: Time.now }
       end
 
       # Unregister an SSE client
       def unregister_sse_client(client_id)
+        existing_client = @sse_clients[client_id]
+        return unless existing_client
+
+        if existing_client[:stream].respond_to?(:close) && !existing_client[:stream].closed?
+          existing_client[:stream].close
+        end
+
         @logger.info("Unregistering SSE client: #{client_id}")
         @sse_clients.delete(client_id)
       end
@@ -302,11 +328,9 @@ module FastMcp
         @logger.info("Client connection from: #{user_agent} (#{browser_type})")
 
         # Handle reconnection
-        if client_id && @sse_clients.key?(client_id)
-          handle_client_reconnection(client_id, browser_type)
-        else
+        unless client_id
           # Generate a new client ID if none was provided
-          client_id ||= SecureRandom.uuid
+          client_id = SecureRandom.uuid
           @logger.info("New client connection: #{client_id} (#{browser_type})")
         end
 
@@ -384,7 +408,10 @@ module FastMcp
 
         # Send endpoint information as the first message with query parameters
         endpoint = "#{@path_prefix}/#{@messages_route}"
-        endpoint += "?#{query_string}" if query_string
+        params = []
+        params << query_string if query_string && !query_string.empty?
+        params << "client_id=#{client_id}"
+        endpoint += "?#{params.join('&')}" unless params.empty?
         @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
         io.write("event: endpoint\ndata: #{endpoint}\n\n")
 
@@ -503,7 +530,8 @@ module FastMcp
         # Parse the request body
         body = request.body.read
 
-        response = process_message(body) || []
+        context = { client_id: extract_client_id(request.env) }
+        response = process_message(body, context) || []
         @logger.info("Response: #{response}")
 
         [200, { 'Content-Type' => 'application/json' }, response]
