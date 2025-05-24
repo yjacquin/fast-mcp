@@ -30,7 +30,6 @@ module FastMcp
       @resources = {}
       @resource_subscriptions = {}
       @logger = logger
-      @logger.level = Logger::INFO
       @request_id = 0
       @transport_klass = nil
       @transport = nil
@@ -142,10 +141,13 @@ module FastMcp
 
       @logger.debug("Received request: #{request.inspect}")
 
+      return send_error(-32_600, 'Invalid Request', nil) unless request['jsonrpc'] == '2.0'
+
+      # This is a ping response, so we don't need to process it
+      return if request['result'] && request['id'].match?(/^fast-mcp-ping-\d+$/)
+
       # Check if it's a valid JSON-RPC 2.0 request
-      unless request['jsonrpc'] == '2.0' && request['method']
-        return send_error(-32_600, 'Invalid Request', request['id'])
-      end
+      return send_error(-32_600, 'Invalid Request', request['id']) unless request['method']
 
       method = request['method']
       params = request['params'] || {}
