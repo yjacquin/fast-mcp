@@ -30,7 +30,7 @@ end
 
 # Define a users resource
 class UsersResource < FastMcp::Resource
-  uri 'users'
+  uri 'app:///users'
   resource_name 'Users'
   description 'List of users'
   mime_type 'application/json'
@@ -48,6 +48,27 @@ class UsersResource < FastMcp::Resource
 
   def content
     JSON.generate(@users)
+  end
+end
+
+class UserResource < FastMcp::Resource
+  uri 'app:///users/{id}'
+  resource_name 'User'
+  description 'A user'
+  mime_type 'application/json'
+
+  def initialize
+    @users = UsersResource.instance.users
+
+    super
+  end
+
+  def content
+    id = params[:id]
+
+    user = @users.find { |u| u[:id] == id.to_i }
+
+    JSON.generate(user)
   end
 end
 
@@ -77,7 +98,7 @@ class WeatherResource < FastMcp::Resource
   end
 end
 
-server.register_resources(CounterResource, UsersResource, WeatherResource)
+server.register_resources(CounterResource, UsersResource, UserResource, WeatherResource)
 
 # Class-based tool for incrementing the counter
 class IncrementCounterTool < FastMcp::Tool

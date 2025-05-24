@@ -4,6 +4,7 @@ require 'json'
 require 'base64'
 require 'mime/types'
 require 'singleton'
+require 'addressable/template'
 
 module FastMcp
   # Resource class for MCP Resources feature
@@ -17,59 +18,82 @@ module FastMcp
       # @param value [String, nil] The URI for this resource
       # @return [String] The URI for this resource
       def uri(value = nil)
-        if value
-          @uri = value
-          # Check if URI contains template parameters
-          if value.include?('{') && value.include?('}')
-            @is_template = true
-            @template_params = value.scan(/\{([^\}]+)\}/).flatten
+        @uri = value if value
 
-            # Generate a regex pattern for matching this URI
-            escaped_uri = Regexp.escape(value)
-
-            @template_params.each do |param|
-              escaped_param = Regexp.escape("{#{param}}")
-              escaped_uri = escaped_uri.sub(escaped_param, '([^/]+)')
-            end
-
-            @uri_pattern = Regexp.new("^#{escaped_uri}$")
-          else
-            @is_template = false
-            @template_params = nil
-            @uri_pattern = nil
-          end
-        end
         @uri || (superclass.respond_to?(:uri) ? superclass.uri : nil)
+      end
+
+      # Variabilize the URI with the given params
+      # @param params [Hash] The parameters to variabilize the URI with
+      # @return [String] The variabilized URI
+      def variabilized_uri(params = {})
+        addressable_template.partial_expand(params).pattern
+      end
+
+      # Get the Addressable::Template for this resource
+      # @return [Addressable::Template] The Addressable::Template for this resource
+      def addressable_template
+        @addressable_template ||= Addressable::Template.new(uri)
+      end
+
+      # Get the template variables for this resource
+      # @return [Array] The template variables for this resource
+      def template_variables
+        addressable_template.variables
       end
 
       # Check if this resource has a templated URI
       # @return [Boolean] true if the URI contains template parameters
       def templated?
-        @is_template || false
+        template_variables.any?
       end
 
-      # Get the regex pattern for matching this URI
-      # @return [Regexp, nil] The pattern for matching this URI
-      def uri_pattern
-        @uri_pattern || (superclass.respond_to?(:uri_pattern) && superclass.templated? ? superclass.uri_pattern : nil)
+      # Check if this resource has a non-templated URI
+      # @return [Boolean] true if the URI does not contain template parameters
+      def non_templated?
+        !templated?
+      end
+
+      # Match the given URI against the resource's addressable template
+      # @param uri [String] The URI to match
+      # @return [Addressable::Template::MatchData, nil] The match data if the URI matches, nil otherwise
+      def match(uri)
+        addressable_template.match(uri)
+      end
+
+      # Initialize a new instance from the given URI
+      # @param uri [String] The URI to initialize from
+      # @return [Resource] A new resource instance
+      def initialize_from_uri(uri)
+        new(params_from_uri(uri))
+      end
+
+      # Get the parameters from the given URI
+      # @param uri [String] The URI to get the parameters from
+      # @return [Hash] The parameters from the URI
+      def params_from_uri(uri)
+        match(uri).mapping.transform_keys(&:to_sym)
       end
 
       # Create a new instance with the given params
       # @param params [Hash] The parameters for this resource instance
       # @return [Resource] A new resource instance
-      def with_params(params)
-        resource_class = Class.new(self)
-        resource_class.instance_variable_set(:@params, params)
+      def instance(uri = self.uri)
+        @instances ||= {}
+        @instances[uri] ||= begin
+          resource_class = Class.new(self)
+          resource_class.instance_variable_set(:@params, params_from_uri(uri))
 
-        resource_class.define_singleton_method(:instance) do
-          @instance ||= begin
-            instance = new
-            instance.instance_variable_set(:@params, params)
-            instance
+          resource_class.define_singleton_method(:instance) do
+            @instance ||= begin
+              instance = new
+              instance.instance_variable_set(:@params, params)
+              instance
+            end
           end
-        end
 
-        resource_class
+          resource_class.instance
+        end
       end
 
       # Get the parameters for this resource instance
@@ -165,7 +189,7 @@ module FastMcp
 
     # Initialize with instance variables
     def initialize
-      @params = {}
+      @params = params
     end
 
     # URI of the resource - delegates to class method

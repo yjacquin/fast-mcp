@@ -65,7 +65,7 @@ server.register_tool(CreateUserTool)
 
 # Share data resources with AI models by inheriting from FastMcp::Resource
 class PopularUsers < FastMcp::Resource
-  uri "file://popular_users.json"
+  uri "myapp:///users/popular"
   resource_name "Popular Users"
   mime_type "application/json"
 
@@ -74,14 +74,29 @@ class PopularUsers < FastMcp::Resource
   end
 end
 
+class User < FastMcp::Resource
+  uri "myapp:///users/{id}" # This is a resource template
+  resource_name "user"
+  mime_type "application/json"
+
+  def content
+    id = params[:id] # params are computed from the uri pattern
+
+    JSON.generate(User.find(id).as_json)
+  end
+end
+
 # Register the resource with the server
-server.register_resource(PopularUsers)
+server.register_resources(PopularUsers, User)
 
 # Accessing the resource through the server
 server.read_resource(PopularUsers.uri)
 
 # Notify the resource content has been updated to clients
-server.notify_resource_updated(PopularUsers.uri)
+server.notify_resource_updated(PopularUsers.variabilized_uri)
+
+# Notifiy the content of a resource from a template has been updated to clients
+server.notify_resource_updated(User.variabilized_uri(id: 1))
 ```
 
 ### 🚂 Fast Ruby on Rails implementation
@@ -300,7 +315,7 @@ Please refer to [configuring_mcp_clients](docs/configuring_mcp_clients.md)
 |---------|--------|
 | ✅ **JSON-RPC 2.0** | Full implementation for communication |
 | ✅ **Tool Definition & Calling** | Define and call tools with rich argument types |
-| ✅ **Resource Management** | Create, read, update, and subscribe to resources |
+| ✅ **Resource & Resource Templates Management** | Create, read, update, and subscribe to resources |
 | ✅ **Transport Options** | STDIO, HTTP, and SSE for flexible integration |
 | ✅ **Framework Integration** | Rails, Sinatra, Hanami, and any Rack-compatible framework |
 | ✅ **Authentication** | Secure your AI endpoints with token authentication |
