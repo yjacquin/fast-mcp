@@ -90,8 +90,8 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(client2_stream).to receive(:flush)
 
         transport.instance_variable_set(:@sse_clients, {
-                                          'client1' => { stream: client1_stream },
-                                          'client2' => { stream: client2_stream }
+                                          'client1' => { stream: client1_stream, mutex: Mutex.new },
+                                          'client2' => { stream: client2_stream, mutex: Mutex.new }
                                         })
 
         expect(logger).to receive(:debug).with(/Broadcasting message to 2 SSE clients/)
@@ -110,7 +110,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(client_stream).to receive(:flush)
 
         transport.instance_variable_set(:@sse_clients, {
-                                          'client' => { stream: client_stream }
+                                          'client' => { stream: client_stream, mutex: Mutex.new }
                                         })
 
         expect(logger).to receive(:debug).with(/Broadcasting message to 1 SSE clients/)
@@ -127,7 +127,33 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(client_stream).to receive(:closed?).and_return(false)
         expect(client_stream).to receive(:write).and_raise(StandardError.new('Test error'))
 
-        transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream } })
+        transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream, mutex: Mutex.new } })
+
+        expect(logger).to receive(:debug).with(/Broadcasting message to 1 SSE clients/)
+        expect(logger).to receive(:error).with(/Error sending message to client test-client/)
+        expect(logger).to receive(:info).with(/Unregistering SSE client: test-client/)
+
+        transport.send_message({ test: 'message' })
+
+        # The client should be removed after the error
+        expect(transport.sse_clients).to be_empty
+      end
+
+      it 'handles errors when mutex raises exception' do
+        # Add a mock SSE client that raises an error
+        client_stream = double('stream')
+        allow(client_stream).to receive(:respond_to?).and_return(false)
+        allow(client_stream).to receive(:respond_to?).with(:closed?).and_return(true)
+        allow(client_stream).to receive(:respond_to?).with(:flush).and_return(true)
+        allow(client_stream).to receive(:closed?).and_return(false)
+        allow(client_stream).to receive(:write)
+        allow(client_stream).to receive(:flush)
+
+        # Create a client with a mutex that will raise an error
+        client_mutex = double('mutex')
+        allow(client_mutex).to receive(:synchronize).and_raise(StandardError.new('Mutex error'))
+
+        transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream, mutex: client_mutex } })
 
         expect(logger).to receive(:debug).with(/Broadcasting message to 1 SSE clients/)
         expect(logger).to receive(:error).with(/Error sending message to client test-client/)
