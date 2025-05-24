@@ -1,6 +1,12 @@
 class User < ApplicationRecord
   after_commit :notify_mcp
 
+  expose_to_mcp :hello, description: "A test tool", read_only: true
+
+  def hello
+    "world"
+  end
+
   private
 
   def notify_mcp
