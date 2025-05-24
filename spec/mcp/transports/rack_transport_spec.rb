@@ -183,10 +183,11 @@ RSpec.describe FastMcp::Transports::RackTransport do
           host: 'localhost'
         )
         allow(Rack::Request).to receive(:new).with(env).and_return(request)
+        allow(request).to receive(:each_header).and_return(env.each)
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: { 'ORIGIN' => env['HTTP_ORIGIN'] })
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -280,7 +281,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(server).to receive(:transport=).with(transport)
         # Mock the behavior for a valid Origin
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: { 'ORIGIN' => env['HTTP_ORIGIN'] })
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -322,7 +323,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: { 'REFERER' => env['HTTP_REFERER'] })
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -340,7 +341,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: { 'HOST' => env['HTTP_HOST'] })
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -453,7 +454,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         # Mock the server's handle_json_request method
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: {})
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
