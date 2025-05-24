@@ -328,7 +328,13 @@ module FastMcp
       if result.is_a?(Hash) && result.key?(:content)
         send_result(result, id, client_id, metadata: metadata)
       else
-        send_result({ content: result }, id, client_id, metadata: metadata)
+        # Format the result according to the MCP specification
+        formatted_result = {
+          content: [{ type: 'text', text: result.to_s }],
+          isError: false
+        }
+
+        send_result(formatted_result, id, client_id, metadata: metadata)
       end
     end
 
@@ -340,7 +346,7 @@ module FastMcp
         isError: true
       }
 
-      send_response(error_result, client_id)
+      send_result(error_result, id, client_id)
     end
 
     # Handle resources/list request
