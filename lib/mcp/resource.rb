@@ -214,25 +214,5 @@ module FastMcp
         mime_type == 'application/xml' ||
         mime_type == 'application/javascript')
     end
-
-    # Get the resource contents
-    # @return [Hash] Resource contents
-    def contents
-      result = {
-        uri: uri,
-        mimeType: mime_type
-      }
-
-      content_value = content
-      if content_value
-        if binary?
-          result[:blob] = Base64.strict_encode64(content_value)
-        else
-          result[:text] = content_value
-        end
-      end
-
-      result
-    end
   end
 end
