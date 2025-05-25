@@ -91,12 +91,15 @@ module FastMcp
           return
         end
 
+        json_message = message.is_a?(String) ? message : JSON.generate(message)
         stream = client[:stream]
-        return if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
 
-        @logger.info("Client: #{client_id}, SSE Message: #{message}")
-        stream.write("data: #{JSON.generate(message)}\n\n")
-        stream.flush if stream.respond_to?(:flush)
+        if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
+          unregister_sse_client(client_id)
+        else
+          stream.write("data: #{json_message}\n\n")
+          stream.flush if stream.respond_to?(:flush)
+        end
         nil
       end
 

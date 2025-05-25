@@ -30,6 +30,10 @@ module FastMcp
         raise NotImplementedError, "#{self.class} must implement #send_message"
       end
 
+      def send_message_to(client_id, message)
+        raise NotImplementedError, "#{self.class} must implement #send_message_to"
+      end
+
       # Process an incoming message
       # This is a helper method that can be used by subclasses
       def process_message(message, context)

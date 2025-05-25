@@ -124,8 +124,10 @@ RSpec.describe FastMcp::Transports::RackTransport do
         # Add a mock SSE client that raises an error
         client_stream = double('stream')
         expect(client_stream).to receive(:respond_to?).with(:closed?).and_return(true)
-        expect(client_stream).to receive(:closed?).and_return(false)
+        expect(client_stream).to receive(:closed?).twice.and_return(false) # once for write check, once unregister
         expect(client_stream).to receive(:write).and_raise(StandardError.new('Test error'))
+        expect(client_stream).to receive(:respond_to?).with(:close).and_return(true) 
+        expect(client_stream).to receive(:close) # unregister close
 
         transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream } })
 
@@ -141,7 +143,94 @@ RSpec.describe FastMcp::Transports::RackTransport do
     end
   end
 
+  describe '#send_message_to' do
+    let(:client_id) { 'test-client' }
+    let(:client_stream) { double('stream') }
+    let(:client_id_2) { 'test-client-2' }
+    let(:client_stream_2) { double('stream-2') }
+
+    before do
+      transport.instance_variable_set(:@sse_clients, {
+        client_id => { stream: client_stream },
+        client_id_2  => { stream: client_stream_2 }
+      })
+    end
+
+    it 'sends a message to a specific client' do
+      expect(client_stream).to receive(:respond_to?).with(:closed?).and_return(true)
+      expect(client_stream).to receive(:closed?).and_return(false)
+      expect(client_stream).to receive(:write).with("data: {\"test\":\"message\"}\n\n")
+      expect(client_stream).to receive(:respond_to?).with(:flush).and_return(true)
+      expect(client_stream).to receive(:flush)
+
+      expect(client_stream_2).not_to receive(:write)
+
+      transport.send_message_to(client_id, { test: 'message' })
+    end
+
+    it 'handles string messages' do
+      expect(client_stream).to receive(:respond_to?).with(:closed?).and_return(true)
+      expect(client_stream).to receive(:closed?).and_return(false)
+      expect(client_stream).to receive(:write).with("data: test message\n\n")
+      expect(client_stream).to receive(:respond_to?).with(:flush).and_return(true)
+      expect(client_stream).to receive(:flush)
+
+      transport.send_message_to(client_id, 'test message')
+    end
+
+    it 'skips sending if client is not found' do
+      expect(logger).to receive(:info).with(/Client nonexistent-client not found, skipping message/)
+      transport.send_message_to('nonexistent-client', { test: 'message' })
+    end
+
+    it 'skips sending if stream is nil' do
+      transport.instance_variable_set(:@sse_clients, {
+        client_id => { stream: nil }
+      })
+      transport.send_message_to(client_id, { test: 'message' })
+    end
+
+    it 'skips sending if stream is closed' do
+      expect(client_stream).to receive(:respond_to?).with(:closed?).and_return(true)
+      expect(client_stream).to receive(:closed?).and_return(true)
+      expect(transport).to receive(:unregister_sse_client).with(client_id)
+      expect(client_stream).to receive(:write).never
+
+      transport.send_message_to(client_id, { test: 'message' })
+    end
+
+    it 'unregisters client if stream is closed' do
+      expect(client_stream).to receive(:respond_to?).with(:closed?).and_return(true)
+      expect(client_stream).to receive(:closed?).and_return(true)
+      expect(transport).to receive(:unregister_sse_client).with(client_id)
+
+      transport.send_message_to(client_id, { test: 'message' })
+    end
+  end
+
+  describe '#unregister_sse_client' do
+    let(:client_id) { 'test-client' }
+    let(:client_stream) { double('stream') }
+
+    it 'closes the stream' do
+      expect(client_stream).to receive(:respond_to?).with(:close).and_return(true)
+      expect(client_stream).to receive(:closed?).and_return(false)
+      expect(client_stream).to receive(:close)
+      transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream } })
+      transport.unregister_sse_client('test-client')
+    end
+
+    it 'removes a client from the sse_clients hash' do
+      transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream } })
+      transport.unregister_sse_client('test-client')
+      expect(transport.sse_clients).to be_empty
+    end
+  end
+
   describe '#call' do
+    let(:client_id) { 'test-client-id' }
+    let(:context) { { client_id: client_id } }
+
     it 'passes non-MCP requests to the app' do
       env = { 'PATH_INFO' => '/not-mcp' }
       expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
@@ -170,7 +259,8 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'PATH_INFO' => '/mcp/messages',
           'REQUEST_METHOD' => 'POST',
           'HTTP_ORIGIN' => 'http://localhost',
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'QUERY_STRING' => "client_id=#{client_id}"
         }
 
         # Create a proper request double that includes necessary methods
@@ -178,15 +268,16 @@ RSpec.describe FastMcp::Transports::RackTransport do
           ip: '127.0.0.1',
           path: '/mcp/messages',
           post?: true,
-          params: {},
+          params: { 'client_id' => client_id },
           body: instance_double(StringIO, read: '{"jsonrpc":"2.0","method":"ping","id":1}'),
-          host: 'localhost'
+          host: 'localhost',
+          env: env
         )
         allow(Rack::Request).to receive(:new).with(env).and_return(request)
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', context)
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -274,13 +365,14 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'REQUEST_METHOD' => 'POST',
           'HTTP_ORIGIN' => 'https://sub.example.com',
           'REMOTE_ADDR' => '127.0.0.1',
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'QUERY_STRING' => "client_id=#{client_id}"
         }
 
         expect(server).to receive(:transport=).with(transport)
         # Mock the behavior for a valid Origin
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', context)
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -317,12 +409,13 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'REQUEST_METHOD' => 'POST',
           'HTTP_REFERER' => 'http://localhost/some/path',
           'REMOTE_ADDR' => '127.0.0.1',
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'QUERY_STRING' => "client_id=#{client_id}"
         }
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', context)
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -335,12 +428,13 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'REQUEST_METHOD' => 'POST',
           'HTTP_HOST' => 'localhost:3000',
           'REMOTE_ADDR' => '127.0.0.1',
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'QUERY_STRING' => "client_id=#{client_id}"
         }
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', context)
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
@@ -447,13 +541,14 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'REQUEST_METHOD' => 'POST',
           'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
           'CONTENT_TYPE' => 'application/json',
-          'REMOTE_ADDR' => '127.0.0.1'
+          'REMOTE_ADDR' => '127.0.0.1',
+          'QUERY_STRING' => "client_id=#{client_id}"
         }
         expect(server).to receive(:transport=).with(transport)
 
         # Mock the server's handle_json_request method
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', context)
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)

@@ -44,6 +44,8 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
   end
 
   describe '#call' do
+    let(:client_id) { 'test-client-id' }
+    let(:context) { { client_id: client_id } }
     context 'with valid authentication' do
       it 'passes the request to parent when token is valid for non-MCP paths' do
         env = {
@@ -64,14 +66,15 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           'CONTENT_TYPE' => 'application/json',
           'REMOTE_ADDR' => '127.0.0.1',
           'rack.input' => StringIO.new(json_message),
-          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}"
+          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
+          'QUERY_STRING' => "client_id=#{client_id}"
         }
 
         expect(server).to receive(:transport=).with(transport)
 
         # The RackTransport class will call server.handle_json_request with the message
         json_response = '{"jsonrpc":"2.0","result":{},"id":1}'
-        expect(server).to receive(:handle_json_request).with(json_message).and_return(json_response)
+        expect(server).to receive(:handle_json_request).with(json_message, context).and_return(json_response)
 
         # For MCP paths, we don't expect app.call to be invoked
         expect(app).not_to receive(:call)
@@ -319,12 +322,13 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           'HTTP_ORIGIN' => 'http://localhost',
           'REMOTE_ADDR' => '127.0.0.1',
           'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'QUERY_STRING' => "client_id=#{client_id}"
         }
 
         expect(server).to receive(:transport=).with(transport)
         expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}')
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', context)
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
