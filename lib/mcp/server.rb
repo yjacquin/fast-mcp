@@ -134,6 +134,7 @@ module FastMcp
 
     # Handle incoming JSON-RPC request
     def handle_request(json_str, headers: {}) # rubocop:disable Metrics/MethodLength
+      client_id = headers[:client_id]
       begin
         request = JSON.parse(json_str)
       rescue JSON::ParserError, TypeError
@@ -155,21 +156,21 @@ module FastMcp
       when 'ping'
         send_result({}, id, client_id)
       when 'initialize'
-        handle_initialize(params, id, context)
+        handle_initialize(params, headers, id)
       when 'notifications/initialized'
         handle_initialized_notification
       when 'tools/list'
-        handle_tools_list(id, context)
+        handle_tools_list(headers, id)
       when 'tools/call'
         handle_tools_call(params, headers, id)
       when 'resources/list'
-        handle_resources_list(id, context)
+        handle_resources_list(headers, id)
       when 'resources/read'
-        handle_resources_read(params, id, context)
+        handle_resources_read(params, headers, id)
       when 'resources/subscribe'
-        handle_resources_subscribe(params, id, context)
+        handle_resources_subscribe(params, headers, id)
       when 'resources/unsubscribe'
-        handle_resources_unsubscribe(params, id, context)
+        handle_resources_unsubscribe(params, headers, id)
       else
         send_error(-32_601, "Method not found: #{method}", id, client_id)
       end
@@ -219,11 +220,11 @@ module FastMcp
 
     PROTOCOL_VERSION = '2024-11-05'
 
-    def handle_initialize(params, id, context)
+    def handle_initialize(params, headers, id)
       # Store client capabilities for later use
       @client_capabilities = params['capabilities'] || {}
       client_info = params['clientInfo'] || {}
-      client_id = context[:client_id]
+      client_id = headers[:client_id]
 
       # Log client information
       @logger.info("Client connected: #{client_info['name']} v#{client_info['version']}")
@@ -245,9 +246,9 @@ module FastMcp
     end
 
     # Handle a resource read
-    def handle_resources_read(params, id, context)
+    def handle_resources_read(params, headers, id)
       uri = params['uri']
-      client_id = context[:client_id]
+      client_id = headers[:client_id]
 
       return send_error(-32_602, 'Invalid params: missing resource URI', id, client_id) unless uri
 
@@ -281,8 +282,8 @@ module FastMcp
     end
 
     # Handle tools/list request
-    def handle_tools_list(id, context)
-      client_id = context[:client_id]
+    def handle_tools_list(headers, id)
+      client_id = headers[:client_id]
       tools_list = @tools.values.map do |tool|
         {
           name: tool.tool_name,
@@ -298,7 +299,7 @@ module FastMcp
     def handle_tools_call(params, headers, id)
       tool_name = params['name']
       arguments = params['arguments'] || {}
-      client_id = context[:client_id]
+      client_id = headers[:client_id]
 
       return send_error(-32_602, 'Invalid params: missing tool name', id, client_id) unless tool_name
 
@@ -349,18 +350,18 @@ module FastMcp
     end
 
     # Handle resources/list request
-    def handle_resources_list(id, context)
-      client_id = context[:client_id]
+    def handle_resources_list(headers, id)
+      client_id = headers[:client_id]
       resources_list = @resources.values.map(&:metadata)
       send_result({ resources: resources_list }, id, client_id)
     end
 
     # Handle resources/subscribe request
-    def handle_resources_subscribe(params, id, context)
+    def handle_resources_subscribe(params, headers, id)
       return unless @client_initialized
 
       uri = params['uri']
-      client_id = context[:client_id]
+      client_id = headers[:client_id]
 
       unless uri
         send_error(-32_602, 'Invalid params: missing resource URI', id, client_id)
@@ -381,11 +382,11 @@ module FastMcp
     end
 
     # Handle resources/unsubscribe request
-    def handle_resources_unsubscribe(params, id, context)
+    def handle_resources_unsubscribe(params, headers, id)
       return unless @client_initialized
 
       uri = params['uri']
-      client_id = context[:client_id]
+      client_id = headers[:client_id]
 
       unless uri
         send_error(-32_602, 'Invalid params: missing resource URI', id, client_id)
