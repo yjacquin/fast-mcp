@@ -35,6 +35,8 @@ module FastMcp
       @transport_klass = nil
       @transport = nil
       @capabilities = DEFAULT_CAPABILITIES.dup
+      @tool_filters = []
+      @resource_filters = []
 
       # Merge with provided capabilities
       @capabilities.merge!(capabilities) if capabilities.is_a?(Hash)
@@ -214,6 +216,58 @@ module FastMcp
 
     def read_resource(uri)
       @resources.find { |r| r.match(uri) }
+    end
+
+    # Add filter for tools
+    def filter_tools(&block)
+      @tool_filters << block if block_given?
+    end
+
+    # Add filter for resources
+    def filter_resources(&block)
+      @resource_filters << block if block_given?
+    end
+
+    # Check if filters are configured
+    def has_filters?
+      @tool_filters.any? || @resource_filters.any?
+    end
+
+    # Create a filtered copy for a specific request
+    def create_filtered_copy(request)
+      filtered_server = self.class.new(
+        name: @name,
+        version: @version,
+        logger: @logger,
+        capabilities: @capabilities
+      )
+
+      # Copy transport settings
+      filtered_server.transport_klass = @transport_klass
+
+      # Apply tool filters
+      filtered_tools = @tools.values
+      @tool_filters.each do |filter|
+        filtered_tools = filter.call(request, filtered_tools)
+      end
+
+      # Register filtered tools
+      filtered_tools.each do |tool|
+        filtered_server.register_tool(tool)
+      end
+
+      # Apply resource filters
+      filtered_resources = @resources.values
+      @resource_filters.each do |filter|
+        filtered_resources = filter.call(request, filtered_resources)
+      end
+
+      # Register filtered resources
+      filtered_resources.each do |resource|
+        filtered_server.register_resource(resource)
+      end
+
+      filtered_server
     end
 
     private
