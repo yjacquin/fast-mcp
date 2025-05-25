@@ -330,7 +330,8 @@ module FastMcp
         browser_type = detect_browser_type(user_agent)
         @logger.info("Client connection from: #{user_agent} (#{browser_type})")
 
-        # Handle reconnection
+        # WIP: reconnection wasn't necessary, removed temporarily but need to verify
+        
         unless client_id
           # Generate a new client ID if none was provided
           client_id = SecureRandom.uuid
