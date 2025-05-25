@@ -137,6 +137,29 @@ RSpec.describe FastMcp::Tool do
     end
   end
 
+  describe '#headers' do
+    let(:test_class) do
+      Class.new(described_class) do
+        def self.name
+          'test-tool'
+        end
+
+        def self.description
+          'A test tool'
+        end
+
+        def call(**_args)
+          "Hello, #{headers['ENTITY']}!"
+        end
+      end
+    end
+
+    it 'can read headers' do
+      tool = test_class.new(headers: { 'ENTITY' => 'World' })
+      expect(tool.call).to eq('Hello, World!')
+    end
+  end
+
   describe 'SchemaCompiler' do
     let(:compiler) { FastMcp::SchemaCompiler.new }
 
