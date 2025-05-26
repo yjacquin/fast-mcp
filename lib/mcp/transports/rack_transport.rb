@@ -113,6 +113,9 @@ module FastMcp
           if existing_client[:stream] != stream
             @logger.info("New stream detected for client #{client_id}")
             unregister_sse_client(client_id)
+
+            # Small delay to ensure the old connection is fully closed
+            sleep 0.1
           end
         end
 
@@ -357,21 +360,6 @@ module FastMcp
         else
           'Other browser'
         end
-      end
-
-      # Handle client reconnection
-      def handle_client_reconnection(client_id, browser_type)
-        @logger.info("Client #{client_id} is reconnecting (#{browser_type})")
-        old_client = @sse_clients[client_id]
-        begin
-          old_client[:stream].close if old_client[:stream].respond_to?(:close) && !old_client[:stream].closed?
-        rescue StandardError => e
-          @logger.error("Error closing old connection for client #{client_id}: #{e.message}")
-        end
-        unregister_sse_client(client_id)
-
-        # Small delay to ensure the old connection is fully closed
-        sleep 0.1
       end
 
       # Handle SSE with Rack hijacking (e.g., Puma)
