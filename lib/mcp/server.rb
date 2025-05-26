@@ -8,9 +8,12 @@ require_relative 'transports/stdio_transport'
 require_relative 'transports/rack_transport'
 require_relative 'transports/authenticated_rack_transport'
 require_relative 'logger'
+require_relative 'server_filtering'
 
 module FastMcp
   class Server
+    include ServerFiltering
+
     attr_reader :name, :version, :tools, :resources, :capabilities
 
     DEFAULT_CAPABILITIES = {

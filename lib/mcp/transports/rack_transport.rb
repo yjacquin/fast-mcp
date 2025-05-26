@@ -521,20 +521,6 @@ module FastMcp
         [200, SSE_HEADERS, []]
       end
 
-      # Handle message POST request
-      def handle_message_request(request)
-        @logger.debug('Received message request')
-        return method_not_allowed_response unless request.post?
-
-        begin
-          process_json_request(request)
-        rescue JSON::ParserError => e
-          handle_parse_error(e)
-        rescue StandardError => e
-          handle_internal_error(e)
-        end
-      end
-
       # Handle message POST request with specific server
       def handle_message_request_with_server(request, server)
         @logger.debug('Received message request')
@@ -549,22 +535,6 @@ module FastMcp
         end
       end
 
-      def process_json_request(request)
-        # Parse the request body
-        body = request.body.read
-        @logger.debug("Request body: #{body}")
-
-        # Extract headers that might be relevant
-        headers = request.env.select { |k, _v| k.start_with?('HTTP_') }
-                         .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
-
-        # Let the server handle the JSON request directly
-        response = @server.handle_request(body, headers: headers)
-
-        # Return the JSON response
-        [200, { 'Content-Type' => 'application/json' }, [response.string]]
-      end
-
       def process_json_request_with_server(request, server)
         # Parse the request body
         body = request.body.read
@@ -575,10 +545,10 @@ module FastMcp
                          .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
 
         # Let the specific server handle the JSON request directly
-        response = server.handle_request(body, headers: headers)
+        response = server.handle_request(body, headers: headers) || []
 
         # Return the JSON response
-        [200, { 'Content-Type' => 'application/json' }, [response.string]]
+        [200, { 'Content-Type' => 'application/json' }, response]
       end
 
       # Return a method not allowed error response
