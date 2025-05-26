@@ -330,8 +330,6 @@ module FastMcp
         browser_type = detect_browser_type(user_agent)
         @logger.info("Client connection from: #{user_agent} (#{browser_type})")
 
-        # WIP: reconnection wasn't necessary, removed temporarily but need to verify
-        
         unless client_id
           # Generate a new client ID if none was provided
           client_id = SecureRandom.uuid
@@ -393,6 +391,7 @@ module FastMcp
       end
 
       # Set up the SSE connection
+      # If SSE connection already exists for a client through a different IO, it will be closed and a new one will be established
       def setup_sse_connection(client_id, io, env)
         # Send headers
         @logger.debug("Sending HTTP headers for SSE connection #{client_id}")
