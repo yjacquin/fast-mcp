@@ -353,6 +353,7 @@ module FastMcp
     def handle_resources_list(headers, id)
       client_id = headers[:client_id]
       resources_list = @resources.values.map(&:metadata)
+
       send_result({ resources: resources_list }, id, client_id)
     end
 
@@ -418,6 +419,7 @@ module FastMcp
     # Send a JSON-RPC result response
     def send_result(result, id, client_id, metadata: {})
       result[:_meta] = metadata if metadata.is_a?(Hash) && !metadata.empty?
+
       response = {
         jsonrpc: '2.0',
         id: id,
