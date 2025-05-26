@@ -533,6 +533,43 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(response['error']['code']).to eq(-32_601)
         expect(response['error']['message']).to include('Method not allowed')
       end
+
+      it 'handles client reconnection with existing stream' do
+        client_id = 'test-client'
+        stream = double('stream')
+        transport.instance_variable_set(:@sse_clients, { client_id => { stream: stream, connected_at: Time.now } })
+
+
+        # Verify only one log message about existing client
+        expect(logger).to receive(:info).with("Client #{client_id} already registered")
+        
+        # Reconnection with same stream
+        transport.send(:register_sse_client, client_id, stream)
+        expect(transport.sse_clients[client_id][:stream]).to eq(stream)
+        
+      end
+
+      it 'handles client reconnection with new stream' do
+        client_id = 'test-client'
+        old_stream = double('stream')
+        new_stream = double('new_stream')
+        transport.instance_variable_set(:@sse_clients, { client_id => { stream: old_stream, connected_at: Time.now } })
+        
+        # Reconnection with new stream
+        expect(old_stream).to receive(:respond_to?).with(:close).and_return(true)
+        expect(old_stream).to receive(:closed?).and_return(false)
+        expect(old_stream).to receive(:close)
+        
+        # Verify log messages
+        expect(logger).to receive(:info).with("Client #{client_id} already registered")
+        expect(logger).to receive(:info).with("New stream detected for client #{client_id}")
+        expect(logger).to receive(:info).with("Unregistering SSE client: #{client_id}")
+        expect(logger).to receive(:info).with("Registering SSE client: #{client_id}")
+
+        transport.send(:register_sse_client, client_id, new_stream)
+        expect(transport.sse_clients[client_id][:stream]).to eq(new_stream)
+        
+      end
     end
 
     context 'with JSON-RPC requests' do

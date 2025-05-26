@@ -109,14 +109,13 @@ module FastMcp
 
         if existing_client
           @logger.info("Client #{client_id} already registered")
+          return if existing_client[:stream] == stream
 
-          if existing_client[:stream] != stream
-            @logger.info("New stream detected for client #{client_id}")
-            unregister_sse_client(client_id)
+          @logger.info("New stream detected for client #{client_id}")
+          unregister_sse_client(client_id)
 
-            # Small delay to ensure the old connection is fully closed
-            sleep 0.1
-          end
+          # Small delay to ensure the old connection is fully closed
+          sleep 0.1
         end
 
         @logger.info("Registering SSE client: #{client_id}")
