@@ -134,7 +134,7 @@ module FastMcp
 
     # Handle incoming JSON-RPC request
     def handle_request(json_str, headers: {}) # rubocop:disable Metrics/MethodLength
-      client_id = headers[:client_id]
+      client_id = headers['client_id']
       begin
         request = JSON.parse(json_str)
       rescue JSON::ParserError, TypeError
@@ -224,7 +224,7 @@ module FastMcp
       # Store client capabilities for later use
       @client_capabilities = params['capabilities'] || {}
       client_info = params['clientInfo'] || {}
-      client_id = headers[:client_id]
+      client_id = headers['client_id']
 
       # Log client information
       @logger.info("Client connected: #{client_info['name']} v#{client_info['version']}")
@@ -248,7 +248,7 @@ module FastMcp
     # Handle a resource read
     def handle_resources_read(params, headers, id)
       uri = params['uri']
-      client_id = headers[:client_id]
+      client_id = headers['client_id']
 
       return send_error(-32_602, 'Invalid params: missing resource URI', id, client_id) unless uri
 
@@ -283,7 +283,7 @@ module FastMcp
 
     # Handle tools/list request
     def handle_tools_list(headers, id)
-      client_id = headers[:client_id]
+      client_id = headers['client_id']
       tools_list = @tools.values.map do |tool|
         {
           name: tool.tool_name,
@@ -299,7 +299,7 @@ module FastMcp
     def handle_tools_call(params, headers, id)
       tool_name = params['name']
       arguments = params['arguments'] || {}
-      client_id = headers[:client_id]
+      client_id = headers['client_id']
 
       return send_error(-32_602, 'Invalid params: missing tool name', id, client_id) unless tool_name
 
@@ -351,7 +351,7 @@ module FastMcp
 
     # Handle resources/list request
     def handle_resources_list(headers, id)
-      client_id = headers[:client_id]
+      client_id = headers['client_id']
       resources_list = @resources.values.map(&:metadata)
 
       send_result({ resources: resources_list }, id, client_id)
@@ -362,7 +362,7 @@ module FastMcp
       return unless @client_initialized
 
       uri = params['uri']
-      client_id = headers[:client_id]
+      client_id = headers['client_id']
 
       unless uri
         send_error(-32_602, 'Invalid params: missing resource URI', id, client_id)
@@ -387,7 +387,7 @@ module FastMcp
       return unless @client_initialized
 
       uri = params['uri']
-      client_id = headers[:client_id]
+      client_id = headers['client_id']
 
       unless uri
         send_error(-32_602, 'Invalid params: missing resource URI', id, client_id)

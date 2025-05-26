@@ -322,6 +322,7 @@ module FastMcp
       def extract_client_id(env)
         request = Rack::Request.new(env)
 
+        @logger.info("Extracting client ID from request: #{request.params}")
         # Check various places for client ID
         client_id = request.params['client_id']
         client_id ||= env['HTTP_LAST_EVENT_ID']
@@ -528,6 +529,7 @@ module FastMcp
           end
         end.to_h
 
+        headers['client_id'] = extract_client_id(request.env)
         response = process_message(body, headers: headers) || []
         @logger.info("Response: #{response}")
 
