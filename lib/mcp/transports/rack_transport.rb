@@ -265,7 +265,7 @@ module FastMcp
         else
           # Fallback for servers that don't support streaming
           @logger.info('Falling back to default SSE')
-          [200, SSE_HEADERS, [":ok\n\n"]]
+          [200, SSE_HEADERS.dup, [":ok\n\n"]]
         end
       end
 
