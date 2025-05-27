@@ -392,7 +392,6 @@ module FastMcp
 
         # Register client (will overwrite if already present)
         register_sse_client(client_id, io, mutex)
-        mutex = @sse_clients[client_id][:mutex]
 
         # Send an initial comment to keep the connection alive
         mutex.synchronize { io.write(": SSE connection established\n\n") }
