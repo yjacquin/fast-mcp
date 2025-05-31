@@ -13,6 +13,7 @@ module FastMcp
       DEFAULT_PATH_PREFIX = '/mcp'
       DEFAULT_ALLOWED_ORIGINS = ['localhost', '127.0.0.1', '[::1]'].freeze
       DEFAULT_ALLOWED_IPS = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].freeze
+      SERVER_ENV_KEY = 'fast_mcp.server'
 
       SSE_HEADERS = {
         'Content-Type' => 'text/event-stream',
@@ -43,6 +44,7 @@ module FastMcp
         @sse_clients = Concurrent::Hash.new
         @sse_clients_mutex = Mutex.new
         @running = false
+        @filtered_servers_cache = {}
       end
 
       # Start the transport
@@ -207,19 +209,33 @@ module FastMcp
         # Validate Origin header to prevent DNS rebinding attacks
         return forbidden_response('Forbidden: Origin validation failed') unless validate_origin(request, env)
 
+        # Get the appropriate server for this request
+        request_server = get_server_for_request(request, env)
+
+        # Store the current transport temporarily if using a filtered server
+        if request_server != @server
+          original_transport = request_server.transport
+          request_server.transport = self
+        end
+
         subpath = request.path[@path_prefix.length..]
         @logger.debug("MCP request subpath: '#{subpath.inspect}'")
 
-        case subpath
-        when "/#{@sse_route}"
-          handle_sse_request(request, env)
-        when "/#{@messages_route}"
-          handle_message_request(request)
-        else
-          @logger.error('Received unknown request')
-          # Return 404 for unknown MCP endpoints
-          endpoint_not_found_response
-        end
+        result = case subpath
+                 when "/#{@sse_route}"
+                   handle_sse_request(request, env)
+                 when "/#{@messages_route}"
+                   handle_message_request_with_server(request, request_server)
+                 else
+                   @logger.error('Received unknown request')
+                   # Return 404 for unknown MCP endpoints
+                   endpoint_not_found_response
+                 end
+
+        # Restore original transport if needed
+        request_server.transport = original_transport if request_server != @server && original_transport
+
+        result
       end
 
       def forbidden_response(message)
@@ -505,13 +521,13 @@ module FastMcp
         [200, SSE_HEADERS, []]
       end
 
-      # Handle message POST request
-      def handle_message_request(request)
+      # Handle message POST request with specific server
+      def handle_message_request_with_server(request, server)
         @logger.debug('Received message request')
         return method_not_allowed_response unless request.post?
 
         begin
-          process_json_request(request)
+          process_json_request_with_server(request, server)
         rescue JSON::ParserError => e
           handle_parse_error(e)
         rescue StandardError => e
@@ -519,22 +535,19 @@ module FastMcp
         end
       end
 
-      # Process a JSON-RPC request
-      def process_json_request(request)
+      def process_json_request_with_server(request, server)
         # Parse the request body
         body = request.body.read
+        @logger.debug("Request body: #{body}")
 
-        # Assemble HTTP headers
-        headers = request.each_header.filter_map do |key, value|
-          if (match = /^HTTP_(?<name>.*)/.match(key))
-            header_name = match[:name]
-            [header_name, value]
-          end
-        end.to_h
+        # Extract headers that might be relevant
+        headers = request.env.select { |k, _v| k.start_with?('HTTP_') }
+                         .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
 
-        response = process_message(body, headers: headers) || []
-        @logger.info("Response: #{response}")
+        # Let the specific server handle the JSON request directly
+        response = server.handle_request(body, headers: headers) || []
 
+        # Return the JSON response
         [200, { 'Content-Type' => 'application/json' }, response]
       end
 
@@ -564,6 +577,50 @@ module FastMcp
              id: id
            }
          )]]
+      end
+
+      # Get the appropriate server for this request
+      def get_server_for_request(request, env)
+        # 1. Check for explicit server in env (highest priority)
+        if env[SERVER_ENV_KEY]
+          @logger.debug("Using server from env[#{SERVER_ENV_KEY}]")
+          return env[SERVER_ENV_KEY]
+        end
+
+        # 2. Apply filters if configured
+        if @server.contains_filters?
+          @logger.debug('Server has filters, creating filtered copy')
+          # Cache filtered servers to avoid recreating them
+          cache_key = generate_cache_key(request)
+
+          @filtered_servers_cache[cache_key] ||= @server.create_filtered_copy(request)
+          return @filtered_servers_cache[cache_key]
+        end
+
+        # 3. Use the default server
+        @logger.debug('Using default server')
+        @server
+      end
+
+      # Generate a cache key based on filter-relevant request attributes
+      def generate_cache_key(request)
+        # Generate a cache key based on filter-relevant request attributes
+        # This is a simple example - real implementation would be more sophisticated
+        {
+          path: request.path,
+          params: request.params.sort.to_h,
+          headers: extract_relevant_headers(request)
+        }.hash
+      end
+
+      # Extract headers that might be relevant for filtering
+      def extract_relevant_headers(request)
+        relevant_headers = {}
+        ['X-User-Role', 'X-API-Version', 'X-Tenant-ID', 'Authorization'].each do |header|
+          header_key = "HTTP_#{header.upcase.tr('-', '_')}"
+          relevant_headers[header] = request.env[header_key] if request.env[header_key]
+        end
+        relevant_headers
       end
     end
   end

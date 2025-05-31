@@ -94,6 +94,27 @@ module FastMcp
     class << self
       attr_accessor :server
 
+      # Add tagging support for tools
+      def tags(*tag_list)
+        if tag_list.empty?
+          @tags || []
+        else
+          @tags = tag_list.flatten.map(&:to_sym)
+        end
+      end
+
+      # Add metadata support for tools
+      def metadata(key = nil, value = nil)
+        @metadata ||= {}
+        if key.nil?
+          @metadata
+        elsif value.nil?
+          @metadata[key]
+        else
+          @metadata[key] = value
+        end
+      end
+
       def arguments(&block)
         @input_schema = Dry::Schema.JSON(&block)
       end
