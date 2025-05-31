@@ -8,46 +8,63 @@ require 'json'
 # Create a server
 server = FastMcp::Server.new(name: 'resource-example-server', version: '1.0.0')
 
-# Define a counter resource
+# Define a counter resource (stateless - reads from file)
 class CounterResource < FastMcp::Resource
   uri 'counter'
   resource_name 'Counter'
   description 'A simple counter resource'
   mime_type 'text/plain'
 
-  def initialize
-    @count = 0
-
-    super
-  end
-
-  attr_accessor :count
-
   def content
-    @count.to_s
+    # Read counter from file or return default
+    File.exist?('counter.txt') ? File.read('counter.txt').strip : '0'
   end
 end
 
-# Define a users resource
+# Define a users resource (stateless - reads from file)
 class UsersResource < FastMcp::Resource
-  uri 'users'
+  uri 'app:///users'
   resource_name 'Users'
   description 'List of users'
   mime_type 'application/json'
 
-  def initialize
-    @users = [
-      { id: 1, name: 'Alice', email: 'alice@example.com' },
-      { id: 2, name: 'Bob', email: 'bob@example.com' }
-    ]
-
-    super
+  def content
+    # Read users from file or return default
+    if File.exist?('users.json')
+      File.read('users.json')
+    else
+      JSON.generate(
+        [
+          { id: 1, name: 'Alice', email: 'alice@example.com' },
+          { id: 2, name: 'Bob', email: 'bob@example.com' }
+        ]
+      )
+    end
   end
+end
 
-  attr_accessor :users
+class UserResource < FastMcp::Resource
+  uri 'app:///users/{id}'
+  resource_name 'User'
+  description 'A user'
+  mime_type 'application/json'
 
   def content
-    JSON.generate(@users)
+    id = params[:id]
+
+    # Read users from file or use default
+    users_data = if File.exist?('users.json')
+                   JSON.parse(File.read('users.json'))
+                 else
+                   [
+                     { 'id' => 1, 'name' => 'Alice', 'email' => 'alice@example.com' },
+                     { 'id' => 2, 'name' => 'Bob', 'email' => 'bob@example.com' }
+                   ]
+                 end
+
+    user = users_data.find { |u| u['id'] == id.to_i }
+
+    JSON.generate(user)
   end
 end
 
@@ -58,40 +75,38 @@ class WeatherResource < FastMcp::Resource
   description 'Current weather conditions'
   mime_type 'application/json'
 
-  def initialize
-    @temperature = 22.5
-    @condition = 'Sunny'
-    @updated_at = Time.now
-
-    super
-  end
-
   def content
     JSON.generate(
       {
-        temperature: @temperature,
-        condition: @condition,
-        updated_at: @updated_at.to_s
+        temperature: rand(15..30),
+        condition: ['Sunny', 'Cloudy', 'Rainy'].sample,
+        updated_at: Time.now.to_s
       }
     )
   end
 end
 
-server.register_resources(CounterResource, UsersResource, WeatherResource)
+server.register_resources(CounterResource, UsersResource, UserResource, WeatherResource)
 
 # Class-based tool for incrementing the counter
 class IncrementCounterTool < FastMcp::Tool
   description 'Increment the counter'
 
   def call
+    # Read current counter value
+    current_count = File.exist?('counter.txt') ? File.read('counter.txt').strip.to_i : 0
+
     # Increment the counter
-    CounterResource.instance.count += 1
+    new_count = current_count + 1
+
+    # Write back to file
+    File.write('counter.txt', new_count.to_s)
 
     # Update the resource
     notify_resource_updated('counter')
 
     # Return the new counter value
-    { count: CounterResource.instance.count }
+    { count: new_count }
   end
 end
 
@@ -110,26 +125,31 @@ class AddUserTool < FastMcp::Tool
   end
 
   def call(name:, email:, address:, admin: nil)
-    # Get the current users
-    users_resource = UsersResource.instance
-    users = users_resource.users
+    # Read current users
+    users = if File.exist?('users.json')
+              JSON.parse(File.read('users.json'))
+            else
+              [
+                { 'id' => 1, 'name' => 'Alice', 'email' => 'alice@example.com' },
+                { 'id' => 2, 'name' => 'Bob', 'email' => 'bob@example.com' }
+              ]
+            end
 
     # Generate a new ID
-    new_id = users.map { |u| u[:id] }.max + 1
+    new_id = users.map { |u| u['id'] }.max + 1
 
     # Create the new user
-    new_user = { id: new_id, name: name, email: email, address: address }
-
-    new_user[:admin] = admin if admin
+    new_user = { 'id' => new_id, 'name' => name, 'email' => email, 'address' => address }
+    new_user['admin'] = admin if admin
 
     # Add the user to the list
     users << new_user
 
-    # Update the resource
-    UsersResource.instance.users = users
+    # Write back to file
+    File.write('users.json', JSON.generate(users))
 
     # Notify the server that the resource has been updated
-    notify_resource_updated('users')
+    notify_resource_updated('app:///users')
 
     # Return the new user
     new_user
@@ -146,21 +166,25 @@ class DeleteUserTool < FastMcp::Tool
   end
 
   def call(id:)
-    # Get the current users
-    users_resource = UsersResource.instance
-    users = users_resource.users
+    # Read current users
+    users = if File.exist?('users.json')
+              JSON.parse(File.read('users.json'))
+            else
+              [
+                { 'id' => 1, 'name' => 'Alice', 'email' => 'alice@example.com' },
+                { 'id' => 2, 'name' => 'Bob', 'email' => 'bob@example.com' }
+              ]
+            end
 
-    # Find the user
-    user_index = users.find_index { |u| u[:id] == id }
+    # Find and remove the user
+    user_index = users.find_index { |u| u['id'] == id }
+    deleted_user = users.delete_at(user_index) if user_index
 
-    # Remove the user
-    deleted_user = users.delete_at(user_index)
-
-    # Update the resource
-    users_resource.users = users
+    # Write back to file
+    File.write('users.json', JSON.generate(users))
 
     # Notify the server that the resource has been updated
-    notify_resource_updated('users')
+    notify_resource_updated('app:///users')
 
     # Return the deleted user
     deleted_user
