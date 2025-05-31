@@ -8,9 +8,12 @@ require_relative 'transports/stdio_transport'
 require_relative 'transports/rack_transport'
 require_relative 'transports/authenticated_rack_transport'
 require_relative 'logger'
+require_relative 'server_filtering'
 
 module FastMcp
   class Server
+    include ServerFiltering
+
     attr_reader :name, :version, :tools, :resources, :capabilities
 
     DEFAULT_CAPABILITIES = {
@@ -35,6 +38,8 @@ module FastMcp
       @transport_klass = nil
       @transport = nil
       @capabilities = DEFAULT_CAPABILITIES.dup
+      @tool_filters = []
+      @resource_filters = []
 
       # Merge with provided capabilities
       @capabilities.merge!(capabilities) if capabilities.is_a?(Hash)
@@ -110,7 +115,7 @@ module FastMcp
     def start_rack(app, options = {})
       @logger.info("Starting MCP server as Rack middleware: #{@name} v#{@version}")
       @logger.info("Available tools: #{@tools.keys.join(', ')}")
-      @logger.info("Available resources: #{@resources.keys.join(', ')}")
+      @logger.info("Available resources: #{@resources.map(&:resource_name).join(', ')}")
 
       # Use Rack transport
       transport_klass = FastMcp::Transports::RackTransport
@@ -124,7 +129,7 @@ module FastMcp
     def start_authenticated_rack(app, options = {})
       @logger.info("Starting MCP server as Authenticated Rack middleware: #{@name} v#{@version}")
       @logger.info("Available tools: #{@tools.keys.join(', ')}")
-      @logger.info("Available resources: #{@resources.keys.join(', ')}")
+      @logger.info("Available resources: #{@resources.map(&:resource_name).join(', ')}")
 
       # Use Rack transport
       transport_klass = FastMcp::Transports::AuthenticatedRackTransport

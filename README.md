@@ -32,6 +32,7 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 - 🧩 **Framework Integration** - Works seamlessly with Rails, Sinatra or any Rack app.
 - 🔒 **Authentication Support** - Secure your AI-powered endpoints with ease
 - 🚀 **Real-time Updates** - Subscribe to changes for interactive applications
+- 🎯 **Dynamic Filtering** - Control tool/resource access based on request context (permissions, API versions, etc.)
 
 
 ## 💎 What Makes FastMCP Great
@@ -97,6 +98,36 @@ server.notify_resource_updated(PopularUsers.variabilized_uri)
 
 # Notifiy the content of a resource from a template has been updated to clients
 server.notify_resource_updated(User.variabilized_uri(id: 1))
+```
+
+### 🎯 Dynamic Tool Filtering
+
+Control which tools and resources are available based on request context:
+
+```ruby
+# Tag your tools for easy filtering
+class AdminTool < FastMcp::Tool
+  tags :admin, :dangerous
+  description "Perform admin operations"
+  
+  def call
+    # Admin only functionality
+  end
+end
+
+# Filter tools based on user permissions
+server.filter_tools do |request, tools|
+  user_role = request.params['role']
+  
+  case user_role
+  when 'admin'
+    tools # Admins see all tools
+  when 'user'
+    tools.reject { |t| t.tags.include?(:admin) }
+  else
+    tools.select { |t| t.tags.include?(:public) }
+  end
+end
 ```
 
 ### 🚂 Fast Ruby on Rails implementation
@@ -368,6 +399,7 @@ FastMcp.authenticated_rack_middleware(app,
 - [📚 Resources](docs/resources.md)
 - [🛠️ Tools](docs/tools.md)
 - [🔒 Security](docs/security.md)
+- [🎯 Dynamic Filtering](docs/filtering.md)
 
 ## 💻 Examples
 

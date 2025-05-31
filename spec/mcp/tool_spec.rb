@@ -569,4 +569,64 @@ RSpec.describe FastMcp::Tool do
       end
     end
   end
+
+  describe '.tags' do
+    it 'sets and returns tags' do
+      test_class = Class.new(described_class)
+      test_class.tags :admin, :dangerous
+      
+      expect(test_class.tags).to eq([:admin, :dangerous])
+    end
+    
+    it 'accepts array of tags' do
+      test_class = Class.new(described_class)
+      test_class.tags [:user, :safe]
+      
+      expect(test_class.tags).to eq([:user, :safe])
+    end
+    
+    it 'returns empty array when no tags are set' do
+      test_class = Class.new(described_class)
+      
+      expect(test_class.tags).to eq([])
+    end
+    
+    it 'converts tags to symbols' do
+      test_class = Class.new(described_class)
+      test_class.tags 'admin', 'dangerous'
+      
+      expect(test_class.tags).to eq([:admin, :dangerous])
+    end
+  end
+  
+  describe '.metadata' do
+    it 'sets and gets individual metadata values' do
+      test_class = Class.new(described_class)
+      test_class.metadata(:category, 'system')
+      test_class.metadata(:risk_level, 'high')
+      
+      expect(test_class.metadata(:category)).to eq('system')
+      expect(test_class.metadata(:risk_level)).to eq('high')
+    end
+    
+    it 'returns all metadata when called without arguments' do
+      test_class = Class.new(described_class)
+      test_class.metadata(:category, 'system')
+      test_class.metadata(:risk_level, 'high')
+      
+      expect(test_class.metadata).to eq({ category: 'system', risk_level: 'high' })
+    end
+    
+    it 'returns empty hash when no metadata is set' do
+      test_class = Class.new(described_class)
+      
+      expect(test_class.metadata).to eq({})
+    end
+    
+    it 'returns nil for undefined metadata keys' do
+      test_class = Class.new(described_class)
+      
+      expect(test_class.metadata(:undefined_key)).to be_nil
+    end
+  end
 end
