@@ -50,23 +50,29 @@ RSpec.describe FastMcp::Resource do
 
   describe 'instance methods' do
     it 'requires implementing content method in subclasses' do
-      resource_class = Class.new(FastMcp::Resource)
-      expect { resource_class.instance.content }.to raise_error(NotImplementedError)
+      resource_class = Class.new(FastMcp::Resource) do 
+        uri 'test/text'
+        mime_type 'text/plain'
+      end
+
+      expect { resource_class.new.content }.to raise_error(NotImplementedError)
     end
 
     it 'determines if content is binary based on mime_type' do
       text_resource = Class.new(FastMcp::Resource) do
+        uri 'test/text'
         mime_type 'text/plain'
         def content; 'text'; end
       end
 
       binary_resource = Class.new(FastMcp::Resource) do
+        uri 'test/binary'
         mime_type 'image/png'
         def content; 'binary data'; end
       end
 
-      expect(text_resource.instance.binary?).to be false
-      expect(binary_resource.instance.binary?).to be true
+      expect(text_resource.new.binary?).to be false
+      expect(binary_resource.new.binary?).to be true
     end
 
     it 'provides metadata as a hash' do
@@ -85,30 +91,6 @@ RSpec.describe FastMcp::Resource do
       expect(metadata[:name]).to eq('Test Resource')
       expect(metadata[:description]).to eq('A test resource')
       expect(metadata[:mimeType]).to eq('text/plain')
-    end
-
-    it 'provides contents with text for non-binary resources' do
-      resource = Class.new(FastMcp::Resource) do
-        uri 'test/resource'
-        mime_type 'text/plain'
-        def content; 'test content'; end
-      end
-
-      contents = resource.instance.contents
-      expect(contents[:text]).to eq('test content')
-      expect(contents[:blob]).to be_nil
-    end
-
-    it 'provides contents with blob for binary resources' do
-      resource = Class.new(FastMcp::Resource) do
-        uri 'test/resource'
-        mime_type 'image/png'
-        def content; 'binary data'; end
-      end
-
-      contents = resource.instance.contents
-      expect(contents[:text]).to be_nil
-      expect(contents[:blob]).to eq(Base64.strict_encode64('binary data'))
     end
   end
 
@@ -143,24 +125,24 @@ RSpec.describe FastMcp::Resource do
     end
 
     it 'registers a resource instance' do
-      expect(server.resources).not_to have_key('file://counter.txt')
+      expect(server.resources.map(&:uri)).not_to include('file://counter.txt')
       server.register_resource(counter_resource_class)
-      expect(server.resources).to have_key('file://counter.txt')
+      expect(server.resources.map(&:uri)).to include('file://counter.txt')
       
-      resource = server.resources['file://counter.txt']
+      resource = server.resources.find { |r| r.uri == 'file://counter.txt' }
       expect(resource.ancestors).to include(FastMcp::Resource)
       expect(resource.uri).to eq('file://counter.txt')
       expect(resource.resource_name).to eq('Counter')
       expect(resource.description).to eq('A simple counter resource')
       expect(resource.mime_type).to eq('text/plain')
-      expect(resource.instance.content).to eq('0')
+      expect(resource.new.content).to eq('0')
     end
 
     it 'registers multiple resources' do
       expect(server.resources).to be_empty
       server.register_resources(counter_resource_class, users_resource_class)
       
-      expect(server.resources.keys).to contain_exactly('file://counter.txt', 'file://users.json')
+      expect(server.resources.map(&:uri)).to contain_exactly('file://counter.txt', 'file://users.json')
     end
 
     it 'allows reading registered resources through the server' do
@@ -169,7 +151,7 @@ RSpec.describe FastMcp::Resource do
       expect(resource.ancestors).to include(FastMcp::Resource)
       expect(resource.uri).to eq('file://users.json')
       expect(resource.resource_name).to eq('Users')
-      expect(JSON.parse(resource.instance.content).size).to eq(2)
+      expect(JSON.parse(resource.new.content).size).to eq(2)
     end
   end
 
@@ -195,40 +177,10 @@ RSpec.describe FastMcp::Resource do
       server.register_resource(weather_resource_class)
       resource = server.read_resource('weather')
       
-      weather_data = JSON.parse(resource.instance.content)
+      weather_data = JSON.parse(resource.new.content)
       expect(weather_data).to have_key('temperature')
       expect(weather_data).to have_key('condition')
       expect(weather_data).to have_key('updated_at')
-    end
-  end
-
-  describe 'resource update_content method' do
-    let(:counter_resource_class) do
-      Class.new(FastMcp::Resource) do
-        uri 'counter'
-        resource_name 'Counter'
-        description 'A counter resource'
-        mime_type 'text/plain'
-
-        def initialize
-          @content = '0'
-        end
-        
-        attr_accessor :content
-      end
-    end
-
-    it 'allows updating resource content' do
-      resource = counter_resource_class
-      server.register_resource(resource)
-      
-      expect(resource.instance.content).to eq('0')
-      resource.instance.content = '5'
-      expect(resource.instance.content).to eq('5')
-      
-      # Verify through server
-      updated_resource = server.read_resource('counter')
-      expect(updated_resource.instance.content).to eq('5')
     end
   end
 
@@ -244,7 +196,7 @@ RSpec.describe FastMcp::Resource do
       expect(resource.uri).to match(/test\.txt$/)
       expect(resource.resource_name).to eq('test.txt')
       expect(resource.mime_type).to eq('text/plain')
-      expect(resource.instance.content).to eq('file content')
+      expect(resource.new.content).to eq('file content')
     end
 
     it 'detects mime type from file extension' do
