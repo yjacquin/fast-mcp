@@ -43,6 +43,11 @@ module FastMcp
         $stdout.flush
       end
 
+      # stdio transport does not support sending to specific clients
+      def send_message_to(client_id, message)
+        send_message(message)
+      end
+
       private
 
       # Send a JSON-RPC error response
