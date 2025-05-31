@@ -18,6 +18,7 @@ Tools are a core concept in the Model Context Protocol (MCP). They allow you to 
   - [Tool Metadata](#tool-metadata)
   - [Tool Permissions](#tool-permissions)
   - [Request Headers](#request-headers)
+  - [Composing Tool Authentication](#composing-tool-authentication)
 - [Best Practices](#best-practices)
 - [Examples](#examples)
 
@@ -175,6 +176,66 @@ class RepeatTool < FastMcp::Tool
   end
 end
 ```
+
+### Authentication and Authorization
+
+Using [the `headers` method](#request-headers), you can access headers passed to the tool call. This can be used to identify a user by authentication details passed in headers:
+```ruby
+class CurrentUserTool < FastMcp::Tool
+  description "Gets the current user details"
+
+  def call
+    JSON.generate current_user
+  end
+
+  private
+
+  def current_user
+    token = headers["AUTHORIZATION"]
+
+    # Validate token
+    # ...
+
+    user
+  end
+end
+```
+
+This can be combined with the `authorize` method to ensure a user is authorized before allowing them to use the tool:
+
+```ruby
+class PerformAuthenticatedActionTool < FastMcp::Tool
+  description "Perform an action which requires an authenticated user"
+
+  arguments do
+    required(:item_id).filled(:integer).description('ID of item to affect')
+  end
+
+  authorize do |item_id:|
+    current_user&.is_admin? &&
+      get_item(item_id).user_id == current_user.id
+  end
+
+  def call(item_id:)
+    # Perform action
+    # ...
+  end
+
+  private
+
+  def current_user
+    # Get current user
+    # ...
+  end
+
+  def get_item(id)
+    # Get item
+    # ...
+  end
+end
+```
+
+You can also implement this in a parent class and the authorization will be inherited by all children. Children may also define their own authorization - in this case, _all_ authorization checks must pass for a caller to be allowed access to the tool.
 
 ## Calling Tools From Another Tool
 Tools can call other tools:
@@ -371,6 +432,52 @@ class MyTool < FastMcp::Tool
   def call
     "Host header is #{headers["HOST"]}"
   end
+end
+```
+
+### Composing Tool Authentication
+
+It can be useful to extract authentication into modules to share functionality without having to bake logic into your tool's ancestor chain.
+
+```ruby
+# This module adds a current_user method to tools which include it, and requires that the user is present
+module UserAuthenticator
+  def self.included(tool)
+    tool.authorize do
+      not current_user.nil?
+    end
+  end
+
+  def current_user
+    # Get current user
+    # ...
+  end
+end
+
+# This module ensures that the THIRD_PARTY_API_KEY header is set
+module ThirdPartyApiKeyRequired
+  def self.included(tool)
+    tool.authorize do
+      not headers['THIRD_PARTY_API_KEY'].nil?
+    end
+  end
+end
+
+class MyTool < FastMcp::Tool
+  # Extra authentications are executed in the order they appear in the tool.
+  # In this case:
+  # - Any authorizations from ancestor classes
+  # - UserAuthenticator
+  # - This tool's authorize call
+  # - ThirdParyApiKeyRequired
+  include UserAuthenticator
+
+  authorize do
+    # My custom auth for this tool
+    # ...
+  end
+
+  include ThirdPartyApiKeyRequired
 end
 ```
 

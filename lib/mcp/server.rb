@@ -304,7 +304,13 @@ module FastMcp
       begin
         # Convert string keys to symbols for Ruby
         symbolized_args = symbolize_keys(arguments)
-        result, metadata = tool.new(headers: headers).call_with_schema_validation!(**symbolized_args)
+
+        tool_instance = tool.new(headers: headers)
+        authorized = tool_instance.authorized?(**symbolized_args)
+
+        return send_error(-32_602, 'Unauthorized', id) unless authorized
+
+        result, metadata = tool_instance.call_with_schema_validation!(**symbolized_args)
 
         # Format and send the result
         send_formatted_result(result, id, metadata)
