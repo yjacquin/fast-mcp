@@ -28,7 +28,7 @@ The Fast MCP library supports the following resource features:
 
 ### Creating and Registering Resources
 
-You can create resources by inheriting from the `FastMcp::Resource` class:
+You can create resources by inheriting from the `FastMcp::Resource` class. Resources are stateless and generate content dynamically:
 
 ```ruby
 require 'fast_mcp'
@@ -43,14 +43,10 @@ class CounterResource < FastMcp::Resource
   description "A simple counter resource"
   mime_type "application/json"
   
-  def initialize
-    @count = 0
-  end
-  
-  attr_accessor :count
-  
   def content
-    JSON.generate({ count: @count })
+    # Read from file or database, or generate dynamically
+    count = File.exist?('counter.txt') ? File.read('counter.txt').to_i : 0
+    JSON.generate({ count: count })
   end
 end
 
@@ -76,15 +72,27 @@ server.register_resource(image_resource)
 
 ### Updating Resources
 
-You can update a resource's content:
+Since resources are stateless, updates are typically handled through tools that modify external state (files, databases, etc.) and then notify about resource changes:
 
 ```ruby
-# Update the counter resource
-counter_resource = server.read_resource("example/counter")
-counter_resource.instance.count += 1
+# Example tool that updates the counter
+class IncrementCounterTool < FastMcp::Tool
+  description 'Increment the counter'
 
-# Notify the content has been updated
-server.notify_resource_updated("example/counter")
+  def call
+    # Read current value
+    current_count = File.exist?('counter.txt') ? File.read('counter.txt').to_i : 0
+    
+    # Increment and save
+    new_count = current_count + 1
+    File.write('counter.txt', new_count.to_s)
+
+    # Notify that the resource has been updated
+    notify_resource_updated("example/counter")
+
+    { count: new_count }
+  end
+end
 ```
 
 ### Removing Resources
@@ -96,10 +104,9 @@ You can remove resources from the server:
 server.remove_resource("example/counter")
 ```
 
-
 ## Custom Resource Types
 
-You can create custom resource types by inheriting from `FastMcp::Resource` and implementing the required methods:
+You can create custom resource types by inheriting from `FastMcp::Resource` and implementing the required methods. Resources should be stateless and read from external sources:
 
 ```ruby
 # Custom resource type for weather data
@@ -109,50 +116,31 @@ class WeatherResource < FastMcp::Resource
   description "Current weather conditions"
   mime_type "application/json"
   
-  def initialize(location = "New York")
-    @location = location
-    @conditions = {
-      temperature: 22.5,
-      condition: "Sunny",
-      humidity: 45,
-      wind_speed: 10,
-      location: @location,
-      updated_at: Time.now.to_s
-    }
-  end
-  
   def content
-    JSON.generate(@conditions)
-  end
-  
-  def update_content(new_content)
-    parsed_content = JSON.parse(new_content, symbolize_names: true)
-    @conditions.merge!(parsed_content)
-    @conditions[:updated_at] = Time.now.to_s
-  end
-  
-  # Custom method to update just the temperature
-  def update_temperature(temp)
-    @conditions[:temperature] = temp
-    @conditions[:updated_at] = Time.now.to_s
+    # Generate dynamic content or read from external source
+    JSON.generate({
+      temperature: rand(15..30),
+      condition: ['Sunny', 'Cloudy', 'Rainy'].sample,
+      humidity: rand(30..70),
+      wind_speed: rand(5..25),
+      updated_at: Time.now.to_s
+    })
   end
 end
 
 # Register the resource
 server.register_resource(WeatherResource)
 
-# Later, update just the temperature
-WeatherResource.instance.update_temperature(25.5)
-# Notify the resource has been updated
-server.notify_resource_updated(WeatherResource.uri)
+# To update weather data, you would typically use a tool that
+# writes to a file or database, then notifies about the update
 ```
 
-This custom resource type has:
+This approach ensures that:
 
-1. Class-level methods to define URI, name, description, and MIME type
-2. Instance variables to store state
-3. A `content` method that returns the current state as JSON
-4. An `update_content` method to handle updates
+1. Resources are stateless and don't hold in-memory state
+2. Content is generated dynamically from external sources
+3. Multiple instances can be created without conflicts
+4. Resources are more suitable for distributed environments
 
 ## Integration with Web Frameworks
 
@@ -171,12 +159,14 @@ For more details on integrating with web frameworks, see:
 
 3. **Handle Binary Content Properly**: When dealing with binary content, be careful with encoding and decoding.
 
-4. **Consider Performance**: For frequently updated resources, consider throttling updates to avoid overwhelming clients.
+4. **Keep Resources Stateless**: Resources should not maintain in-memory state. Instead, read from files, databases, or other external sources.
 
-5. **Error Handling**: Implement proper error handling for resource operations, especially when dealing with external data sources.
+5. **Use Tools for Updates**: Use MCP tools to modify external state and notify about resource changes.
 
-6. **Security**: Be mindful of what data you expose through resources, especially in multi-tenant applications.
+6. **Error Handling**: Implement proper error handling for resource operations, especially when dealing with external data sources.
+
+7. **Security**: Be mindful of what data you expose through resources, especially in multi-tenant applications.
 
 ## Conclusion
 
-MCP Resources provide a powerful way to share and synchronize data between servers and clients. By using resources alongside tools, you can build rich, interactive applications with real-time updates. 
+MCP Resources provide a powerful way to share and synchronize data between servers and clients. By keeping resources stateless and using tools for updates, you can build robust, scalable applications that work well in distributed environments. 

@@ -260,7 +260,7 @@ module FastMcp
 
         base_content = { uri: uri }
         base_content[:mimeType] = resource.mime_type if resource.mime_type
-        resource_instance = resource.instance(uri)
+        resource_instance = resource.initialize_from_uri(uri)
         @logger.debug("Resource instance params: #{resource_instance.params.inspect}")
 
         result = if resource_instance.binary?

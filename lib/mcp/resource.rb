@@ -3,7 +3,6 @@
 require 'json'
 require 'base64'
 require 'mime/types'
-require 'singleton'
 require 'addressable/template'
 
 module FastMcp
@@ -12,7 +11,6 @@ module FastMcp
   class Resource
     class << self
       attr_accessor :server
-      attr_reader :template_params
 
       # Define URI for this resource
       # @param value [String, nil] The URI for this resource
@@ -73,33 +71,6 @@ module FastMcp
       # @return [Hash] The parameters from the URI
       def params_from_uri(uri)
         match(uri).mapping.transform_keys(&:to_sym)
-      end
-
-      # Create a new instance with the given params
-      # @param params [Hash] The parameters for this resource instance
-      # @return [Resource] A new resource instance
-      def instance(uri = self.uri)
-        @instances ||= {}
-        @instances[uri] ||= begin
-          resource_class = Class.new(self)
-          resource_class.instance_variable_set(:@params, params_from_uri(uri))
-
-          resource_class.define_singleton_method(:instance) do
-            @instance ||= begin
-              instance = new
-              instance.instance_variable_set(:@params, params)
-              instance
-            end
-          end
-
-          resource_class.instance
-        end
-      end
-
-      # Get the parameters for this resource instance
-      # @return [Hash] The parameters for this resource instance
-      def params
-        @params || {}
       end
 
       # Define name for this resource
@@ -185,10 +156,9 @@ module FastMcp
       end
     end
 
-    include Singleton
-
     # Initialize with instance variables
-    def initialize
+    # @param params [Hash] The parameters for this resource instance
+    def initialize(params = {})
       @params = params
     end
 
@@ -218,9 +188,7 @@ module FastMcp
 
     # Get parameters from the URI template
     # @return [Hash] The parameters extracted from the URI
-    def params
-      @params || self.class.params
-    end
+    attr_reader :params
 
     # Method to be overridden by subclasses to dynamically generate content
     # @return [String, nil] Generated content for this resource
