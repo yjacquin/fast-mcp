@@ -115,7 +115,7 @@ module FastMcp
     def start_rack(app, options = {})
       @logger.info("Starting MCP server as Rack middleware: #{@name} v#{@version}")
       @logger.info("Available tools: #{@tools.keys.join(', ')}")
-      @logger.info("Available resources: #{@resources.keys.join(', ')}")
+      @logger.info("Available resources: #{@resources.map(&:resource_name).join(', ')}")
 
       # Use Rack transport
       transport_klass = FastMcp::Transports::RackTransport
@@ -129,7 +129,7 @@ module FastMcp
     def start_authenticated_rack(app, options = {})
       @logger.info("Starting MCP server as Authenticated Rack middleware: #{@name} v#{@version}")
       @logger.info("Available tools: #{@tools.keys.join(', ')}")
-      @logger.info("Available resources: #{@resources.keys.join(', ')}")
+      @logger.info("Available resources: #{@resources.map(&:resource_name).join(', ')}")
 
       # Use Rack transport
       transport_klass = FastMcp::Transports::AuthenticatedRackTransport
