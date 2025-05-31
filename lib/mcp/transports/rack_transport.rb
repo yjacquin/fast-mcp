@@ -588,7 +588,7 @@ module FastMcp
         end
 
         # 2. Apply filters if configured
-        if @server.has_filters?
+        if @server.contains_filters?
           @logger.debug('Server has filters, creating filtered copy')
           # Cache filtered servers to avoid recreating them
           cache_key = generate_cache_key(request)

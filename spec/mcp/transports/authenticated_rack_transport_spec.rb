@@ -7,8 +7,8 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
       logger: Logger.new(nil), 
       transport: nil,
       'transport=' => nil,
-      has_filters?: false,
-      handle_request: StringIO.new('{"jsonrpc":"2.0","result":{},"id":1}')
+      contains_filters?: false,
+      handle_request: nil  # handle_request doesn't return anything, it sends through transport
     )
   end
   let(:logger) { Logger.new(nil) }

@@ -108,19 +108,19 @@ RSpec.describe 'FastMcp::Server filtering' do
     end
   end
   
-  describe '#has_filters?' do
+  describe '#contains_filters?' do
     it 'returns false when no filters are configured' do
-      expect(server.has_filters?).to be false
+      expect(server.contains_filters?).to be false
     end
     
     it 'returns true when tool filters are configured' do
       server.filter_tools { |_request, tools| tools }
-      expect(server.has_filters?).to be true
+      expect(server.contains_filters?).to be true
     end
     
     it 'returns true when resource filters are configured' do
       server.filter_resources { |_request, resources| resources }
-      expect(server.has_filters?).to be true
+      expect(server.contains_filters?).to be true
     end
   end
   
@@ -191,8 +191,9 @@ RSpec.describe 'FastMcp::Server filtering' do
       it 'filters resources based on role' do
         filtered_server = server.create_filtered_copy(request)
         
-        expect(filtered_server.resources.keys).to contain_exactly('user/profile')
-        expect(filtered_server.resources.keys).not_to include('admin/config')
+        resource_uris = filtered_server.resources.map(&:uri)
+        expect(resource_uris).to contain_exactly('user/profile')
+        expect(resource_uris).not_to include('admin/config')
       end
     end
     

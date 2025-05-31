@@ -143,12 +143,6 @@ app = lambda do |env|
     <html>
       <head>
         <title>MCP Filtering Example</title>
-        <style>
-          body { font-family: sans-serif; margin: 40px; }
-          .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
-          .role { font-weight: bold; color: #0066cc; }
-          code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
-        </style>
       </head>
       <body>
         <h1>Dynamic Tool Filtering Example</h1>

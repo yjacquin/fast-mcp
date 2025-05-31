@@ -7,8 +7,8 @@ RSpec.describe FastMcp::Transports::RackTransport do
       logger: Logger.new(nil), 
       transport: nil, 
       'transport=' => nil,
-      has_filters?: false,
-      handle_request: StringIO.new('{"jsonrpc":"2.0","result":{},"id":1}')
+      contains_filters?: false,
+      handle_request: nil  # handle_request doesn't return anything, it sends through transport
     )
   end
   let(:logger) { Logger.new(nil) }
@@ -429,7 +429,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         expect(result[0]).to eq(200)
         expect(result[1]['Content-Type']).to eq('application/json')
-        expect(result[2]).to be_a(Array)
+        expect(result[2]).to eq([]) # handle_request returns nil, so response body is empty array
       end
 
       it 'handles errors in JSON-RPC requests' do

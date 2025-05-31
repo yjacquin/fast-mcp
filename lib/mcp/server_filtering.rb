@@ -14,7 +14,7 @@ module FastMcp
     end
 
     # Check if filters are configured
-    def has_filters?
+    def contains_filters?
       @tool_filters.any? || @resource_filters.any?
     end
 
@@ -70,7 +70,7 @@ module FastMcp
 
     # Apply all resource filters to the resources collection
     def apply_resource_filters(request)
-      filtered_resources = @resources.values
+      filtered_resources = @resources
       @resource_filters.each do |filter|
         filtered_resources = filter.call(request, filtered_resources)
       end
