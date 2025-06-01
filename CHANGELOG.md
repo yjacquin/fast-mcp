@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2025-06-01
+### Added
+- Handle filtering tools and resources [#85 @yjacquin](https://github.com/yjacquin/fast-mcp/pull/85)
+- Support for resource templates 🥳 Big thanks to @danielcooper for the contribution [#84 co-authored by @danielcooper and @yjacquin](https://github.com/yjacquin/fast-mcp/pull/84)
+- Possibility to authorize requests before tool calls [#79 @EuanEdgar](https://github.com/yjacquin/fast-mcp/pull/79)
+- Possibility to read request headers in tool calls [#78 @EuanEdgar](https://github.com/yjacquin/fast-mcp/pull/78)
+### Changed
+- Bump Dependencies [#86 @aothelal](https://github.com/yjacquin/fast-mcp/pull/86)
+- ⚠️ Resources are now stateless, meaning that in-memory resources won't work anymore, they require an external data source such as database, file to read and write too, etc. This was needed for a refactoring of the resource class for the [resource template PR](https://github.com/yjacquin/fast-mcp/pull/84)
+### Fixed
+- Stop overriding log level to info [#91 @yjacquin](https://github.com/yjacquin/fast-mcp/pull/91)
+- Properly handle ping request responses from clients [#89 @yjacquin](https://github.com/yjacquin/fast-mcp/pull/89)
+- Add Thread Safety to RackTransport sse_clients [#82 @Kevin-K](https://github.com/yjacquin/fast-mcp/pull/82)
+
 ## [1.4.0] - 2025-05-10
 ### Added
 - Conditionnally hidden properties for tool calls (#70) [#70 @yjacquin](https://github.com/yjacquin/fast-mcp/pull/70)
