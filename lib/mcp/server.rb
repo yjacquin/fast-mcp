@@ -33,7 +33,6 @@ module FastMcp
       @resources = []
       @resource_subscriptions = {}
       @logger = logger
-      @logger.level = Logger::INFO
       @request_id = 0
       @transport_klass = nil
       @transport = nil
