@@ -140,6 +140,13 @@ module FastMcp
       @transport
     end
 
+    # Handle a JSON-RPC request and return the response as a JSON string
+    def handle_json_request(request, headers: {})
+      request_str = request.is_a?(String) ? request : JSON.generate(request)
+
+      handle_request(request_str, headers: headers)
+    end
+
     # Handle incoming JSON-RPC request
     def handle_request(json_str, headers: {}) # rubocop:disable Metrics/MethodLength
       begin
@@ -150,14 +157,12 @@ module FastMcp
 
       @logger.debug("Received request: #{request.inspect}")
 
-      # Check if it's a valid JSON-RPC 2.0 request
-      unless request['jsonrpc'] == '2.0' && request['method']
-        return send_error(-32_600, 'Invalid Request', request['id'])
-      end
-
       method = request['method']
       params = request['params'] || {}
       id = request['id']
+
+      # Check if it's a valid JSON-RPC 2.0 request
+      return send_error(-32_600, 'Invalid Request', id) unless request['jsonrpc'] == '2.0'
 
       case method
       when 'ping'
@@ -180,22 +185,15 @@ module FastMcp
         handle_resources_subscribe(params, id)
       when 'resources/unsubscribe'
         handle_resources_unsubscribe(params, id)
+      when nil
+        # This is a notification response, we don't need to handle it
+        nil
       else
         send_error(-32_601, "Method not found: #{method}", id)
       end
     rescue StandardError => e
       @logger.error("Error handling request: #{e.message}, #{e.backtrace.join("\n")}")
       send_error(-32_600, "Internal error: #{e.message}, #{e.backtrace.join("\n")}", id)
-    end
-
-    # Handle a JSON-RPC request and return the response as a JSON string
-    def handle_json_request(request, headers: {})
-      # Process the request
-      if request.is_a?(String)
-        handle_request(request, headers: headers)
-      else
-        handle_request(JSON.generate(request), headers: headers)
-      end
     end
 
     # Notify subscribers about a resource update
