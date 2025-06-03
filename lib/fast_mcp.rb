@@ -7,6 +7,9 @@
 module FastMcp
   class << self
     attr_accessor :server
+
+    attr_accessor :tools_dir
+    attr_accessor :resources_dir
   end
 end
 
@@ -102,18 +105,20 @@ module FastMcp
 
   # Register a resource with the MCP server
   # @param resource [FastMcp::Resource] The resource to register
+  # @option options [Boolean] :notify Whether to notify subscribers about the list change
   # @return [FastMcp::Resource] The registered resource
-  def self.register_resource(resource)
+  def self.register_resource(resource, notify: true)
     self.server ||= FastMcp::Server.new(name: 'mcp-server', version: '1.0.0')
-    self.server.register_resource(resource)
+    self.server.register_resource(resource, notify: notify)
   end
 
   # Register multiple resources at once
   # @param resources [Array<FastMcp::Resource>] The resources to register
+  # @option options [Boolean] :notify Whether to notify subscribers about the list change
   # @return [Array<FastMcp::Resource>] The registered resources
-  def self.register_resources(*resources)
+  def self.register_resources(*resources, notify: true)
     self.server ||= FastMcp::Server.new(name: 'mcp-server', version: '1.0.0')
-    self.server.register_resources(*resources)
+    self.server.register_resources(*resources, notify: notify)
   end
 
   # Mount the MCP middleware in a Rails application
@@ -127,6 +132,8 @@ module FastMcp
   # @option options [Logger] :logger The logger to use
   # @option options [Boolean] :authenticate Whether to use authentication
   # @option options [String] :auth_token The authentication token
+  # @option options [String] :tools_dir The directory to load tools from
+  # @option options [String] :resources_dir The directory to load resources from
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
@@ -147,6 +154,9 @@ module FastMcp
     options[:allowed_ips] = allowed_ips
     options[:logger] = logger
     options[:allowed_origins] = allowed_origins
+
+    self.tools_dir = options.delete(:tools_dir) || Rails.root.join('app/tools')
+    self.resources_dir = options.delete(:resources_dir) || Rails.root.join('app/resources')
 
     # Create or get the server
     self.server = FastMcp::Server.new(name: name, version: version, logger: logger)
