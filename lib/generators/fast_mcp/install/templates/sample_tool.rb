@@ -3,6 +3,13 @@
 class SampleTool < ApplicationTool
   description 'Greet a user'
 
+  # Optional: Add annotations to provide hints about the tool's behavior
+  # annotations(
+  #   title: 'User Greeting',
+  #   readOnlyHint: true,        # This tool only reads data
+  #   openWorldHint: false       # This tool only accesses the local database
+  # )
+
   arguments do
     required(:id).filled(:integer).description('ID of the user to greet')
     optional(:prefix).filled(:string).description('Prefix to add to the greeting')
