@@ -33,7 +33,7 @@ require 'fast_mcp'
 mcp_server = FastMcp::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
 
 # Define your tools
-class ExampleTool < Mcp::Tool
+class ExampleTool < FastMcp::Tool
   description "An example tool"
   arguments  do
    required(:input).filled(:string).description("Input value")
@@ -47,11 +47,11 @@ end
 # Register resources
 class Counter < FastMcp::Resource
   uri "example/counter"
-  resource_name "Counter",
+  resource_name "Counter"
   description "A simple counter resource"
   mime_type "application/json"
 
-  def initialize
+  def initialize(*_args)
     @count = 0
   end
 
@@ -62,9 +62,12 @@ class Counter < FastMcp::Resource
   end
 end
 
+mcp_server.register_tool(ExampleTool)
+mcp_server.register_resource(Counter)
+
 
 # Use the MCP middleware
-use FastMcp::Transports::RackTransport, server
+use FastMcp::Transports::RackTransport, mcp_server
 
 # Define your Sinatra routes
 get '/' do
@@ -86,7 +89,7 @@ require 'fast_mcp'
 mcp_server = FastMcp::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
 
 # Define your tools
-class ExampleTool < Mcp::Tool
+class ExampleTool < FastMcp::Tool
   description "An example tool"
   arguments  do
    required(:input).filled(:string).description("Input value")
@@ -100,7 +103,7 @@ end
 # Register resources
 class Counter < FastMcp::Resource
   uri "example/counter"
-  resource_name "Counter",
+  resource_name "Counter"
   description "A simple counter resource"
   mime_type "application/json"
 
@@ -115,9 +118,11 @@ class Counter < FastMcp::Resource
   end
 end
 
+mcp_server.register_tool(ExampleTool)
+mcp_server.register_resource(Counter)
 
 # Use the MCP middleware
-use FastMcp::Transports::AuthenticatedRackTransport, server
+use FastMcp::Transports::AuthenticatedRackTransport, mcp_server
 
 # Define your Sinatra routes
 get '/' do
@@ -137,7 +142,7 @@ require 'fast_mcp'
 # Use the MCP middleware with a configuration block
 use FastMcp.rack_middleware, { name: 'sinatra-mcp-server', version: '1.0.0'} do |server|
   # Define your tools, here with anonymous classes
-  tool = Class.new(Mcp::Tool) do
+  tool = Class.new(FastMcp::Tool) do
     description "An example tool"
     tool_name "Example"
 
@@ -154,7 +159,7 @@ use FastMcp.rack_middleware, { name: 'sinatra-mcp-server', version: '1.0.0'} do 
   # Register resources
   counter_resource = Class.new(FastMcp::Resource) do
     uri "example/counter"
-    resource_name "Counter",
+    resource_name "Counter"
     description "A simple counter resource"
     mime_type "application/json"
 
@@ -201,9 +206,9 @@ end
 set :api_key, ENV['API_KEY']
 
 # Use the MCP middleware
-use MCP.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server|
+use FastMcp.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server|
   # Define a tool that uses Sinatra helpers and settings
-  class ProcessDataTool < Mcp::Tool
+  class ProcessDataTool < FastMcp::Tool
     description "Process data using Sinatra helpers"
     arguments do
       required(:input).filled(:string).description("Input data")
@@ -237,7 +242,7 @@ class User < ActiveRecord::Base
 end
 
 # Use the MCP middleware
-use MCP.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server|
+use FastMcp.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server|
   # Define a tool that uses ActiveRecord models
   server.tool "search_users" do
     description "Search for users by name"
