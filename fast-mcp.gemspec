@@ -29,13 +29,16 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Runtime dependencies
-  spec.add_dependency 'addressable', '~> 2.8'
   spec.add_dependency 'activesupport', '~> 7.0'
+  spec.add_dependency 'addressable', '~> 2.8'
   spec.add_dependency 'base64'
   spec.add_dependency 'dry-schema', '~> 1.14'
   spec.add_dependency 'json', '~> 2.0'
   spec.add_dependency 'mime-types', '~> 3.4'
-  spec.add_dependency 'rack', '~> 3.1'
+  # Support both Rack 2.x and 3.x for maximum compatibility with legacy apps
+  # This gem only uses simple query parameter access (request.params['key'])
+  # which is not affected by the nested parameter parsing changes in Rack 3.x
+  spec.add_dependency 'rack', '>= 2.2.4', '< 4.0'
 
   # Development dependencies are specified in the Gemfile
 end
