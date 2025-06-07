@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
+require 'active_support/concern'
+require 'active_support/core_ext/class/attribute'
+require 'active_record'
 require 'fast_mcp'
+# Require support files
+Dir[File.expand_path('support/**/*.rb', __dir__)].sort.each { |f| require f }
 
 Bundler.require(:default, :test)
 

@@ -16,6 +16,7 @@ Tools are a core concept in the Model Context Protocol (MCP). They allow you to 
   - [Tool Hidden Arguments](#tool-hidden-arguments)
   - [Tool Categories](#tool-categories)
   - [Tool Metadata](#tool-metadata)
+  - [Tool Annotations](#tool-annotations)
   - [Tool Permissions](#tool-permissions)
   - [Request Headers](#request-headers)
   - [Composing Tool Authentication](#composing-tool-authentication)
@@ -44,6 +45,7 @@ To define a tool, create a class that inherits from `FastMcp::Tool`:
 class HelloTool < FastMcp::Tool
   description "Say hello to someone"
 
+
   def call(**_args)
     "Hello, world!"
   end
@@ -70,9 +72,11 @@ To define arguments for a tool, use the `arguments` class method with a block us
 class GreetTool < FastMcp::Tool
   description "Greet a person"
 
+
   arguments do
     required(:name).filled(:string).description("Name of the person")
   end
+
 
   def call(name:)
     "Hello, #{name}!"
@@ -257,6 +261,14 @@ end
 class GreetMultipleTool < FastMcp::Tool
   description "Greet multiple people"
 
+  # Class variable to hold server instance
+  @server = nil
+
+  # Class methods to get and set server instance
+  class << self
+    attr_accessor :server
+  end
+
   arguments do
     required(:names).array(:string).description("Names of people to greet")
   end
@@ -264,7 +276,6 @@ class GreetMultipleTool < FastMcp::Tool
   def call(names:)
     raise "Server not set" unless self.class.server
 
-    greet_tool = GreetTool.new
     results = names.map do |name|
       # Call the tool
       greet_tool.call(name: name)
@@ -377,19 +388,140 @@ You can add metadata to tools using class methods:
 MCP specifies that we can declare metadata in the tool call result. For this, we have a _meta attr_accessor in all tools. We kept the _meta original naming to avoid collisions with arguments that could be named "metadata". It is a hash that accepts modifications and will be returned to the tool call response whenever it has been modified.
 
 ```ruby
-class RepeatTool < FastMcp::Tool
-  description "Repeat a string multiple times"
+class WeatherTool < FastMcp::Tool
+  description "Get the weather for a location"
+
+  class << self
+    attr_accessor :metadata
+  end
+
+  self.metadata = {
+    author: "John Doe",
+    version: "1.0.0",
+    tags: ["weather", "forecast"]
+  }
 
   arguments do
     required(:text).filled(:string).description("Text to repeat")
     optional(:count).filled(:integer).description("Number of times to repeat")
   end
 
-  def call(text:, count: 3)
-    _meta[:foo] = 'bar'
-    _meta[:some_key] = 'some value'
+  def call(location:)
+    # Implementation
+    { location: location, temperature: rand(0..30), condition: ["Sunny", "Cloudy", "Rainy"].sample }
+  end
+end
+```
 
-    text * count
+### Tool Annotations
+
+Fast MCP supports the Model Context Protocol's [tool annotations](https://modelcontextprotocol.io/docs/concepts/tools#tool-annotations), which provide additional metadata about a tool's behavior, helping clients understand how to present and manage tools:
+
+```ruby
+class WebSearchTool < FastMcp::Tool
+  tool_name "web_search"
+  description "Search the web for information"
+
+  # Add MCP annotations
+  title "Web Search"           # Human-readable title for UI display
+  read_only true               # Tool does not modify its environment
+  destructive false            # Only meaningful when readOnlyHint is false
+  idempotent true              # Calling repeatedly with same args has no additional effect
+  open_world true              # Tool interacts with external entities
+
+  arguments do
+    required(:query).filled(:string).description("The search query")
+    optional(:max_results).filled(:integer, gt?: 0).description("Maximum number of results to return")
+  end
+
+  def call(query:, max_results: 10)
+    # Implementation...
+    { results: ["Result 1", "Result 2", "Result 3"].take(max_results) }
+  end
+end
+```
+
+#### Available Annotations
+
+| Annotation      | Type    | Default | Description                                                               |
+|-----------------|---------|---------|---------------------------------------------------------------------------|
+| `title`         | String  | -       | A human-readable title for the tool, useful for UI display                |
+| `read_only`     | Boolean | false   | If true, indicates the tool does not modify its environment               |
+| `destructive`   | Boolean | true    | If true, the tool may perform destructive updates                         |
+| `idempotent`    | Boolean | false   | If true, calling the tool repeatedly with the same arguments has no additional effect |
+| `open_world`    | Boolean | true    | If true, the tool may interact with an "open world" of external entities  |
+
+#### When to Use Each Annotation
+
+- **title**: Use this to provide a more user-friendly name for your tool that can be displayed in UIs.
+- **read_only**: Set this to `true` for tools that only read data without modifying any state.
+- **destructive**: Set this to `true` for tools that modify state in ways that cannot be easily undone.
+- **idempotent**: Set this to `true` for tools that, when called multiple times with the same arguments, have the same effect as being called once.
+- **open_world**: Set this to `true` for tools that interact with external systems like APIs, databases, or the file system.
+
+#### Examples of Annotation Usage
+
+**Read-only search tool:**
+```ruby
+class SearchDatabaseTool < FastMcp::Tool
+  tool_name "search_database"
+  description "Search the database for records"
+
+  title "Database Search"
+  read_only true      # Just reading data, not modifying
+  open_world false    # Only interacting with a known database, not external systems
+
+  arguments do
+    required(:query).filled(:string).description("Search query")
+  end
+
+  def call(query:)
+    # Implementation...
+  end
+end
+```
+
+**Destructive file operation:**
+```ruby
+class DeleteFileTool < FastMcp::Tool
+  tool_name "delete_file"
+  description "Delete a file from the filesystem"
+
+  title "Delete File"
+  read_only false     # Modifies the environment
+  destructive true    # Destructive operation
+  idempotent true     # Deleting the same file twice has the same effect as once
+  open_world true     # Interacts with the filesystem
+
+  arguments do
+    required(:path).filled(:string).description("File path to delete")
+  end
+
+  def call(path:)
+    # Implementation...
+  end
+end
+```
+
+**Non-destructive database update:**
+```ruby
+class UpdateUserPreferencesTool < FastMcp::Tool
+  tool_name "update_user_preferences"
+  description "Update user preferences in the database"
+
+  title "Update User Preferences"
+  read_only false     # Modifies the environment
+  destructive false   # Not destructive, just updating preferences
+  idempotent true     # Setting the same preferences multiple times has the same effect
+  open_world false    # Only interacting with a known database
+
+  arguments do
+    required(:user_id).filled(:string).description("User ID")
+    required(:preferences).hash.description("User preferences to update")
+  end
+
+  def call(user_id:, preferences:)
+    # Implementation...
   end
 end
 ```
