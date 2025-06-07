@@ -629,4 +629,46 @@ RSpec.describe FastMcp::Tool do
       expect(test_class.metadata(:undefined_key)).to be_nil
     end
   end
+
+  describe '.annotations' do
+    it 'sets and returns annotations hash' do
+      test_class = Class.new(described_class)
+      annotations = {
+        title: 'Web Search',
+        readOnlyHint: true,
+        openWorldHint: true
+      }
+      test_class.annotations(annotations)
+      
+      expect(test_class.annotations).to eq(annotations)
+    end
+    
+    it 'returns empty hash when no annotations are set' do
+      test_class = Class.new(described_class)
+      
+      expect(test_class.annotations).to eq({})
+    end
+    
+    it 'returns the current annotations when called with nil' do
+      test_class = Class.new(described_class)
+      annotations = { title: 'Test Tool' }
+      test_class.annotations(annotations)
+      
+      expect(test_class.annotations(nil)).to eq(annotations)
+    end
+    
+    it 'supports all MCP annotation fields' do
+      test_class = Class.new(described_class)
+      annotations = {
+        title: 'Delete File',
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+      test_class.annotations(annotations)
+      
+      expect(test_class.annotations).to eq(annotations)
+    end
+  end
 end

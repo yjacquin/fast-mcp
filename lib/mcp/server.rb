@@ -294,11 +294,17 @@ module FastMcp
     # Handle tools/list request
     def handle_tools_list(id)
       tools_list = @tools.values.map do |tool|
-        {
+        tool_info = {
           name: tool.tool_name,
           description: tool.description || '',
           inputSchema: tool.input_schema_to_json || { type: 'object', properties: {}, required: [] }
         }
+
+        # Add annotations if they exist
+        annotations = tool.annotations
+        tool_info[:annotations] = annotations unless annotations.empty?
+
+        tool_info
       end
 
       send_result({ tools: tools_list }, id)
