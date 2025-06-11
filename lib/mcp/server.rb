@@ -306,7 +306,7 @@ module FastMcp
           # Convert snake_case keys to camelCase for MCP protocol
           camel_case_annotations = {}
           annotations.each do |key, value|
-            camel_key = key.to_s.gsub(/_([a-z])/) { $1.upcase }.to_sym
+            camel_key = key.to_s.gsub(/_([a-z])/) { ::Regexp.last_match(1).upcase }.to_sym
             camel_case_annotations[camel_key] = value
           end
           tool_info[:annotations] = camel_case_annotations
