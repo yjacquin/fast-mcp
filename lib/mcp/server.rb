@@ -302,7 +302,15 @@ module FastMcp
 
         # Add annotations if they exist
         annotations = tool.annotations
-        tool_info[:annotations] = annotations unless annotations.empty?
+        unless annotations.empty?
+          # Convert snake_case keys to camelCase for MCP protocol
+          camel_case_annotations = {}
+          annotations.each do |key, value|
+            camel_key = key.to_s.gsub(/_([a-z])/) { $1.upcase }.to_sym
+            camel_case_annotations[camel_key] = value
+          end
+          tool_info[:annotations] = camel_case_annotations
+        end
 
         tool_info
       end

@@ -288,8 +288,8 @@ class WebSearchTool < FastMcp::Tool
   
   annotations(
     title: 'Web Search',           # Human-readable title for the tool
-    readOnlyHint: true,           # Indicates the tool doesn't modify its environment
-    openWorldHint: true           # The tool interacts with external entities
+    read_only_hint: true,          # Indicates the tool doesn't modify its environment
+    open_world_hint: true          # The tool interacts with external entities
   )
   
   arguments do
@@ -307,10 +307,10 @@ Available annotations:
 | Annotation | Type | Default | Description |
 |------------|------|---------|-------------|
 | `title` | string | - | A human-readable title for the tool, useful for UI display |
-| `readOnlyHint` | boolean | false | If true, indicates the tool does not modify its environment |
-| `destructiveHint` | boolean | true | If true, the tool may perform destructive updates (only meaningful when `readOnlyHint` is false) |
-| `idempotentHint` | boolean | false | If true, calling the tool repeatedly with the same arguments has no additional effect |
-| `openWorldHint` | boolean | true | If true, the tool may interact with an "open world" of external entities |
+| `read_only_hint` | boolean | false | If true, indicates the tool does not modify its environment |
+| `destructive_hint` | boolean | true | If true, the tool may perform destructive updates (only meaningful when `read_only_hint` is false) |
+| `idempotent_hint` | boolean | false | If true, calling the tool repeatedly with the same arguments has no additional effect |
+| `open_world_hint` | boolean | true | If true, the tool may interact with an "open world" of external entities |
 
 Example with all annotations:
 
@@ -320,10 +320,10 @@ class DeleteFileTool < FastMcp::Tool
   
   annotations(
     title: 'Delete File',
-    readOnlyHint: false,      # This tool modifies the filesystem
-    destructiveHint: true,    # Deleting files is destructive
-    idempotentHint: true,     # Deleting the same file twice has no additional effect
-    openWorldHint: false      # Only interacts with the local filesystem
+    read_only_hint: false,     # This tool modifies the filesystem
+    destructive_hint: true,    # Deleting files is destructive
+    idempotent_hint: true,     # Deleting the same file twice has no additional effect
+    open_world_hint: false     # Only interacts with the local filesystem
   )
   
   arguments do

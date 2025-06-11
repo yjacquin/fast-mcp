@@ -635,8 +635,8 @@ RSpec.describe FastMcp::Tool do
       test_class = Class.new(described_class)
       annotations = {
         title: 'Web Search',
-        readOnlyHint: true,
-        openWorldHint: true
+        read_only_hint: true,
+        open_world_hint: true
       }
       test_class.annotations(annotations)
       
@@ -661,10 +661,10 @@ RSpec.describe FastMcp::Tool do
       test_class = Class.new(described_class)
       annotations = {
         title: 'Delete File',
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: true,
-        openWorldHint: false
+        read_only_hint: false,
+        destructive_hint: true,
+        idempotent_hint: true,
+        open_world_hint: false
       }
       test_class.annotations(annotations)
       

@@ -6,8 +6,8 @@ class SampleTool < ApplicationTool
   # Optional: Add annotations to provide hints about the tool's behavior
   # annotations(
   #   title: 'User Greeting',
-  #   readOnlyHint: true,        # This tool only reads data
-  #   openWorldHint: false       # This tool only accesses the local database
+  #   read_only_hint: true,      # This tool only reads data
+  #   open_world_hint: false     # This tool only accesses the local database
   # )
 
   arguments do

@@ -170,8 +170,8 @@ RSpec.describe FastMcp::Server do
             
             annotations(
               title: 'Web Search Tool',
-              readOnlyHint: true,
-              openWorldHint: true
+              read_only_hint: true,
+              open_world_hint: true
             )
 
             def call(**_args)

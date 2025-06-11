@@ -211,8 +211,8 @@ class WebSearchTool < FastMcp::Tool
 
   annotations(
     title: 'Web Search',
-    readOnlyHint: true,
-    openWorldHint: true
+    read_only_hint: true,
+    open_world_hint: true
   )
 
   arguments do
@@ -231,10 +231,10 @@ class DeleteFileTool < FastMcp::Tool
 
   annotations(
     title: 'Delete File',
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: true,
-    openWorldHint: false
+    read_only_hint: false,
+    destructive_hint: true,
+    idempotent_hint: true,
+    open_world_hint: false
   )
 
   arguments do
@@ -251,10 +251,10 @@ class CreateRecordTool < FastMcp::Tool
 
   annotations(
     title: 'Create Database Record',
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: false,
-    openWorldHint: false
+    read_only_hint: false,
+    destructive_hint: false,
+    idempotent_hint: false,
+    open_world_hint: false
   )
 
   arguments do
