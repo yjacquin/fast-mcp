@@ -124,7 +124,10 @@ module FastMcp
       end
 
       def tool_name(name = nil)
-        return @name || self.name if name.nil?
+        name = @name || self.name if name.nil?
+        return if name.nil?
+
+        name = name.gsub(/[^a-zA-Z0-9_-]/, '')[0, 64]
 
         @name = name
       end

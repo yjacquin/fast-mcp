@@ -9,6 +9,20 @@ RSpec.describe FastMcp::Tool do
       expect(test_class.tool_name).to eq('custom_tool')
     end
 
+    it 'sets and returns the name (exceeds 64 characters - will be truncated)' do
+      test_class = Class.new(described_class)
+      test_class.tool_name('custom_very_long_tool_name_that_exceeds_64_characters_that_will_be_truncated')
+
+      expect(test_class.tool_name).to eq('custom_very_long_tool_name_that_exceeds_64_characters_that_will_')
+    end
+
+    it 'sets and returns the name (with special characters - special characters will be removed)' do
+      test_class = Class.new(described_class)
+      test_class.tool_name('custom_tool_name_with_special_characters_like!@#$%^&*()')
+
+      expect(test_class.tool_name).to eq('custom_tool_name_with_special_characters_like')
+    end
+
     it 'returns the current name when called with nil' do
       test_class = Class.new(described_class)
       test_class.tool_name('custom_tool')
@@ -22,9 +36,9 @@ RSpec.describe FastMcp::Tool do
     end
 
     it 'returns the name of the class' do
-      class Bar < described_class; end;
+      class Foo; class Bar < FastMcp::Tool; end; end
 
-      expect(Bar.tool_name).to eq('Bar')
+      expect(Foo::Bar.tool_name).to eq('FooBar')
     end
   end
 
