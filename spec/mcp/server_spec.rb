@@ -156,6 +156,66 @@ RSpec.describe FastMcp::Server do
 
         server.handle_request(request)
       end
+      
+      context 'with tool annotations' do
+        let(:annotated_tool_class) do
+          Class.new(FastMcp::Tool) do
+            def self.name
+              'annotated-tool'
+            end
+
+            def self.description
+              'A tool with annotations'
+            end
+            
+            annotations(
+              title: 'Web Search Tool',
+              read_only_hint: true,
+              open_world_hint: true
+            )
+
+            def call(**_args)
+              'Searching...'
+            end
+          end
+        end
+        
+        before do
+          server.register_tool(annotated_tool_class)
+        end
+        
+        it 'includes annotations in the tools list' do
+          request = { jsonrpc: '2.0', method: 'tools/list', id: 1 }.to_json
+
+          expect(server).to receive(:send_result) do |result, id|
+            expect(id).to eq(1)
+            
+            annotated_tool = result[:tools].find { |t| t[:name] == 'annotated-tool' }
+            expect(annotated_tool[:annotations]).to eq({
+              title: 'Web Search Tool',
+              readOnlyHint: true,
+              openWorldHint: true
+            })
+          end
+
+          server.handle_request(request)
+        end
+      end
+      
+      context 'with tool without annotations' do
+        it 'does not include annotations field' do
+          request = { jsonrpc: '2.0', method: 'tools/list', id: 1 }.to_json
+
+          expect(server).to receive(:send_result) do |result, id|
+            expect(id).to eq(1)
+            
+            test_tool = result[:tools].find { |t| t[:name] == 'test-tool' }
+            expect(test_tool).not_to have_key(:annotations)
+          end
+
+          server.handle_request(request)
+        end
+      end
     end
 
     context 'with a tools/call request' do
