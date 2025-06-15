@@ -219,6 +219,89 @@ class ApplicationResource < ActionResource::Base
 end
 ```
 
+
+### 🏷️ Tool Annotations
+FastMCP supports the MCP tool annotation specification, which allows you to provide additional metadata about your tools' behavior:
+
+```ruby
+class WebSearchTool < FastMcp::Tool
+  tool_name 'web_search'
+  description 'Search the web for information'
+
+  # Tool annotations for better UI and behavior hints
+  title 'Web Search'          # Human-friendly title for UI display
+  read_only true              # Tool doesn't modify its environment
+  open_world true             # Tool interacts with external entities
+
+  arguments do
+    required(:query).filled(:string).description('The search query')
+    optional(:max_results).filled(:integer, gt?: 0).description('Maximum number of results')
+  end
+
+  def call(query:, max_results: 10)
+    # Implementation...
+  end
+end
+
+class DeleteFileTool < FastMcp::Tool
+  tool_name 'delete_file'
+  description 'Delete a file from the filesystem'
+
+  # Tool annotations for destructive operations
+  title 'Delete File'
+  read_only false            # Tool modifies its environment
+  destructive true           # Tool performs destructive updates
+  idempotent true            # Calling repeatedly with same args has no additional effect
+  open_world false           # Tool doesn't interact with external entities
+
+  arguments do
+    required(:path).filled(:string).description('File path to delete')
+  end
+
+  def call(path:)
+    # Implementation...
+  end
+end
+
+### 🔄 ActiveRecord Auto-derive
+
+FastMCP automatically discovers and registers ActiveRecord models that expose methods through the `expose_to_mcp` method:
+
+```ruby
+class User < ApplicationRecord
+  # Regular methods
+  def full_name
+    "#{first_name} #{last_name}"
+  end
+
+  # Predicate methods with ? are automatically handled
+  def is_admin?
+    role == 'admin'
+  end
+
+  # Expose methods to MCP
+  expose_to_mcp :full_name,
+    description: "Get the user's full name"
+
+  # Methods with special characters like ? are automatically sanitized
+  # The tool will be registered as "user_is_admin_is"
+  expose_to_mcp :is_admin?,
+    description: "Check if the user is an admin"
+
+  # You can also provide a custom tool name
+  expose_to_mcp :is_admin?,
+    description: "Check if the user is an admin",
+    tool_name: 'user_admin_check'
+end
+```
+
+The library automatically handles special characters in method names:
+- Methods with `?` are converted to have `_is` as a suffix (e.g., `is_admin?` → `is_admin_is`)
+- Methods with `!` are converted to have `_bang` as a suffix
+- Methods with `=` are converted to have `_equals` as a suffix
+
+This ensures that the tool names are valid Ruby constants while preserving the original method behavior.
+
 ### Easy Sinatra setup
 I'll let you check out the dedicated [sinatra integration docs](./docs/sinatra_integration.md).
 

@@ -14,6 +14,7 @@ end
 require_relative 'mcp/tool'
 require_relative 'mcp/server'
 require_relative 'mcp/resource'
+require_relative 'mcp/tools'
 require_relative 'mcp/railtie' if defined?(Rails::Railtie)
 
 # Load generators if Rails is available
@@ -24,7 +25,6 @@ require_relative 'mcp/transports/base_transport'
 Dir[File.join(File.dirname(__FILE__), 'mcp/transports', '*.rb')].each do |file|
   require file
 end
-
 # Version information
 require_relative 'mcp/version'
 
@@ -56,7 +56,6 @@ module FastMcp
 
     # Store the server in the FastMcp module
     self.server = server
-
     server.start_rack(app, options)
   end
 
@@ -80,7 +79,6 @@ module FastMcp
 
     # Store the server in the FastMcp module
     self.server = server
-
     server.start_authenticated_rack(app, options)
   end
 
@@ -128,6 +126,8 @@ module FastMcp
   # @option options [Boolean] :authenticate Whether to use authentication
   # @option options [String] :auth_token The authentication token
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
+  # @option options [Boolean] :auto_register_tools Whether to register tools derived from ActiveRecord models
+  # @option options [Boolean] :read_only_mode Whether to enable read-only mode for ActiveRecord operations
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
@@ -142,12 +142,14 @@ module FastMcp
     authenticate = options.delete(:authenticate) || false
     allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
     allowed_ips = options[:allowed_ips] || FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_IPS
-
+    auto_register_tools = options.delete(:auto_register_tools) || false
+    excluded_models = options.delete(:excluded_models) || []
+    excluded_namespaces = options.delete(:excluded_namespaces) || []
+    read_only_mode = options.delete(:read_only) || false
     options[:localhost_only] = Rails.env.local? if options[:localhost_only].nil?
     options[:allowed_ips] = allowed_ips
     options[:logger] = logger
     options[:allowed_origins] = allowed_origins
-
     # Create or get the server
     self.server = FastMcp::Server.new(name: name, version: version, logger: logger)
     yield self.server if block_given?
@@ -165,6 +167,29 @@ module FastMcp
       self.server,
       options.merge(path_prefix: path_prefix, messages_route: messages_route, sse_route: sse_route)
     )
+
+    return unless auto_register_tools
+
+    load_auto_derive_modules
+
+    app.config.after_initialize do
+      # Initialize AutoDerive modules
+      FastMcp::AutoDerive::AutoInclude.initialize
+      self.server.register_auto_derived_tools(options: {
+                                                exclusions: { models: excluded_models,
+                                                              namespaces: excluded_namespaces },
+                                                read_only_mode: read_only_mode
+                                              })
+    end
+  end
+
+  def self.load_auto_derive_modules
+    Dir[File.join(File.dirname(__FILE__), 'mcp/auto_derive', '*.rb'),
+        File.join(File.dirname(__FILE__), 'mcp/auto_derive/deriver', '*.rb'),
+        File.join(File.dirname(__FILE__), 'mcp/auto_derive/adapters', '*.rb'),
+        File.join(File.dirname(__FILE__), 'mcp/auto_derive/adapters/active_record_adapters', '*.rb')].each do |file|
+      require file
+    end
   end
 
   def self.default_rails_allowed_origins(rail_app)

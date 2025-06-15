@@ -15,6 +15,11 @@ group :development, :test do
   gem 'rubocop-rspec', '~> 3.5'
 end
 
+group :test do
+  gem 'activerecord'
+  gem 'activesupport'
+end
+
 # Gems required for examples
 group :examples do
   gem 'puma'
