@@ -33,7 +33,7 @@ require 'fast_mcp'
 mcp_server = FastMcp::Server.new(name: 'sinatra-mcp-server', version: '1.0.0')
 
 # Define your tools
-class ExampleTool < Mcp::Tool
+class ExampleTool < FastMcp::Tool
   description "An example tool"
   arguments  do
    required(:input).filled(:string).description("Input value")
