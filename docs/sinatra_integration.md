@@ -47,7 +47,7 @@ end
 # Register resources
 class Counter < FastMcp::Resource
   uri "example/counter"
-  resource_name "Counter",
+  resource_name "Counter"
   description "A simple counter resource"
   mime_type "application/json"
 
