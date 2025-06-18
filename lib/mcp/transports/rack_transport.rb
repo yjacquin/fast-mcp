@@ -100,7 +100,7 @@ module FastMcp
         json_message = message.is_a?(String) ? message : JSON.generate(message)
         stream = client[:stream]
 
-        if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?) || client[:mutex].nil?
+        if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
           unregister_sse_client(client_id)
         else
           client[:mutex].synchronize do
@@ -124,10 +124,8 @@ module FastMcp
         existing_client = @sse_clients[client_id]
         return unless existing_client
 
-        if existing_client[:stream].respond_to?(:close) && !existing_client[:stream].closed?
-          existing_client[:mutex].synchronize do
-            existing_client[:stream].close
-          end
+        if existing_client[:stream].respond_to?(:closed?) && !existing_client[:stream].closed?
+          existing_client[:stream].close
         end
 
         @sse_clients_mutex.synchronize do
