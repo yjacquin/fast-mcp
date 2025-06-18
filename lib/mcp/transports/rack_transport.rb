@@ -74,19 +74,11 @@ module FastMcp
       def send_message(message)
         json_message = message.is_a?(String) ? message : JSON.generate(message)
         @logger.debug("Broadcasting message to #{@sse_clients.size} SSE clients: #{json_message}")
+        clients_to_message = @sse_clients.keys
 
-        clients_to_remove = []
-        @sse_clients_mutex.synchronize do
-          @sse_clients.each_key do |client_id|
-            send_message_to(client_id, message)
-          rescue StandardError => e
-            @logger.error("Error sending message to client #{client_id}: #{e.message}")
-            clients_to_remove << client_id
-          end
+        clients_to_message.each do |client_id|
+          send_message_to(client_id, message)
         end
-
-        # Remove disconnected clients outside the loop to avoid modifying the hash during iteration
-        clients_to_remove.each { |client_id| unregister_sse_client(client_id) }
       end
 
       # Send a message to a specific SSE client
@@ -108,6 +100,14 @@ module FastMcp
             stream.flush if stream.respond_to?(:flush)
           end
         end
+        nil
+      rescue Errno::EPIPE, IOError => e
+        @logger.info("Client #{client_id} disconnected: #{e.message}")
+        unregister_sse_client(client_id)
+        nil
+      rescue StandardError => e
+        @logger.error("Error sending message to client #{client_id}: #{e.message}")
+        unregister_sse_client(client_id)
         nil
       end
 
