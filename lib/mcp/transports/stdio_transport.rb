@@ -44,7 +44,7 @@ module FastMcp
       end
 
       # stdio transport does not support sending to specific clients
-      def send_message_to(client_id, message)
+      def send_message_to(_client_id, message)
         send_message(message)
       end
 

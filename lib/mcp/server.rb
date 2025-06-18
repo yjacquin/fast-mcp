@@ -152,22 +152,17 @@ module FastMcp
       begin
         request = JSON.parse(json_str)
       rescue JSON::ParserError, TypeError
-        return send_error(-32_600, 'Invalid Request', nil, client_id)
+        return send_error(-32_600, client_id, 'Invalid Request', nil)
       end
 
       @logger.debug("Received request: #{request.inspect}")
-
-      # Check if it's a valid JSON-RPC 2.0 request
-      unless request['jsonrpc'] == '2.0' && request['method']
-        return send_error(-32_600, 'Invalid Request', request['id'], client_id)
-      end
 
       method = request['method']
       params = request['params'] || {}
       id = request['id']
 
       # Check if it's a valid JSON-RPC 2.0 request
-      return send_error(-32_600, 'Invalid Request', id) unless request['jsonrpc'] == '2.0'
+      return send_error(-32_600, client_id, 'Invalid Request', id) unless request['jsonrpc'] == '2.0'
 
       case method
       when 'ping'
@@ -194,11 +189,11 @@ module FastMcp
         # This is a notification response, we don't need to handle it
         nil
       else
-        send_error(-32_601, "Method not found: #{method}", id, client_id)
+        send_error(-32_601, client_id, "Method not found: #{method}", id)
       end
     rescue StandardError => e
       @logger.error("Error handling request: #{e.message}, #{e.backtrace.join("\n")}")
-      send_error(-32_600, "Internal error: #{e.message}, #{e.backtrace.join("\n")}", id, client_id)
+      send_error(-32_600, client_id, "Internal error: #{e.message}, #{e.backtrace.join("\n")}", id)
     end
 
     # Notify subscribers about a resource update
@@ -258,13 +253,13 @@ module FastMcp
       uri = params['uri']
       client_id = headers['client_id']
 
-      return send_error(-32_602, 'Invalid params: missing resource URI', id, client_id) unless uri
+      return send_error(-32_602, client_id, 'Invalid params: missing resource URI', id) unless uri
 
       @logger.debug("Looking for resource with URI: #{uri}")
 
       begin
         resource = read_resource(uri)
-        return send_error(-32_602, "Resource not found: #{uri}", id, client_id) unless resource
+        return send_error(-32_602, client_id, "Resource not found: #{uri}", id) unless resource
 
         @logger.debug("Found resource: #{resource.resource_name}, templated: #{resource.templated?}")
 
@@ -319,10 +314,10 @@ module FastMcp
       arguments = params['arguments'] || {}
       client_id = headers['client_id']
 
-      return send_error(-32_602, 'Invalid params: missing tool name', id, client_id) unless tool_name
+      return send_error(-32_602, client_id, 'Invalid params: missing tool name', id) unless tool_name
 
       tool = @tools[tool_name]
-      return send_error(-32_602, "Tool not found: #{tool_name}", id, client_id) unless tool
+      return send_error(-32_602, client_id, "Tool not found: #{tool_name}", id) unless tool
 
       begin
         # Convert string keys to symbols for Ruby
@@ -331,7 +326,7 @@ module FastMcp
         tool_instance = tool.new(headers: headers)
         authorized = tool_instance.authorized?(**symbolized_args)
 
-        return send_error(-32_602, 'Unauthorized', id) unless authorized
+        return send_error(-32_602, client_id, 'Unauthorized', id) unless authorized
 
         result, metadata = tool_instance.call_with_schema_validation!(**symbolized_args)
 
@@ -398,12 +393,12 @@ module FastMcp
       client_id = headers['client_id']
 
       unless uri
-        send_error(-32_602, 'Invalid params: missing resource URI', id, client_id)
+        send_error(-32_602, client_id, 'Invalid params: missing resource URI', id)
         return
       end
 
       resource = @resources.find { |r| r.match(uri) }
-      return send_error(-32_602, "Resource not found: #{uri}", id, client_id) unless resource
+      return send_error(-32_602, client_id, "Resource not found: #{uri}", id) unless resource
 
       # Add to subscriptions
       @resource_subscriptions[uri] ||= []
@@ -420,7 +415,7 @@ module FastMcp
       client_id = headers['client_id']
 
       unless uri
-        send_error(-32_602, 'Invalid params: missing resource URI', id, client_id)
+        send_error(-32_602, client_id, 'Invalid params: missing resource URI', id)
         return
       end
 
@@ -461,7 +456,7 @@ module FastMcp
     end
 
     # Send a JSON-RPC error response
-    def send_error(code, message, id = nil, client_id)
+    def send_error(code, client_id, message, id = nil)
       response = {
         jsonrpc: '2.0',
         error: {

@@ -217,7 +217,7 @@ RSpec.describe FastMcp::Server do
           id: 1
         }.to_json
 
-        expect(server).to receive(:send_error).with(-32_602, 'Tool not found: non-existent-tool', 1, client_id)
+        expect(server).to receive(:send_error).with(-32_602, client_id, 'Tool not found: non-existent-tool', 1)
         server.handle_request(request, headers: headers)
       end
 
@@ -231,7 +231,7 @@ RSpec.describe FastMcp::Server do
           id: 1
         }.to_json
 
-        expect(server).to receive(:send_error).with(-32_602, 'Invalid params: missing tool name', 1, client_id)
+        expect(server).to receive(:send_error).with(-32_602, client_id, 'Invalid params: missing tool name', 1)
         server.handle_request(request, headers: headers)
       end
     end
@@ -240,21 +240,21 @@ RSpec.describe FastMcp::Server do
       it 'returns an error for an unknown method' do
         request = { jsonrpc: '2.0', method: 'unknown', id: 1 }.to_json
 
-        expect(server).to receive(:send_error).with(-32_601, 'Method not found: unknown', 1, client_id)
+        expect(server).to receive(:send_error).with(-32_601, client_id, 'Method not found: unknown', 1)
         server.handle_request(request, headers: headers)
       end
 
       it 'returns an error for an invalid JSON-RPC request' do
         request = { id: 1 }.to_json
 
-        expect(server).to receive(:send_error).with(-32_600, 'Invalid Request', 1, client_id)
+        expect(server).to receive(:send_error).with(-32_600, client_id, 'Invalid Request', 1)
         server.handle_request(request, headers: headers)
       end
 
       it 'returns an error for an invalid JSON request' do
         request = 'invalid json'
 
-        expect(server).to receive(:send_error).with(-32_600, 'Invalid Request', nil, client_id)
+        expect(server).to receive(:send_error).with(-32_600, client_id, 'Invalid Request', nil)
         server.handle_request(request, headers: headers)
       end
     end

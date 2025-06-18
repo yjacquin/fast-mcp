@@ -389,7 +389,8 @@ module FastMcp
       end
 
       # Set up the SSE connection
-      # If SSE connection already exists for a client through a different IO, it will be closed and a new one will be established
+      # If SSE connection already exists for a client through a different IO,
+      # it will be closed and a new one will be established
       def setup_sse_connection(client_id, io, env)
         # Handle for reconnection, if the client_id is already registered we reuse the mutex
         # If not a reconnection, generate a new mutex used in registration
@@ -397,41 +398,46 @@ module FastMcp
         mutex = client ? client[:mutex] : Mutex.new
         # Send headers
         @logger.debug("Sending HTTP headers for SSE connection #{client_id}")
-        mutex.synchronize do
-          io.write("HTTP/1.1 200 OK\r\n")
-          SSE_HEADERS.each { |k, v| io.write("#{k}: #{v}\r\n") }
-          io.write("\r\n")
-          io.flush
-        end
+        mutex.synchronize { write_sse_headers(io) }
 
         # Register client (will overwrite if already present)
         register_sse_client(client_id, io, mutex)
 
-        # Send an initial comment to keep the connection alive
-        mutex.synchronize { io.write(": SSE connection established\n\n") }
+        # Extract query parameters from the request and generate the endpoint
+        # the client will use to send messages to the server
+        endpoint = generate_endpoint_info(client_id, env['QUERY_STRING'])
+        @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
+        mutex.synchronize { write_sse_initialize(io, endpoint) }
+      rescue StandardError => e
+        @logger.error("Error setting up SSE connection for client #{client_id}: #{e.message}")
+        @logger.error(e.backtrace.join("\n")) if e.backtrace
+        raise
+      end
 
-        # Extract query parameters from the request
-        query_string = env['QUERY_STRING']
+      def write_sse_headers(stream)
+        stream.write("HTTP/1.1 200 OK\r\n")
 
-        # Send endpoint information as the first message with query parameters
+        SSE_HEADERS.each { |k, v| stream.write("#{k}: #{v}\r\n") }
+        stream.write("\r\n")
+        stream.flush
+      end
+
+      def generate_endpoint_info(client_id, query_string = '')
         endpoint = "#{@path_prefix}/#{@messages_route}"
         params = []
         params << query_string if query_string && !query_string.empty?
         params << "client_id=#{client_id}"
         endpoint += "?#{params.join('&')}" unless params.empty?
-        @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
-        mutex.synchronize { io.write("event: endpoint\ndata: #{endpoint}\n\n") }
+        endpoint
+      end
 
+      def write_sse_initialize(stream, endpoint)
+        stream.write(": SSE connection established\n\n")
+        stream.write("event: endpoint\ndata: #{endpoint}\n\n")
         # Send a retry directive with a very short reconnect time
         # This helps browsers reconnect quickly if the connection is lost
-        mutex.synchronize do
-          io.write("retry: 100\n\n")
-          io.flush
-        end
-      rescue StandardError => e
-        @logger.error("Error setting up SSE connection for client #{client_id}: #{e.message}")
-        @logger.error(e.backtrace.join("\n")) if e.backtrace
-        raise
+        stream.write("retry: 100\n\n")
+        stream.flush
       end
 
       # Start a keep-alive thread for SSE connection
