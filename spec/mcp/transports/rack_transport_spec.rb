@@ -185,8 +185,8 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
     before do
       transport.instance_variable_set(:@sse_clients, {
-        client_id => { stream: client_stream },
-        client_id_2  => { stream: client_stream_2 }
+        client_id => { stream: client_stream, mutex: Mutex.new },
+        client_id_2  => { stream: client_stream_2, mutex: Mutex.new }
       })
     end
 
@@ -250,12 +250,12 @@ RSpec.describe FastMcp::Transports::RackTransport do
       expect(client_stream).to receive(:respond_to?).with(:close).and_return(true)
       expect(client_stream).to receive(:closed?).and_return(false)
       expect(client_stream).to receive(:close)
-      transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream } })
+      transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream, mutex: Mutex.new } })
       transport.unregister_sse_client('test-client')
     end
 
     it 'removes a client from the sse_clients hash' do
-      transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream } })
+      transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream, mutex: Mutex.new } })
       transport.unregister_sse_client('test-client')
       expect(transport.sse_clients).to be_empty
     end
@@ -312,8 +312,8 @@ RSpec.describe FastMcp::Transports::RackTransport do
         allow(request).to receive(:each_header).and_return(env.each)
 
         expect(server).to receive(:transport=).with(transport)
-        expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: { 'ORIGIN' => env['HTTP_ORIGIN'] })
+        expect(server).to receive(:handle_request)
+          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: { 'origin' => env['HTTP_ORIGIN'], 'client_id' => client_id })
           .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)

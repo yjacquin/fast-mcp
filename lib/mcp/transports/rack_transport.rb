@@ -77,16 +77,12 @@ module FastMcp
 
         clients_to_remove = []
         @sse_clients_mutex.synchronize do
-          @sse_clients.each do |client_id, client|
-            stream = client[:stream]
-            mutex = client[:mutex]
-            next if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?) || mutex.nil?
-
-        @sse_clients.each_key do |client_id|
-          send_message_to(client_id, message)
-        rescue StandardError => e
-          @logger.error("Error sending message to client #{client_id}: #{e.message}")
-          clients_to_remove << client_id
+          @sse_clients.each_key do |client_id|
+            send_message_to(client_id, message)
+          rescue StandardError => e
+            @logger.error("Error sending message to client #{client_id}: #{e.message}")
+            clients_to_remove << client_id
+          end
         end
 
         # Remove disconnected clients outside the loop to avoid modifying the hash during iteration
@@ -104,11 +100,13 @@ module FastMcp
         json_message = message.is_a?(String) ? message : JSON.generate(message)
         stream = client[:stream]
 
-        if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
+        if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?) || client[:mutex].nil?
           unregister_sse_client(client_id)
         else
-          stream.write("data: #{json_message}\n\n")
-          stream.flush if stream.respond_to?(:flush)
+          client[:mutex].synchronize do
+            stream.write("data: #{json_message}\n\n")
+            stream.flush if stream.respond_to?(:flush)
+          end
         end
         nil
       end
@@ -123,6 +121,15 @@ module FastMcp
 
       # Unregister an SSE client
       def unregister_sse_client(client_id)
+        existing_client = @sse_clients[client_id]
+        return unless existing_client
+
+        if existing_client[:stream].respond_to?(:close) && !existing_client[:stream].closed?
+          existing_client[:mutex].synchronize do
+            existing_client[:stream].close
+          end
+        end
+
         @sse_clients_mutex.synchronize do
           @logger.info("Unregistering SSE client: #{client_id}")
           @sse_clients.delete(client_id)
@@ -232,7 +239,6 @@ module FastMcp
 
         subpath = request.path[@path_prefix.length..]
         @logger.debug("MCP request subpath: '#{subpath.inspect}'")
-
         result = case subpath
                  when "/#{@sse_route}"
                    handle_sse_request(request, env)

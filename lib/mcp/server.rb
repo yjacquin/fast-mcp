@@ -141,6 +141,7 @@ module FastMcp
 
     # Handle a JSON-RPC request and return the response as a JSON string
     def handle_json_request(request, headers: {})
+      binding.pry
       request_str = request.is_a?(String) ? request : JSON.generate(request)
 
       handle_request(request_str, headers: headers)
