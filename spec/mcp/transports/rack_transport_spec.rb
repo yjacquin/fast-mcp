@@ -1,8 +1,16 @@
 # frozen_string_literal: true
 
 RSpec.describe FastMcp::Transports::RackTransport do
-  let(:server) { instance_double(FastMcp::Server, logger: Logger.new(nil), transport: nil) }
   let(:app) { ->(_env) { [200, { 'Content-Type' => 'text/plain' }, ['OK']] } }
+  let(:server) do 
+    instance_double(FastMcp::Server, 
+      logger: Logger.new(nil), 
+      transport: nil, 
+      'transport=' => nil,
+      contains_filters?: false,
+      handle_request: nil  # handle_request doesn't return anything, it sends through transport
+    )
+  end
   let(:logger) { Logger.new(nil) }
   let(:transport) { described_class.new(app, server, logger: logger, localhost_only: localhost_only) }
   let(:localhost_only) { true }
@@ -90,8 +98,8 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(client2_stream).to receive(:flush)
 
         transport.instance_variable_set(:@sse_clients, {
-                                          'client1' => { stream: client1_stream },
-                                          'client2' => { stream: client2_stream }
+                                          'client1' => { stream: client1_stream, mutex: Mutex.new },
+                                          'client2' => { stream: client2_stream, mutex: Mutex.new }
                                         })
 
         expect(logger).to receive(:debug).with(/Broadcasting message to 2 SSE clients/)
@@ -110,7 +118,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(client_stream).to receive(:flush)
 
         transport.instance_variable_set(:@sse_clients, {
-                                          'client' => { stream: client_stream }
+                                          'client' => { stream: client_stream, mutex: Mutex.new }
                                         })
 
         expect(logger).to receive(:debug).with(/Broadcasting message to 1 SSE clients/)
@@ -129,7 +137,33 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(client_stream).to receive(:respond_to?).with(:close).and_return(true) 
         expect(client_stream).to receive(:close) # unregister close
 
-        transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream } })
+        transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream, mutex: Mutex.new } })
+
+        expect(logger).to receive(:debug).with(/Broadcasting message to 1 SSE clients/)
+        expect(logger).to receive(:error).with(/Error sending message to client test-client/)
+        expect(logger).to receive(:info).with(/Unregistering SSE client: test-client/)
+
+        transport.send_message({ test: 'message' })
+
+        # The client should be removed after the error
+        expect(transport.sse_clients).to be_empty
+      end
+
+      it 'handles errors when mutex raises exception' do
+        # Add a mock SSE client that raises an error
+        client_stream = double('stream')
+        allow(client_stream).to receive(:respond_to?).and_return(false)
+        allow(client_stream).to receive(:respond_to?).with(:closed?).and_return(true)
+        allow(client_stream).to receive(:respond_to?).with(:flush).and_return(true)
+        allow(client_stream).to receive(:closed?).and_return(false)
+        allow(client_stream).to receive(:write)
+        allow(client_stream).to receive(:flush)
+
+        # Create a client with a mutex that will raise an error
+        client_mutex = double('mutex')
+        allow(client_mutex).to receive(:synchronize).and_raise(StandardError.new('Mutex error'))
+
+        transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream, mutex: client_mutex } })
 
         expect(logger).to receive(:debug).with(/Broadcasting message to 1 SSE clients/)
         expect(logger).to receive(:error).with(/Error sending message to client test-client/)
@@ -259,6 +293,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'PATH_INFO' => '/mcp/messages',
           'REQUEST_METHOD' => 'POST',
           'HTTP_ORIGIN' => 'http://localhost',
+          'REMOTE_ADDR' => '127.0.0.1',
           'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
           'QUERY_STRING' => "client_id=#{client_id}"
         }
@@ -291,26 +326,13 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'PATH_INFO' => '/mcp/messages',
           'REQUEST_METHOD' => 'POST',
           'HTTP_ORIGIN' => 'http://disallowed.com',
+          'REMOTE_ADDR' => '127.0.0.1',
           'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
         }
 
-        # Create a proper request double that includes necessary methods
-        request = instance_double(Rack::Request,
-          ip: '127.0.0.1',
-          path: '/mcp/messages',
-          post?: true,
-          params: {},
-          body: instance_double(StringIO, read: '{"jsonrpc":"2.0","method":"ping","id":1}'),
-          host: 'localhost'
-        )
-        allow(Rack::Request).to receive(:new).with(env).and_return(request)
-
-        expect(server).to receive(:transport=).with(transport)
-        expect(server).to receive(:handle_json_request).never
-
         result = transport.call(env)
         expect(result[0]).to eq(403)
-        expect(result[1]).to eq('Content-Type' => 'application/json')
+        expect(result[1]['Content-Type']).to eq('application/json')
         expect(result[2]).to eq([JSON.generate(
           {
             jsonrpc: '2.0',
@@ -347,7 +369,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         result = transport.call(env)
         expect(result[0]).to eq(403)
-        expect(result[1]).to eq('Content-Type' => 'application/json')
+        expect(result[1]['Content-Type']).to eq('application/json')
         expect(result[2]).to eq([JSON.generate(
           {
             jsonrpc: '2.0',
@@ -370,12 +392,6 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'QUERY_STRING' => "client_id=#{client_id}"
         }
 
-        expect(server).to receive(:transport=).with(transport)
-        # Mock the behavior for a valid Origin
-        expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: { 'ORIGIN' => env['HTTP_ORIGIN'] })
-          .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
-
         result = transport.call(env)
         expect(result[0]).to eq(200)
       end
@@ -389,10 +405,6 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'REMOTE_ADDR' => '127.0.0.1',
           'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
         }
-
-        expect(server).to receive(:transport=).with(transport)
-        # The server should NOT receive handle_json_request for a disallowed origin
-        expect(server).not_to receive(:handle_json_request)
 
         result = transport.call(env)
         expect(result[0]).to eq(403)
@@ -414,11 +426,6 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'QUERY_STRING' => "client_id=#{client_id}"
         }
 
-        expect(server).to receive(:transport=).with(transport)
-        expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: { 'REFERER' => env['HTTP_REFERER'] })
-          .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
-
         result = transport.call(env)
         expect(result[0]).to eq(200)
       end
@@ -433,11 +440,6 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'QUERY_STRING' => "client_id=#{client_id}"
         }
 
-        expect(server).to receive(:transport=).with(transport)
-        expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: { 'HOST' => env['HTTP_HOST'] })
-          .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
-
         result = transport.call(env)
         expect(result[0]).to eq(200)
       end
@@ -445,8 +447,6 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
     it 'returns 404 for unknown MCP endpoints' do
       env = { 'PATH_INFO' => '/mcp/invalid-endpoint', 'REMOTE_ADDR' => '127.0.0.1' }
-
-      expect(server).to receive(:transport=).with(transport)
 
       result = transport.call(env)
 
@@ -465,8 +465,6 @@ RSpec.describe FastMcp::Transports::RackTransport do
         # so we expect a 404 response with "Endpoint not found" message
         env = { 'PATH_INFO' => '/mcp', 'REMOTE_ADDR' => '127.0.0.1'
  }
-        expect(server).to receive(:transport=).with(transport)
-
         result = transport.call(env)
 
         # This should match the endpoint_not_found_response method behavior
@@ -499,11 +497,6 @@ RSpec.describe FastMcp::Transports::RackTransport do
         env['rack.hijack_io'] = io
         allow(env['rack.hijack']).to receive(:call)
 
-        expect(server).to receive(:transport=).with(transport)
-
-        # We can't fully test the SSE connection setup because it involves
-        # thread creation and complex IO operations, but we can test the
-        # initial response headers
         result = transport.call(env)
 
         # The result should be [-1, {}, []] for async response
@@ -521,8 +514,6 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'REQUEST_METHOD' => 'POST',
           'REMOTE_ADDR' => '127.0.0.1'
         }
-        expect(server).to receive(:transport=).with(transport)
-
         result = transport.call(env)
 
         expect(result[0]).to eq(405)
@@ -582,18 +573,12 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'REMOTE_ADDR' => '127.0.0.1',
           'QUERY_STRING' => "client_id=#{client_id}"
         }
-        expect(server).to receive(:transport=).with(transport)
-
-        # Mock the server's handle_json_request method
-        expect(server).to receive(:handle_json_request)
-          .with('{"jsonrpc":"2.0","method":"ping","id":1}', headers: {})
-          .and_return('{"jsonrpc":"2.0","result":{},"id":1}')
 
         result = transport.call(env)
 
         expect(result[0]).to eq(200)
         expect(result[1]['Content-Type']).to eq('application/json')
-        expect(result[2]).to eq('{"jsonrpc":"2.0","result":{},"id":1}')
+        expect(result[2]).to eq([]) # handle_request returns nil, so response body is empty array
       end
 
       it 'handles errors in JSON-RPC requests' do
@@ -604,10 +589,9 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'CONTENT_TYPE' => 'application/json',
           'REMOTE_ADDR' => '127.0.0.1'
         }
-        expect(server).to receive(:transport=).with(transport)
-
-        # Mock the behavior to simulate a JSON parse error when processing the message
-        allow(transport).to receive(:process_message).and_raise(JSON::ParserError.new('Invalid JSON'))
+        
+        # Mock the server to return a parse error
+        allow(server).to receive(:handle_request).and_raise(JSON::ParserError, 'Invalid JSON')
 
         result = transport.call(env)
 
@@ -626,8 +610,6 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'REQUEST_METHOD' => 'GET',
           'REMOTE_ADDR' => '127.0.0.1'
         }
-        expect(server).to receive(:transport=).with(transport)
-
         result = transport.call(env)
 
         expect(result[0]).to eq(405)

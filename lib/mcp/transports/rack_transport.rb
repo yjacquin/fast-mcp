@@ -13,6 +13,7 @@ module FastMcp
       DEFAULT_PATH_PREFIX = '/mcp'
       DEFAULT_ALLOWED_ORIGINS = ['localhost', '127.0.0.1', '[::1]'].freeze
       DEFAULT_ALLOWED_IPS = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].freeze
+      SERVER_ENV_KEY = 'fast_mcp.server'
 
       SSE_HEADERS = {
         'Content-Type' => 'text/event-stream',
@@ -40,8 +41,10 @@ module FastMcp
         @allowed_origins = options[:allowed_origins] || DEFAULT_ALLOWED_ORIGINS
         @localhost_only = options.fetch(:localhost_only, true) # Default to localhost-only mode
         @allowed_ips = options[:allowed_ips] || DEFAULT_ALLOWED_IPS
-        @sse_clients = {}
+        @sse_clients = Concurrent::Hash.new
+        @sse_clients_mutex = Mutex.new
         @running = false
+        @filtered_servers_cache = {}
       end
 
       # Start the transport
@@ -57,12 +60,14 @@ module FastMcp
         @running = false
 
         # Close all SSE connections
-        @sse_clients.each_value do |client|
-          client[:stream].close if client[:stream].respond_to?(:close) && !client[:stream].closed?
-        rescue StandardError => e
-          @logger.error("Error closing SSE connection: #{e.message}")
+        @sse_clients_mutex.synchronize do
+          @sse_clients.each_value do |client|
+            client[:stream].close if client[:stream].respond_to?(:close) && !client[:stream].closed?
+          rescue StandardError => e
+            @logger.error("Error closing SSE connection: #{e.message}")
+          end
+          @sse_clients.clear
         end
-        @sse_clients.clear
       end
 
       # Send a message to all connected SSE clients
@@ -71,6 +76,11 @@ module FastMcp
         @logger.debug("Broadcasting message to #{@sse_clients.size} SSE clients: #{json_message}")
 
         clients_to_remove = []
+        @sse_clients_mutex.synchronize do
+          @sse_clients.each do |client_id, client|
+            stream = client[:stream]
+            mutex = client[:mutex]
+            next if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?) || mutex.nil?
 
         @sse_clients.each_key do |client_id|
           send_message_to(client_id, message)
@@ -104,35 +114,19 @@ module FastMcp
       end
 
       # Register a new SSE client
-      def register_sse_client(client_id, stream)
-        existing_client = @sse_clients[client_id]
-
-        if existing_client
-          @logger.info("Client #{client_id} already registered")
-          return if existing_client[:stream] == stream
-
-          @logger.info("New stream detected for client #{client_id}")
-          unregister_sse_client(client_id)
-
-          # Small delay to ensure the old connection is fully closed
-          sleep 0.1
+      def register_sse_client(client_id, stream, mutex = nil)
+        @sse_clients_mutex.synchronize do
+          @logger.info("Registering SSE client: #{client_id}")
+          @sse_clients[client_id] = { stream: stream, connected_at: Time.now, mutex: mutex || Mutex.new }
         end
-
-        @logger.info("Registering SSE client: #{client_id}")
-        @sse_clients[client_id] = { stream: stream, connected_at: Time.now }
       end
 
       # Unregister an SSE client
       def unregister_sse_client(client_id)
-        existing_client = @sse_clients[client_id]
-        return unless existing_client
-
-        if existing_client[:stream].respond_to?(:close) && !existing_client[:stream].closed?
-          existing_client[:stream].close
+        @sse_clients_mutex.synchronize do
+          @logger.info("Unregistering SSE client: #{client_id}")
+          @sse_clients.delete(client_id)
         end
-
-        @logger.info("Unregistering SSE client: #{client_id}")
-        @sse_clients.delete(client_id)
       end
 
       # Rack call method
@@ -227,19 +221,33 @@ module FastMcp
         # Validate Origin header to prevent DNS rebinding attacks
         return forbidden_response('Forbidden: Origin validation failed') unless validate_origin(request, env)
 
+        # Get the appropriate server for this request
+        request_server = get_server_for_request(request, env)
+
+        # Store the current transport temporarily if using a filtered server
+        if request_server != @server
+          original_transport = request_server.transport
+          request_server.transport = self
+        end
+
         subpath = request.path[@path_prefix.length..]
         @logger.debug("MCP request subpath: '#{subpath.inspect}'")
 
-        case subpath
-        when "/#{@sse_route}"
-          handle_sse_request(request, env)
-        when "/#{@messages_route}"
-          handle_message_request(request)
-        else
-          @logger.error('Received unknown request')
-          # Return 404 for unknown MCP endpoints
-          endpoint_not_found_response
-        end
+        result = case subpath
+                 when "/#{@sse_route}"
+                   handle_sse_request(request, env)
+                 when "/#{@messages_route}"
+                   handle_message_request_with_server(request, request_server)
+                 else
+                   @logger.error('Received unknown request')
+                   # Return 404 for unknown MCP endpoints
+                   endpoint_not_found_response
+                 end
+
+        # Restore original transport if needed
+        request_server.transport = original_transport if request_server != @server && original_transport
+
+        result
       end
 
       def forbidden_response(message)
@@ -296,7 +304,7 @@ module FastMcp
         else
           # Fallback for servers that don't support streaming
           @logger.info('Falling back to default SSE')
-          [200, headers, [":ok\n\n"]]
+          [200, SSE_HEADERS.dup, [":ok\n\n"]]
         end
       end
 
@@ -381,18 +389,24 @@ module FastMcp
       # Set up the SSE connection
       # If SSE connection already exists for a client through a different IO, it will be closed and a new one will be established
       def setup_sse_connection(client_id, io, env)
+        # Handle for reconnection, if the client_id is already registered we reuse the mutex
+        # If not a reconnection, generate a new mutex used in registration
+        client = @sse_clients[client_id]
+        mutex = client ? client[:mutex] : Mutex.new
         # Send headers
         @logger.debug("Sending HTTP headers for SSE connection #{client_id}")
-        io.write("HTTP/1.1 200 OK\r\n")
-        SSE_HEADERS.each { |k, v| io.write("#{k}: #{v}\r\n") }
-        io.write("\r\n")
-        io.flush
+        mutex.synchronize do
+          io.write("HTTP/1.1 200 OK\r\n")
+          SSE_HEADERS.each { |k, v| io.write("#{k}: #{v}\r\n") }
+          io.write("\r\n")
+          io.flush
+        end
 
-        # Register client
-        register_sse_client(client_id, io)
+        # Register client (will overwrite if already present)
+        register_sse_client(client_id, io, mutex)
 
         # Send an initial comment to keep the connection alive
-        io.write(": SSE connection established\n\n")
+        mutex.synchronize { io.write(": SSE connection established\n\n") }
 
         # Extract query parameters from the request
         query_string = env['QUERY_STRING']
@@ -404,12 +418,14 @@ module FastMcp
         params << "client_id=#{client_id}"
         endpoint += "?#{params.join('&')}" unless params.empty?
         @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
-        io.write("event: endpoint\ndata: #{endpoint}\n\n")
+        mutex.synchronize { io.write("event: endpoint\ndata: #{endpoint}\n\n") }
 
         # Send a retry directive with a very short reconnect time
         # This helps browsers reconnect quickly if the connection is lost
-        io.write("retry: 100\n\n") # 100ms reconnect time
-        io.flush
+        mutex.synchronize do
+          io.write("retry: 100\n\n")
+          io.flush
+        end
       rescue StandardError => e
         @logger.error("Error setting up SSE connection for client #{client_id}: #{e.message}")
         @logger.error(e.backtrace.join("\n")) if e.backtrace
@@ -435,11 +451,10 @@ module FastMcp
         ping_count = 0
         ping_interval = 1 # Send a ping every 1 second
         @running = true
-
+        mutex = @sse_clients[client_id] && @sse_clients[client_id][:mutex]
         while @running && !io.closed?
           begin
-            ping_count = send_keep_alive_ping(io, client_id, ping_count)
-
+            mutex.synchronize { ping_count = send_keep_alive_ping(io, client_id, ping_count) }
             sleep ping_interval
           rescue Errno::EPIPE, IOError => e
             # Broken pipe or IO error - client disconnected
@@ -452,7 +467,6 @@ module FastMcp
       # Send a keep-alive ping and return the updated ping count
       def send_keep_alive_ping(io, client_id, ping_count)
         ping_count += 1
-
         # Send a comment before each ping to keep the connection alive
         io.write(": keep-alive #{ping_count}\n\n")
         io.flush
@@ -462,7 +476,6 @@ module FastMcp
           @logger.debug("Sending ping ##{ping_count} to SSE client #{client_id}")
           send_ping_event(io)
         end
-
         ping_count
       end
 
@@ -480,9 +493,14 @@ module FastMcp
       # Clean up SSE connection
       def cleanup_sse_connection(client_id, io)
         @logger.info("Cleaning up SSE connection for client #{client_id}")
+        mutex = @sse_clients[client_id] && @sse_clients[client_id][:mutex]
         unregister_sse_client(client_id)
         begin
-          io.close unless io.closed?
+          if mutex
+            mutex.synchronize { io.close unless io.closed? }
+          else
+            io.close unless io.closed?
+          end
           @logger.info("Successfully closed IO for client #{client_id}")
         rescue StandardError => e
           @logger.error("Error closing IO for client #{client_id}: #{e.message}")
@@ -502,13 +520,13 @@ module FastMcp
         [200, SSE_HEADERS, []]
       end
 
-      # Handle message POST request
-      def handle_message_request(request)
+      # Handle message POST request with specific server
+      def handle_message_request_with_server(request, server)
         @logger.debug('Received message request')
         return method_not_allowed_response unless request.post?
 
         begin
-          process_json_request(request)
+          process_json_request_with_server(request, server)
         rescue JSON::ParserError => e
           handle_parse_error(e)
         rescue StandardError => e
@@ -516,23 +534,21 @@ module FastMcp
         end
       end
 
-      # Process a JSON-RPC request
-      def process_json_request(request)
+      def process_json_request_with_server(request, server)
         # Parse the request body
         body = request.body.read
+        @logger.debug("Request body: #{body}")
 
-        # Assemble HTTP headers
-        headers = request.each_header.filter_map do |key, value|
-          if (match = /^HTTP_(?<name>.*)/.match(key))
-            header_name = match[:name]
-            [header_name, value]
-          end
-        end.to_h
+        # Extract headers that might be relevant
+        headers = request.env.select { |k, _v| k.start_with?('HTTP_') }
+                         .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
 
         headers['client_id'] = extract_client_id(request.env)
-        response = process_message(body, headers: headers) || []
-        @logger.info("Response: #{response}")
 
+        # Let the specific server handle the JSON request directly
+        response = server.handle_request(body, headers: headers) || []
+
+        # Return the JSON response
         [200, { 'Content-Type' => 'application/json' }, response]
       end
 
@@ -562,6 +578,50 @@ module FastMcp
              id: id
            }
          )]]
+      end
+
+      # Get the appropriate server for this request
+      def get_server_for_request(request, env)
+        # 1. Check for explicit server in env (highest priority)
+        if env[SERVER_ENV_KEY]
+          @logger.debug("Using server from env[#{SERVER_ENV_KEY}]")
+          return env[SERVER_ENV_KEY]
+        end
+
+        # 2. Apply filters if configured
+        if @server.contains_filters?
+          @logger.debug('Server has filters, creating filtered copy')
+          # Cache filtered servers to avoid recreating them
+          cache_key = generate_cache_key(request)
+
+          @filtered_servers_cache[cache_key] ||= @server.create_filtered_copy(request)
+          return @filtered_servers_cache[cache_key]
+        end
+
+        # 3. Use the default server
+        @logger.debug('Using default server')
+        @server
+      end
+
+      # Generate a cache key based on filter-relevant request attributes
+      def generate_cache_key(request)
+        # Generate a cache key based on filter-relevant request attributes
+        # This is a simple example - real implementation would be more sophisticated
+        {
+          path: request.path,
+          params: request.params.sort.to_h,
+          headers: extract_relevant_headers(request)
+        }.hash
+      end
+
+      # Extract headers that might be relevant for filtering
+      def extract_relevant_headers(request)
+        relevant_headers = {}
+        ['X-User-Role', 'X-API-Version', 'X-Tenant-ID', 'Authorization'].each do |header|
+          header_key = "HTTP_#{header.upcase.tr('-', '_')}"
+          relevant_headers[header] = request.env[header_key] if request.env[header_key]
+        end
+        relevant_headers
       end
     end
   end

@@ -97,6 +97,16 @@ RSpec.describe FastMcp::Server do
       end
     end
 
+    context 'with a ping response' do
+      it 'responds with an empty result' do
+        request = { result: {}, id: 1, jsonrpc: '2.0' }.to_json
+        expect(server).not_to receive(:send_result)
+
+        response = server.handle_request(request)
+        expect(response).to be_nil
+      end
+    end
+
     context 'with a notifications/initialized request' do
       it 'responds with nil' do
         request = { jsonrpc: '2.0', method: 'notifications/initialized' }.to_json

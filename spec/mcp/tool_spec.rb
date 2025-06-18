@@ -9,6 +9,20 @@ RSpec.describe FastMcp::Tool do
       expect(test_class.tool_name).to eq('custom_tool')
     end
 
+    it 'sets and returns the name (exceeds 64 characters - will be truncated)' do
+      test_class = Class.new(described_class)
+      test_class.tool_name('custom_very_long_tool_name_that_exceeds_64_characters_that_will_be_truncated')
+
+      expect(test_class.tool_name).to eq('custom_very_long_tool_name_that_exceeds_64_characters_that_will_')
+    end
+
+    it 'sets and returns the name (with special characters - special characters will be removed)' do
+      test_class = Class.new(described_class)
+      test_class.tool_name('custom_tool_name_with_special_characters_like!@#$%^&*()')
+
+      expect(test_class.tool_name).to eq('custom_tool_name_with_special_characters_like')
+    end
+
     it 'returns the current name when called with nil' do
       test_class = Class.new(described_class)
       test_class.tool_name('custom_tool')
@@ -22,9 +36,9 @@ RSpec.describe FastMcp::Tool do
     end
 
     it 'returns the name of the class' do
-      class Bar < described_class; end;
+      class Foo; class Bar < FastMcp::Tool; end; end
 
-      expect(Bar.tool_name).to eq('Bar')
+      expect(Foo::Bar.tool_name).to eq('FooBar')
     end
   end
 
@@ -54,6 +68,22 @@ RSpec.describe FastMcp::Tool do
       end
 
       expect(test_class.input_schema).to be_a(Dry::Schema::JSON)
+    end
+  end
+
+  describe '.authorize' do
+    it 'records authorization blocks' do
+      authorization_block_1 = Proc.new { true }
+      authorization_block_2 = Proc.new { true }
+
+      test_class = Class.new(described_class) do
+        authorize(&authorization_block_1)
+        authorize(&authorization_block_2)
+      end
+
+      expect(test_class.instance_variable_get('@authorization_blocks')).to be_an(Array)
+      expect(test_class.instance_variable_get('@authorization_blocks').first).to be(authorization_block_1)
+      expect(test_class.instance_variable_get('@authorization_blocks').last).to be(authorization_block_2)
     end
   end
 
@@ -160,6 +190,300 @@ RSpec.describe FastMcp::Tool do
     end
   end
 
+  describe '#authorized?' do
+    context 'without authorization' do
+      let(:open_tool_class) do
+        Class.new(described_class) do
+          def self.name
+            'open-tool'
+          end
+
+          def self.description
+            'An open tool'
+          end
+
+          def call(**_args)
+            'Hello, World!'
+          end
+        end
+      end
+
+      it 'returns true' do
+        tool = open_tool_class.new
+        expect(tool.authorized?).to be true
+      end
+    end
+
+    context 'with authorization' do
+      context 'without arguments' do
+        let(:token) { 'valid_token' }
+        let(:authorized_tool_class) do
+          valid_token = token
+          Class.new(described_class) do
+            def self.name
+              'authorized-tool'
+            end
+
+            def self.description
+              'An authorized tool'
+            end
+
+            authorize do
+              headers['AUTHORIZATION'] == valid_token
+            end
+
+            def call(**_args)
+              'Hello, Admin!'
+            end
+          end
+        end
+
+        it 'returns true when authorized' do
+          tool = authorized_tool_class.new(headers: {
+            'AUTHORIZATION' => token
+          })
+
+          expect(tool.authorized?).to be true
+        end
+
+        it 'returns false when not authorized' do
+          tool = authorized_tool_class.new(headers: {
+            'AUTHORIZATION' => 'invalid_token'
+          })
+
+          expect(tool.authorized?).to be false
+        end
+      end
+
+      context 'with arguments' do
+        let(:token) { 'valid_token' }
+        let(:authorized_tool_class) do
+          valid_token = token
+          Class.new(described_class) do
+            def self.name
+              'authorized-tool'
+            end
+
+            def self.description
+              'An authorized tool'
+            end
+
+            arguments do
+              required(:name).filled(:string)
+            end
+
+            authorize do |args|
+              headers['AUTHORIZATION'] == valid_token && args[:name] == 'admin'
+            end
+
+            def call(**_args)
+              'Hello, Admin!'
+            end
+          end
+        end
+
+        it 'returns true when authorized' do
+          tool = authorized_tool_class.new(headers: {
+            'AUTHORIZATION' => token
+          })
+
+          expect(tool.authorized?(name: 'admin')).to be true
+        end
+
+        it 'returns false when not authorized' do
+          tool = authorized_tool_class.new(headers: {
+            'AUTHORIZATION' => token
+          })
+
+          expect(tool.authorized?(name: 'user')).to be false
+        end
+      end
+
+      context 'with inherited authorization' do
+        let(:token) { 'valid_token' }
+        let(:root_authorized_tool_class) do
+          valid_token = token
+          Class.new(described_class) do
+            def self.name
+              'root-authorized-tool'
+            end
+
+            def self.description
+              'A root authorized tool'
+            end
+
+            authorize do
+              headers['AUTHORIZATION'] == valid_token
+            end
+
+            def call(**_args)
+              'Hello, Admin!'
+            end
+          end
+        end
+        context 'with own authorization' do
+          let(:child_authorized_tool_class) do
+            Class.new(root_authorized_tool_class) do
+              def self.name
+                'child-authorized-tool'
+              end
+
+              def self.description
+                'A child authorized tool'
+              end
+
+              authorize do
+                headers['OTHER_HEADER'] == 'other_value'
+              end
+
+              def call(**_args)
+                'Hello, Child Admin!'
+              end
+            end
+          end
+
+          it 'returns true when fully authorized' do
+            tool = child_authorized_tool_class.new(headers: {
+              'AUTHORIZATION' => token,
+              'OTHER_HEADER' => 'other_value'
+            })
+            expect(tool.authorized?).to be true
+          end
+
+          it 'returns false when failing parent authorization' do
+            tool = child_authorized_tool_class.new(headers: {
+              'OTHER_HEADER' => 'other_value'
+            })
+            expect(tool.authorized?).to be false
+          end
+
+          it 'returns false when failing child authorization' do
+            tool = child_authorized_tool_class.new(headers: {
+              'AUTHORIZATION' => token
+            })
+            expect(tool.authorized?).to be false
+          end
+        end
+
+        context 'without own authorization' do
+          let(:child_tool_class) do
+            Class.new(root_authorized_tool_class) do
+              def self.name
+                'child-tool'
+              end
+
+              def self.description
+                'A child tool'
+              end
+
+              def call(**_args)
+                'Hello, Child!'
+              end
+            end
+          end
+
+          it 'returns true when authorized' do
+            tool = child_tool_class.new(headers: {
+              'AUTHORIZATION' => token
+            })
+            expect(tool.authorized?).to be true
+          end
+
+          it 'returns false when not authorized' do
+            tool = child_tool_class.new(headers: {
+              'AUTHORIZATION' => 'invalid_token'
+            })
+            expect(tool.authorized?).to be false
+          end
+        end
+      end
+
+      context 'with composed authorization' do
+        let(:current_user_module) do
+          Module.new do
+            def self.included(base)
+              base.authorize do
+                not current_user.nil?
+              end
+            end
+
+            def current_user
+              @current_user ||= headers['CURRENT_USER']
+            end
+          end
+        end
+
+        let(:token_module) do
+          Module.new do
+            def self.included(base)
+              base.authorize do
+                headers['AUTHORIZATION'] == 'valid_token'
+              end
+            end
+          end
+        end
+
+        let(:composed_tool_class) do
+          current_user_auth = current_user_module
+          token_auth = token_module
+          Class.new(described_class) do
+            include current_user_auth
+            include token_auth
+
+            def self.name
+              'composed-tool'
+            end
+
+            def self.description
+              'A composed tool'
+            end
+
+            arguments do
+              required(:name).filled(:string)
+            end
+
+            authorize do |name:|
+              name.start_with?('Bob')
+            end
+
+            def call(**_args)
+              "Hello, #{current_user}!"
+            end
+          end
+        end
+
+        it 'returns true when authorized by both modules' do
+          tool = composed_tool_class.new(headers: {
+            'AUTHORIZATION' => 'valid_token',
+            'CURRENT_USER' => 'admin'
+          })
+          expect(tool.authorized?(name: "Bob")).to be true
+        end
+
+        it 'returns false when not authorized by one of the modules' do
+          headers = [
+            { 'AUTHORIZATION' => 'valid_token', 'CURRENT_USER' => nil },
+            { 'AUTHORIZATION' => 'invalid_token', 'CURRENT_USER' => 'admin' },
+          ]
+
+          headers.each do |header|
+            tool = composed_tool_class.new(headers: header)
+            expect(tool.authorized?(name: "Bob")).to be false
+          end
+        end
+
+        it 'returns false when not authorized by the tool' do
+          tool = composed_tool_class.new(headers: {
+            'AUTHORIZATION' => 'valid_token',
+            'CURRENT_USER' => 'admin'
+          })
+
+          expect(tool.authorized?(name: "Alice")).to be false
+        end
+      end
+    end
+  end
+
   describe 'SchemaCompiler' do
     let(:compiler) { FastMcp::SchemaCompiler.new }
 
@@ -257,6 +581,66 @@ RSpec.describe FastMcp::Tool do
         expect(result[:properties][:person][:properties][:first_name][:description]).to eq('First name of the person')
         expect(result[:properties][:person][:properties][:last_name][:description]).to eq('Last name of the person')
       end
+    end
+  end
+
+  describe '.tags' do
+    it 'sets and returns tags' do
+      test_class = Class.new(described_class)
+      test_class.tags :admin, :dangerous
+      
+      expect(test_class.tags).to eq([:admin, :dangerous])
+    end
+    
+    it 'accepts array of tags' do
+      test_class = Class.new(described_class)
+      test_class.tags [:user, :safe]
+      
+      expect(test_class.tags).to eq([:user, :safe])
+    end
+    
+    it 'returns empty array when no tags are set' do
+      test_class = Class.new(described_class)
+      
+      expect(test_class.tags).to eq([])
+    end
+    
+    it 'converts tags to symbols' do
+      test_class = Class.new(described_class)
+      test_class.tags 'admin', 'dangerous'
+      
+      expect(test_class.tags).to eq([:admin, :dangerous])
+    end
+  end
+  
+  describe '.metadata' do
+    it 'sets and gets individual metadata values' do
+      test_class = Class.new(described_class)
+      test_class.metadata(:category, 'system')
+      test_class.metadata(:risk_level, 'high')
+      
+      expect(test_class.metadata(:category)).to eq('system')
+      expect(test_class.metadata(:risk_level)).to eq('high')
+    end
+    
+    it 'returns all metadata when called without arguments' do
+      test_class = Class.new(described_class)
+      test_class.metadata(:category, 'system')
+      test_class.metadata(:risk_level, 'high')
+      
+      expect(test_class.metadata).to eq({ category: 'system', risk_level: 'high' })
+    end
+    
+    it 'returns empty hash when no metadata is set' do
+      test_class = Class.new(described_class)
+      
+      expect(test_class.metadata).to eq({})
+    end
+    
+    it 'returns nil for undefined metadata keys' do
+      test_class = Class.new(described_class)
+      
+      expect(test_class.metadata(:undefined_key)).to be_nil
     end
   end
 end

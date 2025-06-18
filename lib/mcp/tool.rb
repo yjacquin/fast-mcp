@@ -94,6 +94,27 @@ module FastMcp
     class << self
       attr_accessor :server
 
+      # Add tagging support for tools
+      def tags(*tag_list)
+        if tag_list.empty?
+          @tags || []
+        else
+          @tags = tag_list.flatten.map(&:to_sym)
+        end
+      end
+
+      # Add metadata support for tools
+      def metadata(key = nil, value = nil)
+        @metadata ||= {}
+        if key.nil?
+          @metadata
+        elsif value.nil?
+          @metadata[key]
+        else
+          @metadata[key] = value
+        end
+      end
+
       def arguments(&block)
         @input_schema = Dry::Schema.JSON(&block)
       end
@@ -103,7 +124,10 @@ module FastMcp
       end
 
       def tool_name(name = nil)
-        return @name || self.name if name.nil?
+        name = @name || self.name if name.nil?
+        return if name.nil?
+
+        name = name.gsub(/[^a-zA-Z0-9_-]/, '')[0, 64]
 
         @name = name
       end
@@ -112,6 +136,11 @@ module FastMcp
         return @description if description.nil?
 
         @description = description
+      end
+
+      def authorize(&block)
+        @authorization_blocks ||= []
+        @authorization_blocks.push block
       end
 
       def call(**args)
@@ -129,6 +158,26 @@ module FastMcp
     def initialize(headers: {})
       @_meta = {}
       @headers = headers
+    end
+
+    def authorized?(**args)
+      auth_checks = self.class.ancestors.filter_map do |ancestor|
+        ancestor.ancestors.include?(FastMcp::Tool) &&
+          ancestor.instance_variable_get(:@authorization_blocks)
+      end.flatten
+
+      return true if auth_checks.empty?
+
+      arg_validation = self.class.input_schema.call(args)
+      raise InvalidArgumentsError, arg_validation.errors.to_h.to_json if arg_validation.errors.any?
+
+      auth_checks.all? do |auth_check|
+        if auth_check.parameters.empty?
+          instance_exec(&auth_check)
+        else
+          instance_exec(**args, &auth_check)
+        end
+      end
     end
 
     attr_accessor :_meta

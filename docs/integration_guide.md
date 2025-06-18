@@ -186,18 +186,14 @@ MCP Resources provide a way to share and synchronize data between the server and
 # Create a resource
 class Counter < FastMcp::Resource
   uri "example/counter"
-  resource_name "Counter",
+  resource_name "Counter"
   description "A simple counter resource"
   mime_type "application/json"
 
-  def initialize
-    @count = 0
-  end
-
-  attr_accessor :count
-
   def content
-    JSON.generate({ count: @count })
+    # Read from file or database, or generate dynamically
+    count = File.exist?('counter.txt') ? File.read('counter.txt').to_i : 0
+    JSON.generate({ count: count })
   end
 end
 
@@ -205,14 +201,29 @@ end
 server.register_resource(Counter)
 ```
 
-### Notifying Resource updates
+### Updating Resources
+
+Since resources are stateless, updates are typically handled through tools:
 
 ```ruby
-# Update a resource
-count = Counter.instance.count
-Counter.instance.count += 1
+# Example tool that updates the counter
+class IncrementCounterTool < FastMcp::Tool
+  description 'Increment the counter'
 
-server.notify_resource_updated("example/counter")
+  def call
+    # Read current value
+    current_count = File.exist?('counter.txt') ? File.read('counter.txt').to_i : 0
+    
+    # Increment and save
+    new_count = current_count + 1
+    File.write('counter.txt', new_count.to_s)
+
+    # Notify that the resource has been updated
+    notify_resource_updated("example/counter")
+
+    { count: new_count }
+  end
+end
 ```
 
 ### Reading Resources from the Client
