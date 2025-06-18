@@ -92,8 +92,8 @@ RSpec.describe FastMcp::Server do
       it 'responds with an empty result' do
         request = { jsonrpc: '2.0', method: 'ping', id: 1 }.to_json
 
-        expect(server).to receive(:send_result).with({}, 1, client_id)
-        server.handle_request(request,headers: headers)
+        expect(server).to receive(:send_result).with(client_id, {}, 1)
+        server.handle_request(request, headers: headers)
       end
     end
 
@@ -120,14 +120,14 @@ RSpec.describe FastMcp::Server do
       it 'responds with the server info' do
         request = { jsonrpc: '2.0', method: 'initialize', id: 1 }.to_json
 
-        expect(server).to receive(:send_result).with({
+        expect(server).to receive(:send_result).with(client_id, {
                                                        protocolVersion: FastMcp::Server::PROTOCOL_VERSION,
                                                        capabilities: server.capabilities,
                                                        serverInfo: {
                                                          name: server.name,
                                                          version: server.version
                                                        }
-                                                     }, 1, client_id)
+                                                     }, 1)
         server.handle_request(request, headers: headers)
       end
     end
@@ -136,7 +136,7 @@ RSpec.describe FastMcp::Server do
       it 'responds with a list of tools' do
         request = { jsonrpc: '2.0', method: 'tools/list', id: 1 }.to_json
 
-        expect(server).to receive(:send_result) do |result, id|
+        expect(server).to receive(:send_result) do |_client_id, result, id|
           expect(id).to eq(1)
           expect(result[:tools]).to be_an(Array)
           expect(result[:tools].length).to eq(2)
@@ -173,9 +173,9 @@ RSpec.describe FastMcp::Server do
         }.to_json
 
         expect(server).to receive(:send_result).with(
+          client_id,
           { content: [{ text: 'Hello, World!', type: 'text' }], isError: false },
           1,
-          client_id,
           metadata: {}
         )
         server.handle_request(request, headers: headers)
@@ -198,9 +198,9 @@ RSpec.describe FastMcp::Server do
         }.to_json
 
         expect(server).to receive(:send_result).with(
+          client_id,
           { content: [{ text: 'John Doe', type: 'text' }], isError: false },
           1,
-          client_id,
           metadata: {}
         )
         server.handle_request(request, headers: headers)
