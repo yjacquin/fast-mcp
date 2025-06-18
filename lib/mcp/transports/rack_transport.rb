@@ -427,7 +427,7 @@ module FastMcp
         params = []
         params << query_string if query_string && !query_string.empty?
         params << "client_id=#{client_id}"
-        endpoint += "?#{params.join('&')}" unless params.empty?
+        endpoint += "?#{params.join('&')}"
         endpoint
       end
 
