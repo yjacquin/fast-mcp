@@ -131,8 +131,9 @@ RSpec.describe FastMcp::Transports::RackTransport do
       it 'handles errors when sending to clients' do
         # Add a mock SSE client that raises an error
         client_stream = double('stream')
-        expect(client_stream).to receive(:respond_to?).with(:closed?).twice.and_return(true)
-        expect(client_stream).to receive(:closed?).twice.and_return(false)
+        expect(client_stream).to receive(:respond_to?).with(:closed?).and_return(true)
+        expect(client_stream).to receive(:respond_to?).with(:close).and_return(true)
+        expect(client_stream).to receive(:closed?).and_return(false)
         expect(client_stream).to receive(:write).and_raise(StandardError.new('Test error'))
         expect(client_stream).to receive(:close)
 

@@ -35,7 +35,7 @@ RSpec.describe FastMcp::Server do
 
   describe '#handle_request' do
     let(:client_id) { 'test-client-id' }
-    let(:headers) { { client_id: client_id } }
+    let(:headers) { { 'client_id' => client_id } }
     let(:test_tool_class) do
       Class.new(FastMcp::Tool) do
         def self.name

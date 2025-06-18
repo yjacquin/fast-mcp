@@ -141,7 +141,6 @@ module FastMcp
 
     # Handle a JSON-RPC request and return the response as a JSON string
     def handle_json_request(request, headers: {})
-      binding.pry
       request_str = request.is_a?(String) ? request : JSON.generate(request)
 
       handle_request(request_str, headers: headers)
@@ -184,7 +183,7 @@ module FastMcp
       when 'resources/list'
         handle_resources_list(headers, id)
       when 'resources/templates/list'
-        handle_resources_templates_list(id)
+        handle_resources_templates_list(headers, id)
       when 'resources/read'
         handle_resources_read(params, headers, id)
       when 'resources/subscribe'
@@ -383,11 +382,12 @@ module FastMcp
     end
 
     # Handle resources/templates/list request
-    def handle_resources_templates_list(id)
+    def handle_resources_templates_list(headers, id)
+      client_id = headers['client_id']
       # Collect templated resources
       templated_resources_list = @resources.select(&:templated?).map(&:metadata)
 
-      send_result({ resourceTemplates: templated_resources_list }, id)
+      send_result({ resourceTemplates: templated_resources_list }, id, client_id)
     end
 
     # Handle resources/subscribe request

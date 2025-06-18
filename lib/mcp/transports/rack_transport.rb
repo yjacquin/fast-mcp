@@ -124,9 +124,7 @@ module FastMcp
         existing_client = @sse_clients[client_id]
         return unless existing_client
 
-        if existing_client[:stream].respond_to?(:closed?) && !existing_client[:stream].closed?
-          existing_client[:stream].close
-        end
+        existing_client[:stream].close if existing_client[:stream].respond_to?(:close)
 
         @sse_clients_mutex.synchronize do
           @logger.info("Unregistering SSE client: #{client_id}")
