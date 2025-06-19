@@ -235,6 +235,7 @@ module FastMcp
 
         subpath = request.path[@path_prefix.length..]
         @logger.debug("MCP request subpath: '#{subpath.inspect}'")
+
         result = case subpath
                  when "/#{@sse_route}"
                    handle_sse_request(request, env)
