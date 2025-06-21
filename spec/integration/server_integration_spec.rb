@@ -223,6 +223,73 @@ RSpec.describe 'MCP Server Integration' do
     end
   end
 
+  describe 'protocol version negotiation' do
+    it 'responds to initialize with correct protocol version' do
+      request = { jsonrpc: '2.0', method: 'initialize', id: 1 }
+      io_response = server.handle_request(JSON.generate(request))
+
+      io_response.rewind
+      io_as_json = JSON.parse(io_response.read)
+      expect(io_as_json['jsonrpc']).to eq('2.0')
+      expect(io_as_json['result']['protocolVersion']).to eq('2025-06-18')
+      expect(io_as_json['id']).to eq(1)
+    end
+
+    it 'accepts requests without protocol version header' do
+      request = { jsonrpc: '2.0', method: 'ping', id: 1 }
+      io_response = server.handle_request(JSON.generate(request))
+
+      io_response.rewind
+      io_as_json = JSON.parse(io_response.read)
+      expect(io_as_json['jsonrpc']).to eq('2.0')
+      expect(io_as_json['result']).to eq({})
+      expect(io_as_json['id']).to eq(1)
+    end
+
+    it 'accepts requests with supported protocol version header' do
+      request = { jsonrpc: '2.0', method: 'ping', id: 1 }
+      headers = { 'mcp-protocol-version' => '2025-06-18' }
+      io_response = server.handle_request(JSON.generate(request), headers: headers)
+
+      io_response.rewind
+      io_as_json = JSON.parse(io_response.read)
+      expect(io_as_json['jsonrpc']).to eq('2.0')
+      expect(io_as_json['result']).to eq({})
+      expect(io_as_json['id']).to eq(1)
+    end
+
+    context 'with RackTransport' do
+      let(:app) { ->(_env) { [200, { 'Content-Type' => 'text/plain' }, ['OK']] } }
+      let(:rack_transport) { FastMcp::Transports::RackTransport.new(app, server, localhost_only: true) }
+
+      before do
+        server.transport = rack_transport
+      end
+
+      it 'validates protocol version in HTTP requests' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => '2024-11-05',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = rack_transport.call(env)
+
+        expect(result[0]).to eq(400)
+        expect(result[1]['Content-Type']).to eq('application/json')
+
+        response = JSON.parse(result[2].first)
+        expect(response['jsonrpc']).to eq('2.0')
+        expect(response['error']['code']).to eq(-32_000)
+        expect(response['error']['message']).to eq('Unsupported protocol version: 2024-11-05')
+        expect(response['error']['data']['expected_version']).to eq('2025-06-18')
+      end
+    end
+  end
+
   describe 'templated resources' do
     let(:debug_logger) { Logger.new($stderr) }
 
