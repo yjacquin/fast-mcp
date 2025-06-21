@@ -201,3 +201,88 @@ puts "Tool call result without interests: #{user_profile.call_with_schema_valida
   email: 'jane@example.com',
   age: 25
 )}"
+puts
+
+# Example 7: Tools with annotations
+puts 'Example 7: Tools with annotations'
+
+class WebSearchTool < FastMcp::Tool
+  description 'Search the web for information'
+
+  annotations(
+    title: 'Web Search',
+    read_only_hint: true,
+    open_world_hint: true
+  )
+
+  arguments do
+    required(:query).filled(:string).description('Search query')
+    optional(:max_results).filled(:integer, gteq?: 1, lteq?: 50).description('Maximum number of results')
+  end
+
+  def call(args)
+    max_results = args[:max_results] || 10
+    "Searching for '#{args[:query]}' (returning up to #{max_results} results)..."
+  end
+end
+
+class DeleteFileTool < FastMcp::Tool
+  description 'Delete a file from the filesystem'
+
+  annotations(
+    title: 'Delete File',
+    read_only_hint: false,
+    destructive_hint: true,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
+  arguments do
+    required(:path).filled(:string).description('File path to delete')
+  end
+
+  def call(args)
+    "Would delete file at: #{args[:path]}"
+  end
+end
+
+class CreateRecordTool < FastMcp::Tool
+  description 'Create a new record in the database'
+
+  annotations(
+    title: 'Create Database Record',
+    read_only_hint: false,
+    destructive_hint: false,
+    idempotent_hint: false,
+    open_world_hint: false
+  )
+
+  arguments do
+    required(:table).filled(:string).description('Database table name')
+    required(:data).hash.description('Record data')
+  end
+
+  def call(args)
+    "Creating record in #{args[:table]} with data: #{args[:data].inspect}"
+  end
+end
+
+# Demonstrate the web search tool
+web_search = WebSearchTool.new
+puts "Tool: #{web_search.class.name}"
+puts "Annotations: #{web_search.class.annotations.inspect}"
+puts "Call result: #{web_search.call(query: 'Ruby programming')}"
+puts
+
+# Demonstrate the delete file tool
+delete_file = DeleteFileTool.new
+puts "Tool: #{delete_file.class.name}"
+puts "Annotations: #{delete_file.class.annotations.inspect}"
+puts "Call result: #{delete_file.call(path: '/tmp/test.txt')}"
+puts
+
+# Demonstrate the create record tool
+create_record = CreateRecordTool.new
+puts "Tool: #{create_record.class.name}"
+puts "Annotations: #{create_record.class.annotations.inspect}"
+puts "Call result: #{create_record.call(table: 'users', data: { name: 'John', email: 'john@example.com' })}"

@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+- Tool annotations support for providing hints about tool behavior (readOnlyHint, destructiveHint, etc.)
+
 ## [1.5.0] - 2025-06-01
 ### Added
 - Handle filtering tools and resources [#85 @yjacquin](https://github.com/yjacquin/fast-mcp/pull/85)

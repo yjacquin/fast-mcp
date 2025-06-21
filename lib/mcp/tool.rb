@@ -138,6 +138,12 @@ module FastMcp
         @description = description
       end
 
+      def annotations(annotations_hash = nil)
+        return @annotations || {} if annotations_hash.nil?
+
+        @annotations = annotations_hash
+      end
+
       def authorize(&block)
         @authorization_blocks ||= []
         @authorization_blocks.push block
