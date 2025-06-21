@@ -760,4 +760,55 @@ RSpec.describe FastMcp::Tool do
       expect(test_class.annotations).to eq(annotations)
     end
   end
+
+  describe 'metadata validation' do
+    let(:test_class) do
+      Class.new(FastMcp::Tool) do
+        def self.name
+          'TestTool'
+        end
+      end
+    end
+
+    it 'allows setting valid metadata' do
+      test_class.metadata('app_version', '1.0.0')
+      test_class.metadata('custom_data', { nested: 'value' })
+      
+      expect(test_class.metadata('app_version')).to eq('1.0.0')
+      expect(test_class.metadata('custom_data')).to eq({ nested: 'value' })
+    end
+
+    it 'raises error for reserved mcp: prefix' do
+      expect { test_class.metadata('mcp:reserved', 'value') }.to raise_error(
+        FastMcp::Metadata::ReservedMetadataError,
+        "Key 'mcp:reserved' uses reserved prefix"
+      )
+    end
+
+    it 'raises error for reserved mcp- prefix' do
+      expect { test_class.metadata('mcp-reserved', 'value') }.to raise_error(
+        FastMcp::Metadata::ReservedMetadataError,
+        "Key 'mcp-reserved' uses reserved prefix"
+      )
+    end
+
+    it 'allows reading metadata without validation' do
+      test_class.metadata('valid_key', 'value')
+      expect(test_class.metadata).to include('valid_key' => 'value')
+    end
+
+    it 'handles symbol keys' do
+      expect { test_class.metadata(:'mcp:symbol', 'value') }.to raise_error(
+        FastMcp::Metadata::ReservedMetadataError
+      )
+    end
+
+    it 'preserves existing metadata when adding new keys' do
+      test_class.metadata('key1', 'value1')
+      test_class.metadata('key2', 'value2')
+      
+      metadata = test_class.metadata
+      expect(metadata).to include('key1' => 'value1', 'key2' => 'value2')
+    end
+  end
 end

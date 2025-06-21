@@ -8,11 +8,13 @@ require_relative 'transports/stdio_transport'
 require_relative 'transports/rack_transport'
 require_relative 'transports/authenticated_rack_transport'
 require_relative 'logger'
+require_relative 'metadata'
 require_relative 'server_filtering'
 
 module FastMcp
   class Server
     include ServerFiltering
+    include Metadata
 
     attr_reader :name, :version, :tools, :resources, :capabilities
 
@@ -442,7 +444,9 @@ module FastMcp
 
     # Send a JSON-RPC result response
     def send_result(result, id, metadata: {})
-      result[:_meta] = metadata if metadata.is_a?(Hash) && !metadata.empty?
+      # Validate and sanitize metadata
+      sanitized_metadata = format_meta_field(metadata)
+      result[:_meta] = sanitized_metadata if sanitized_metadata
 
       response = {
         jsonrpc: '2.0',
