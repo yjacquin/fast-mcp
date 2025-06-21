@@ -74,31 +74,41 @@ module FastMcp
       def send_message(message)
         json_message = message.is_a?(String) ? message : JSON.generate(message)
         @logger.debug("Broadcasting message to #{@sse_clients.size} SSE clients: #{json_message}")
+        clients_to_message = @sse_clients.keys
 
-        clients_to_remove = []
-        @sse_clients_mutex.synchronize do
-          @sse_clients.each do |client_id, client|
-            stream = client[:stream]
-            mutex = client[:mutex]
-            next if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?) || mutex.nil?
+        clients_to_message.each do |client_id|
+          send_message_to(client_id, message)
+        end
+      end
 
-            begin
-              mutex.synchronize do
-                stream.write("data: #{json_message}\n\n")
-                stream.flush if stream.respond_to?(:flush)
-              end
-            rescue Errno::EPIPE, IOError => e
-              @logger.info("Client #{client_id} disconnected: #{e.message}")
-              clients_to_remove << client_id
-            rescue StandardError => e
-              @logger.error("Error sending message to client #{client_id}: #{e.message}")
-              clients_to_remove << client_id
-            end
-          end
+      # Send a message to a specific SSE client
+      def send_message_to(client_id, message)
+        client = @sse_clients[client_id]
+        if client.nil?
+          @logger.info("Client #{client_id} not found, skipping message")
+          return
         end
 
-        # Remove disconnected clients outside the loop to avoid modifying the hash during iteration
-        clients_to_remove.each { |client_id| unregister_sse_client(client_id) }
+        json_message = message.is_a?(String) ? message : JSON.generate(message)
+        stream = client[:stream]
+
+        if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
+          unregister_sse_client(client_id)
+        else
+          client[:mutex].synchronize do
+            stream.write("data: #{json_message}\n\n")
+            stream.flush if stream.respond_to?(:flush)
+          end
+        end
+        nil
+      rescue Errno::EPIPE, IOError => e
+        @logger.info("Client #{client_id} disconnected: #{e.message}")
+        unregister_sse_client(client_id)
+        nil
+      rescue StandardError => e
+        @logger.error("Error sending message to client #{client_id}: #{e.message}")
+        unregister_sse_client(client_id)
+        nil
       end
 
       # Register a new SSE client
@@ -111,6 +121,11 @@ module FastMcp
 
       # Unregister an SSE client
       def unregister_sse_client(client_id)
+        existing_client = @sse_clients[client_id]
+        return unless existing_client
+
+        existing_client[:stream].close if existing_client[:stream].respond_to?(:close)
+
         @sse_clients_mutex.synchronize do
           @logger.info("Unregistering SSE client: #{client_id}")
           @sse_clients.delete(client_id)
@@ -318,6 +333,7 @@ module FastMcp
       def extract_client_id(env)
         request = Rack::Request.new(env)
 
+        @logger.info("Extracting client ID from request: #{request.params}")
         # Check various places for client ID
         client_id = request.params['client_id']
         client_id ||= env['HTTP_LAST_EVENT_ID']
@@ -328,12 +344,9 @@ module FastMcp
         browser_type = detect_browser_type(user_agent)
         @logger.info("Client connection from: #{user_agent} (#{browser_type})")
 
-        # Handle reconnection
-        if client_id && @sse_clients.key?(client_id)
-          handle_client_reconnection(client_id, browser_type)
-        else
+        unless client_id
           # Generate a new client ID if none was provided
-          client_id ||= SecureRandom.uuid
+          client_id = SecureRandom.uuid
           @logger.info("New client connection: #{client_id} (#{browser_type})")
         end
 
@@ -360,21 +373,6 @@ module FastMcp
         end
       end
 
-      # Handle client reconnection
-      def handle_client_reconnection(client_id, browser_type)
-        @logger.info("Client #{client_id} is reconnecting (#{browser_type})")
-        old_client = @sse_clients[client_id]
-        begin
-          old_client[:stream].close if old_client[:stream].respond_to?(:close) && !old_client[:stream].closed?
-        rescue StandardError => e
-          @logger.error("Error closing old connection for client #{client_id}: #{e.message}")
-        end
-        unregister_sse_client(client_id)
-
-        # Small delay to ensure the old connection is fully closed
-        sleep 0.1
-      end
-
       # Handle SSE with Rack hijacking (e.g., Puma)
       def handle_rack_hijack_sse(env)
         client_id = extract_client_id(env)
@@ -392,6 +390,8 @@ module FastMcp
       end
 
       # Set up the SSE connection
+      # If SSE connection already exists for a client through a different IO,
+      # it will be closed and a new one will be established
       def setup_sse_connection(client_id, io, env)
         # Handle for reconnection, if the client_id is already registered we reuse the mutex
         # If not a reconnection, generate a new mutex used in registration
@@ -399,38 +399,46 @@ module FastMcp
         mutex = client ? client[:mutex] : Mutex.new
         # Send headers
         @logger.debug("Sending HTTP headers for SSE connection #{client_id}")
-        mutex.synchronize do
-          io.write("HTTP/1.1 200 OK\r\n")
-          SSE_HEADERS.each { |k, v| io.write("#{k}: #{v}\r\n") }
-          io.write("\r\n")
-          io.flush
-        end
+        mutex.synchronize { write_sse_headers(io) }
 
         # Register client (will overwrite if already present)
         register_sse_client(client_id, io, mutex)
 
-        # Send an initial comment to keep the connection alive
-        mutex.synchronize { io.write(": SSE connection established\n\n") }
-
-        # Extract query parameters from the request
-        query_string = env['QUERY_STRING']
-
-        # Send endpoint information as the first message with query parameters
-        endpoint = "#{@path_prefix}/#{@messages_route}"
-        endpoint += "?#{query_string}" if query_string
+        # Extract query parameters from the request and generate the endpoint
+        # the client will use to send messages to the server
+        endpoint = generate_endpoint_info(client_id, env['QUERY_STRING'])
         @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
-        mutex.synchronize { io.write("event: endpoint\ndata: #{endpoint}\n\n") }
-
-        # Send a retry directive with a very short reconnect time
-        # This helps browsers reconnect quickly if the connection is lost
-        mutex.synchronize do
-          io.write("retry: 100\n\n")
-          io.flush
-        end
+        mutex.synchronize { write_sse_initialize(io, endpoint) }
       rescue StandardError => e
         @logger.error("Error setting up SSE connection for client #{client_id}: #{e.message}")
         @logger.error(e.backtrace.join("\n")) if e.backtrace
         raise
+      end
+
+      def write_sse_headers(stream)
+        stream.write("HTTP/1.1 200 OK\r\n")
+
+        SSE_HEADERS.each { |k, v| stream.write("#{k}: #{v}\r\n") }
+        stream.write("\r\n")
+        stream.flush
+      end
+
+      def generate_endpoint_info(client_id, query_string = '')
+        endpoint = "#{@path_prefix}/#{@messages_route}"
+        params = []
+        params << query_string if query_string && !query_string.empty?
+        params << "client_id=#{client_id}"
+        endpoint += "?#{params.join('&')}"
+        endpoint
+      end
+
+      def write_sse_initialize(stream, endpoint)
+        stream.write(": SSE connection established\n\n")
+        stream.write("event: endpoint\ndata: #{endpoint}\n\n")
+        # Send a retry directive with a very short reconnect time
+        # This helps browsers reconnect quickly if the connection is lost
+        stream.write("retry: 100\n\n")
+        stream.flush
       end
 
       # Start a keep-alive thread for SSE connection
@@ -543,6 +551,8 @@ module FastMcp
         # Extract headers that might be relevant
         headers = request.env.select { |k, _v| k.start_with?('HTTP_') }
                          .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
+
+        headers['client_id'] = extract_client_id(request.env)
 
         # Let the specific server handle the JSON request directly
         response = server.handle_request(body, headers: headers) || []

@@ -132,8 +132,10 @@ RSpec.describe FastMcp::Transports::RackTransport do
         # Add a mock SSE client that raises an error
         client_stream = double('stream')
         expect(client_stream).to receive(:respond_to?).with(:closed?).and_return(true)
+        expect(client_stream).to receive(:respond_to?).with(:close).and_return(true)
         expect(client_stream).to receive(:closed?).and_return(false)
         expect(client_stream).to receive(:write).and_raise(StandardError.new('Test error'))
+        expect(client_stream).to receive(:close)
 
         transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream, mutex: Mutex.new } })
 
@@ -156,6 +158,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
         allow(client_stream).to receive(:closed?).and_return(false)
         allow(client_stream).to receive(:write)
         allow(client_stream).to receive(:flush)
+        allow(client_stream).to receive(:close)
 
         # Create a client with a mutex that will raise an error
         client_mutex = double('mutex')
