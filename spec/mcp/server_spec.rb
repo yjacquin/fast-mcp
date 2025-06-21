@@ -314,5 +314,53 @@ RSpec.describe FastMcp::Server do
         server.handle_request(request)
       end
     end
+
+    describe 'metadata handling' do
+      let(:metadata_helper) do
+        Class.new { include FastMcp::Metadata }.new
+      end
+
+      it 'validates metadata keys for reserved prefixes' do
+        expect { metadata_helper.validate_meta_field({ 'mcp:reserved' => 'value' }) }.to raise_error(
+          FastMcp::Metadata::ReservedMetadataError
+        )
+      end
+
+      it 'sanitizes metadata correctly' do
+        metadata = {
+          'valid_key' => 'value',
+          'mcp:reserved' => 'should_be_removed',
+          'mcp-reserved' => 'should_be_removed',
+          '' => 'empty_key'
+        }
+        
+        sanitized = metadata_helper.sanitize_meta_field(metadata)
+        expect(sanitized).to eq({ 'valid_key' => 'value' })
+      end
+
+      it 'formats metadata for JSON serialization' do
+        # Test with valid metadata
+        metadata = { 'app_version' => '1.0.0', 'request_id' => 'abc123' }
+        formatted = metadata_helper.format_meta_field(metadata)
+        expect(formatted).to eq(metadata)
+        
+        # Test with metadata that gets filtered out
+        invalid_metadata = { 'mcp:reserved' => 'value', 'mcp-reserved' => 'value' }
+        formatted = metadata_helper.format_meta_field(invalid_metadata)
+        expect(formatted).to be_nil
+      end
+
+      it 'merges metadata from multiple sources' do
+        meta1 = { 'key1' => 'value1', 'common' => 'meta1' }
+        meta2 = { 'key2' => 'value2', 'common' => 'meta2' }
+        
+        merged = metadata_helper.merge_meta_fields(meta1, meta2)
+        expect(merged).to eq({
+          'key1' => 'value1',
+          'key2' => 'value2',
+          'common' => 'meta2'  # Later sources take precedence
+        })
+      end
+    end
   end
 end
