@@ -544,6 +544,13 @@ module FastMcp
         headers = request.env.select { |k, _v| k.start_with?('HTTP_') }
                          .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
 
+        # Validate protocol version
+        unless validate_protocol_version(headers)
+          version = headers['mcp-protocol-version']
+          error_response = protocol_version_error_response(version)
+          return [400, { 'Content-Type' => 'application/json' }, [JSON.generate(error_response)]]
+        end
+
         # Let the specific server handle the JSON request directly
         response = server.handle_request(body, headers: headers) || []
 

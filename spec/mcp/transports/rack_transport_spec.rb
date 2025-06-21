@@ -471,6 +471,116 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(response['error']['message']).to include('Method not allowed')
       end
     end
+
+    context 'with MCP protocol version validation' do
+      it 'accepts requests without protocol version header' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = transport.call(env)
+
+        expect(result[0]).to eq(200)
+        expect(result[1]['Content-Type']).to eq('application/json')
+      end
+
+      it 'accepts requests with supported protocol version' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => '2025-06-18',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = transport.call(env)
+
+        expect(result[0]).to eq(200)
+        expect(result[1]['Content-Type']).to eq('application/json')
+      end
+
+      it 'rejects requests with unsupported protocol version' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => '2024-11-05',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = transport.call(env)
+
+        expect(result[0]).to eq(400)
+        expect(result[1]['Content-Type']).to eq('application/json')
+
+        response = JSON.parse(result[2].first)
+        expect(response['jsonrpc']).to eq('2.0')
+        expect(response['error']['code']).to eq(-32_000)
+        expect(response['error']['message']).to eq('Unsupported protocol version: 2024-11-05')
+        expect(response['error']['data']['expected_version']).to eq('2025-06-18')
+        expect(response['id']).to be_nil
+      end
+
+      it 'rejects requests with invalid protocol version' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => 'invalid-version',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = transport.call(env)
+
+        expect(result[0]).to eq(400)
+        expect(result[1]['Content-Type']).to eq('application/json')
+
+        response = JSON.parse(result[2].first)
+        expect(response['jsonrpc']).to eq('2.0')
+        expect(response['error']['code']).to eq(-32_000)
+        expect(response['error']['message']).to eq('Unsupported protocol version: invalid-version')
+        expect(response['error']['data']['expected_version']).to eq('2025-06-18')
+      end
+
+      it 'accepts empty protocol version header' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => '',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = transport.call(env)
+
+        expect(result[0]).to eq(200)
+        expect(result[1]['Content-Type']).to eq('application/json')
+      end
+
+      it 'logs warning for unsupported protocol versions' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => '1.0.0',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        expect(logger).to receive(:warn).with('Unsupported protocol version: 1.0.0, expected: 2025-06-18')
+
+        result = transport.call(env)
+        expect(result[0]).to eq(400)
+      end
+    end
   end
 
   # Tests for private methods

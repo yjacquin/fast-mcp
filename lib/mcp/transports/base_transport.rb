@@ -5,6 +5,8 @@ module FastMcp
     # Base class for all MCP transports
     # This defines the interface that all transports must implement
     class BaseTransport
+      PROTOCOL_VERSION = '2025-06-18'
+
       attr_reader :server, :logger
 
       def initialize(server, logger: nil)
@@ -34,6 +36,36 @@ module FastMcp
       # This is a helper method that can be used by subclasses
       def process_message(message, headers: {})
         server.handle_request(message, headers: headers)
+      end
+
+      protected
+
+      # Validate the MCP protocol version from headers
+      def validate_protocol_version(headers)
+        version = headers['mcp-protocol-version']
+        return true if version.nil? || version.empty?
+
+        unless version == PROTOCOL_VERSION
+          @logger.warn("Unsupported protocol version: #{version}, expected: #{PROTOCOL_VERSION}")
+          return false
+        end
+
+        true
+      end
+
+      # Create a protocol version error response
+      def protocol_version_error_response(version = nil)
+        message = version ? "Unsupported protocol version: #{version}" : 'Invalid protocol version'
+
+        {
+          jsonrpc: '2.0',
+          error: {
+            code: -32_000,
+            message: message,
+            data: { expected_version: PROTOCOL_VERSION }
+          },
+          id: nil
+        }
       end
     end
   end
