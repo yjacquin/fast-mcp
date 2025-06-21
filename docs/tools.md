@@ -13,6 +13,7 @@ Tools are a core concept in the Model Context Protocol (MCP). They allow you to 
   - [Default Values](#default-values)
 - [Calling Tools From Another Tool](#calling-tools-from-another-tool)
 - [Advanced Tool Features](#advanced-tool-features)
+  - [Tool Annotations](#tool-annotations)
   - [Tool Hidden Arguments](#tool-hidden-arguments)
   - [Tool Categories](#tool-categories)
   - [Tool Metadata](#tool-metadata)
@@ -276,6 +277,67 @@ end
 ```
 
 ## Advanced Tool Features
+
+### Tool Annotations
+
+Tool annotations provide additional metadata about a tool's behavior, helping clients understand how to present and manage tools. These annotations are hints that describe the nature and impact of a tool.
+
+```ruby
+class WebSearchTool < FastMcp::Tool
+  description 'Search the web for information'
+  
+  annotations(
+    title: 'Web Search',           # Human-readable title for the tool
+    read_only_hint: true,          # Indicates the tool doesn't modify its environment
+    open_world_hint: true          # The tool interacts with external entities
+  )
+  
+  arguments do
+    required(:query).filled(:string).description('Search query')
+  end
+  
+  def call(query:)
+    "Searching for: #{query}"
+  end
+end
+```
+
+Available annotations:
+
+| Annotation | Type | Default | Description |
+|------------|------|---------|-------------|
+| `title` | string | - | A human-readable title for the tool, useful for UI display |
+| `read_only_hint` | boolean | false | If true, indicates the tool does not modify its environment |
+| `destructive_hint` | boolean | true | If true, the tool may perform destructive updates (only meaningful when `read_only_hint` is false) |
+| `idempotent_hint` | boolean | false | If true, calling the tool repeatedly with the same arguments has no additional effect |
+| `open_world_hint` | boolean | true | If true, the tool may interact with an "open world" of external entities |
+
+Example with all annotations:
+
+```ruby
+class DeleteFileTool < FastMcp::Tool
+  description 'Delete a file from the filesystem'
+  
+  annotations(
+    title: 'Delete File',
+    read_only_hint: false,     # This tool modifies the filesystem
+    destructive_hint: true,    # Deleting files is destructive
+    idempotent_hint: true,     # Deleting the same file twice has no additional effect
+    open_world_hint: false     # Only interacts with the local filesystem
+  )
+  
+  arguments do
+    required(:path).filled(:string).description('File path to delete')
+  end
+  
+  def call(path:)
+    File.delete(path) if File.exist?(path)
+    "File deleted: #{path}"
+  end
+end
+```
+
+**Important**: Annotations are hints and not guaranteed to provide a faithful description of tool behavior. Clients should never make security-critical decisions based solely on annotations.
 
 ### Tool hidden arguments
 If need be, we can register arguments that won't show up in the tools/list call but can still be used in the tool when provided.

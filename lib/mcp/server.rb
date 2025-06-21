@@ -294,11 +294,25 @@ module FastMcp
     # Handle tools/list request
     def handle_tools_list(id)
       tools_list = @tools.values.map do |tool|
-        {
+        tool_info = {
           name: tool.tool_name,
           description: tool.description || '',
           inputSchema: tool.input_schema_to_json || { type: 'object', properties: {}, required: [] }
         }
+
+        # Add annotations if they exist
+        annotations = tool.annotations
+        unless annotations.empty?
+          # Convert snake_case keys to camelCase for MCP protocol
+          camel_case_annotations = {}
+          annotations.each do |key, value|
+            camel_key = key.to_s.gsub(/_([a-z])/) { ::Regexp.last_match(1).upcase }.to_sym
+            camel_case_annotations[camel_key] = value
+          end
+          tool_info[:annotations] = camel_case_annotations
+        end
+
+        tool_info
       end
 
       send_result({ tools: tools_list }, id)
