@@ -4,12 +4,16 @@ require 'json'
 require 'base64'
 require 'mime/types'
 require 'addressable/template'
+require_relative 'metadata'
 
 module FastMcp
   # Resource class for MCP Resources feature
   # Represents a resource that can be exposed to clients
   class Resource
+    include Metadata
+
     class << self
+      include Metadata
       attr_accessor :server
 
       # Define URI for this resource
