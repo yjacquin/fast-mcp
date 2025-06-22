@@ -1,8 +1,21 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Example server with OAuth 2.1 enabled StreamableHTTP transport
-# This demonstrates OAuth-based authorization for MCP servers
+# Comprehensive OAuth 2.1 MCP Server Example
+#
+# This example demonstrates a complete OAuth 2.1 implementation for MCP servers including:
+# - Role-based access control with scopes (admin, read, tools)
+# - Token validation with both opaque and JWT tokens
+# - Audience binding for enhanced security
+# - Production-ready configuration examples
+# - Security best practices
+#
+# Security Features Demonstrated:
+# - PKCE (Proof Key for Code Exchange) support
+# - Audience binding (RFC 8707) to prevent confused deputy attacks
+# - Proper HTTPS enforcement (disabled for local development)
+# - Scope-based authorization for different MCP operations
+# - Secure token validation
 
 require_relative '../lib/fast_mcp'
 require 'rack'
@@ -100,98 +113,204 @@ mcp_server = FastMcp::Server.new(
 mcp_server.register_tools(ServerStatusTool, ListFilesTool)
 mcp_server.register_resource(FileResource)
 
-# Example opaque token validator
+# Enhanced OAuth Token Validator Examples
+# In production, these would connect to your OAuth authorization server
+
+# Example 1: Opaque Token Validator (for custom tokens)
+# This simulates checking tokens against a database or authorization server
 opaque_token_validator = lambda do |token|
+  # In production, this would validate against your OAuth server's database
   case token
   when 'admin_token_123'
-    { valid: true, scopes: ['mcp:admin', 'mcp:read', 'mcp:write', 'mcp:tools'] }
+    # Full administrative access
+    {
+      valid: true,
+      scopes: ['mcp:admin', 'mcp:resources', 'mcp:tools'],
+      subject: 'admin_user',
+      client_id: 'mcp_admin_client'
+    }
   when 'read_token_456'
-    { valid: true, scopes: ['mcp:read'] }
+    # Read-only access to resources
+    {
+      valid: true,
+      scopes: ['mcp:resources'],
+      subject: 'readonly_user',
+      client_id: 'mcp_readonly_client'
+    }
   when 'tools_token_789'
-    { valid: true, scopes: ['mcp:tools', 'mcp:read'] }
+    # Can execute tools and read resources
+    {
+      valid: true,
+      scopes: ['mcp:tools', 'mcp:resources'],
+      subject: 'developer_user',
+      client_id: 'mcp_developer_client'
+    }
   else
     { valid: false }
   end
 end
 
-# Create OAuth-enabled StreamableHTTP transport as Rack middleware
+# Example 2: JWT Token Configuration (for standards-based tokens)
+# Uncomment and configure these options for JWT token validation:
+#
+# jwt_config = {
+#   # For HMAC-signed JWTs (shared secret)
+#   hmac_secret: ENV['JWT_HMAC_SECRET'],
+#
+#   # For RSA/ECDSA-signed JWTs (public key validation)
+#   jwks_uri: 'https://your-auth-server.com/.well-known/jwks.json',
+#   issuer: 'https://your-auth-server.com',
+#   audience: 'http://localhost:3001/mcp', # Should match resource_identifier
+#
+#   # Optional: Authorization server discovery
+#   # The system can auto-discover endpoints from the issuer
+#   # issuer: 'https://your-auth-server.com' # Will auto-discover from /.well-known/openid-configuration
+# }
+
+# OAuth 2.1 Transport Configuration
+# This demonstrates all available security options
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   main_app,
   mcp_server,
+  # Basic Configuration
   logger: Logger.new($stdout, level: Logger::DEBUG),
   path: '/mcp',
+
+  # OAuth 2.1 Configuration
   oauth_enabled: true,
+
+  # Token Validation Options
   opaque_token_validator: opaque_token_validator,
-  require_https: false, # Allow HTTP for local development
-  tools_scope: 'mcp:tools',
-  resources_scope: 'mcp:read',
-  admin_scope: 'mcp:admin'
+  # For JWT tokens, merge jwt_config here instead:
+  # **jwt_config,
+
+  # Security Configuration
+  require_https: false, # ⚠️  Set to true in production! Allow HTTP for local development only
+  resource_identifier: 'http://localhost:3001/mcp', # Audience binding (RFC 8707) - prevents confused deputy attacks
+
+  # Scope Configuration - Define what scopes are required for different operations
+  tools_scope: 'mcp:tools', # Required to execute tools
+  resources_scope: 'mcp:resources', # Required to read resources
+  admin_scope: 'mcp:admin', # Required for administrative operations
+
+  # CORS Configuration (for web clients)
+  cors_enabled: true,
+  allowed_origins: ['localhost', '127.0.0.1']
+  # Optional: Token Introspection (for remote token validation)
+  # introspection_endpoint: 'https://your-auth-server.com/oauth/introspect',
+  # client_id: 'your_mcp_server_client_id',
+  # client_secret: ENV['OAUTH_CLIENT_SECRET'],
+
+  # Optional: Authorization Server Discovery
+  # issuer: 'https://your-auth-server.com', # Auto-discovers endpoints
 )
 
 if __FILE__ == $0
-  puts 'Starting OAuth-enabled StreamableHTTP MCP Server...'
-puts 'Server will be available at: http://localhost:3001'
-puts 'Available endpoints:'
-puts '  GET  / - Main application with token information'
-puts '  POST /mcp - OAuth-protected JSON-RPC endpoint'
-puts '  GET  /mcp (with Accept: text/event-stream) - OAuth-protected SSE streaming'
-puts ''
-puts 'Test tokens:'
-puts '  admin_token_123 - Full access (admin, read, write, tools)'
-puts '  read_token_456 - Read-only access'
-puts '  tools_token_789 - Tools and read access'
-puts ''
-puts 'Test with MCP Inspector (add token in settings):'
-puts '  npx @modelcontextprotocol/inspector http://localhost:3001/mcp'
-puts ''
-puts 'Example curl commands:'
-puts '  # List tools (requires mcp:tools scope)'
-puts '  curl -H "Authorization: Bearer admin_token_123" -X POST http://localhost:3001/mcp \\'
-puts '    -H "Content-Type: application/json" \\'
-puts '    -H "Accept: application/json" \\'
-puts '    -H "MCP-Protocol-Version: 2025-06-18" \\'
-puts '    -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
-puts ''
-puts '  # List resources (requires mcp:read scope)'
-puts '  curl -H "Authorization: Bearer read_token_456" -X POST http://localhost:3001/mcp \\'
-puts '    -H "Content-Type: application/json" \\'
-puts '    -H "Accept: application/json" \\'
-puts '    -H "MCP-Protocol-Version: 2025-06-18" \\'
-puts '    -d \'{"jsonrpc":"2.0","method":"resources/list","id":1}\''
-puts ''
-puts 'Press Ctrl+C to stop'
+  puts '🚀 Starting OAuth 2.1 Enabled MCP Server...'
+  puts '   Server will be available at: http://localhost:3001'
+  puts ''
+  puts '📋 Available Endpoints:'
+  puts '   GET  /           - Main application with token information and examples'
+  puts '   POST /mcp        - OAuth 2.1 protected JSON-RPC endpoint'
+  puts '   GET  /mcp        - OAuth 2.1 protected SSE streaming (Accept: text/event-stream)'
+  puts ''
+  puts '🔑 Demo Tokens (for testing):'
+  puts '   admin_token_123  - Full administrative access (admin + resources + tools)'
+  puts '   read_token_456   - Read-only access to resources'
+  puts '   tools_token_789  - Can execute tools and read resources'
+  puts ''
+  puts '🔒 Security Features Enabled:'
+  puts '   ✅ OAuth 2.1 compliance with PKCE support'
+  puts '   ✅ Scope-based authorization (admin, resources, tools)'
+  puts '   ✅ Audience binding for enhanced security'
+  puts '   ✅ Token introspection with local fallback'
+  puts '   ⚠️  HTTPS enforcement disabled (development mode)'
+  puts ''
+  puts '🧪 Testing Options:'
+  puts ''
+  puts '1. MCP Inspector (graphical interface):'
+  puts '   npx @modelcontextprotocol/inspector http://localhost:3001/mcp'
+  puts '   → Add token in Inspector settings before connecting'
+  puts ''
+  puts '2. Command Line Examples:'
+  puts ''
+  puts '   # Test server capabilities (requires admin scope)'
+  puts '   curl -H "Authorization: Bearer admin_token_123" \\'
+  puts '        -H "Content-Type: application/json" \\'
+  puts '        -H "Accept: application/json" \\'
+  puts '        -H "MCP-Protocol-Version: 2025-06-18" \\'
+  puts '        -X POST http://localhost:3001/mcp \\'
+  puts '        -d \'{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}\''
+  puts ''
+  puts '   # List available tools (requires tools scope)'
+  puts '   curl -H "Authorization: Bearer admin_token_123" \\'
+  puts '        -H "Content-Type: application/json" \\'
+  puts '        -H "Accept: application/json" \\'
+  puts '        -H "MCP-Protocol-Version: 2025-06-18" \\'
+  puts '        -X POST http://localhost:3001/mcp \\'
+  puts '        -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
+  puts ''
+  puts '   # List available resources (requires resources scope)'
+  puts '   curl -H "Authorization: Bearer read_token_456" \\'
+  puts '        -H "Content-Type: application/json" \\'
+  puts '        -H "Accept: application/json" \\'
+  puts '        -H "MCP-Protocol-Version: 2025-06-18" \\'
+  puts '        -X POST http://localhost:3001/mcp \\'
+  puts '        -d \'{"jsonrpc":"2.0","method":"resources/list","id":1}\''
+  puts ''
+  puts '   # Execute a tool (requires tools scope)'
+  puts '   curl -H "Authorization: Bearer tools_token_789" \\'
+  puts '        -H "Content-Type: application/json" \\'
+  puts '        -H "Accept: application/json" \\'
+  puts '        -H "MCP-Protocol-Version: 2025-06-18" \\'
+  puts '        -X POST http://localhost:3001/mcp \\'
+  puts '        -d \'{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_files","arguments":{"directory":"."}},"id":1}\''
+  puts ''
+  puts '3. Error Testing (demonstrating OAuth 2.1 error responses):'
+  puts ''
+  puts '   # Test with invalid token'
+  puts '   curl -H "Authorization: Bearer invalid_token" \\'
+  puts '        -X POST http://localhost:3001/mcp \\'
+  puts '        -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
+  puts ''
+  puts '   # Test with insufficient scope (read token trying to access tools)'
+  puts '   curl -H "Authorization: Bearer read_token_456" \\'
+  puts '        -X POST http://localhost:3001/mcp \\'
+  puts '        -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
+  puts ''
+  puts '🛑 Press Ctrl+C to stop the server'
 
-# Start the HTTP server using Puma
-begin
-  require 'puma'
-  
-  # Create the Rack application
-  app = Rack::Builder.new do
-    run transport
+  # Start the HTTP server using Puma
+  begin
+    require 'puma'
+
+    # Create the Rack application
+    app = Rack::Builder.new do
+      run transport
+    end
+
+    # Create Puma server with proper configuration
+    server = Puma::Server.new(app)
+    server.add_tcp_listener('localhost', 3001)
+
+    # Set up signal handlers
+    Signal.trap('INT') do
+      puts "\nShutting down..."
+      server.stop
+    end
+
+    Signal.trap('TERM') do
+      puts "\nShutting down..."
+      server.stop
+    end
+
+    puts 'Server started successfully!'
+    server.run.join
+  rescue LoadError
+    puts 'Puma gem not available. Please install it with: gem install puma'
+    exit 1
+  rescue StandardError => e
+    puts "Error starting server: #{e.message}"
+    exit 1
   end
-  
-  # Create Puma server with proper configuration
-  server = Puma::Server.new(app)
-  server.add_tcp_listener('localhost', 3001)
-  
-  # Set up signal handlers
-  Signal.trap('INT') do
-    puts "\nShutting down..."
-    server.stop
-  end
-  
-  Signal.trap('TERM') do
-    puts "\nShutting down..."
-    server.stop
-  end
-  
-  puts "Server started successfully!"
-  server.run.join
-rescue LoadError
-  puts "Puma gem not available. Please install it with: gem install puma"
-  exit 1
-rescue StandardError => e
-  puts "Error starting server: #{e.message}"
-  exit 1
-end
 end

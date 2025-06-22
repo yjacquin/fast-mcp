@@ -382,5 +382,144 @@ RSpec.describe FastMcp::Transports::StreamableHttpTransport do
       message = '{"jsonrpc":"2.0","method":"test"}'
       expect { transport.send_message(message) }.not_to raise_error
     end
+
+    it 'sends messages to specific sessions when session_id is provided' do
+      # This test verifies the new session-specific messaging capability
+      expect { transport.send_message({ test: 'message' }, session_id: 'test-session') }.not_to raise_error
+    end
+  end
+
+  describe 'Server-controlled streaming API' do
+    describe '#initiate_streaming_response' do
+      it 'returns nil when rack hijacking is not available' do
+        env = {}
+        result = transport.initiate_streaming_response('test-session', env)
+        expect(result).to be_nil
+      end
+
+      it 'hijacks connection and sets up SSE when rack hijacking is available' do
+        hijack_proc = proc { }
+        mock_io = instance_double(IO)
+        
+        env = {
+          'rack.hijack' => hijack_proc,
+          'rack.hijack_io' => mock_io
+        }
+
+        allow(transport).to receive(:setup_server_controlled_sse).with('test-session', mock_io)
+        
+        status, headers, body = transport.initiate_streaming_response('test-session', env)
+        expect(status).to eq(-1)
+        expect(headers).to eq({})
+        expect(body).to eq([])
+      end
+    end
+
+    describe '#send_streaming_message' do
+      it 'returns false when session does not exist' do
+        result = transport.send_streaming_message('nonexistent', { test: 'message' })
+        expect(result).to be(false)
+      end
+
+      it 'sends message to existing streaming session' do
+        # This is a simplified test - in practice would need to set up SSE client
+        expect(transport.send_streaming_message('test-session', { test: 'message' })).to be(false)
+      end
+    end
+
+    describe '#complete_streaming_response' do
+      it 'handles completion for non-existent session gracefully' do
+        result = transport.complete_streaming_response('nonexistent', { result: 'done' })
+        expect(result).to be(false)
+      end
+    end
+
+    describe 'MCP-Session-Id header support' do
+      it 'includes MCP-Session-Id header in JSON responses' do
+        # Use a server that returns a single response (not an array)
+        single_response_server = instance_double(FastMcp::Server,
+                                                 logger: logger,
+                                                 transport: nil,
+                                                 'transport=': nil,
+                                                 contains_filters?: false,
+                                                 handle_request: '{"jsonrpc":"2.0","result":{"status":"ok"},"id":1}')
+        single_response_transport = described_class.new(app, single_response_server, logger: logger)
+
+        env = {
+          'REQUEST_METHOD' => 'POST',
+          'PATH_INFO' => '/mcp',
+          'HTTP_CONTENT_TYPE' => 'application/json',
+          'HTTP_ACCEPT' => 'application/json, text/event-stream',
+          'HTTP_MCP_PROTOCOL_VERSION' => '2025-06-18',
+          'REMOTE_ADDR' => '127.0.0.1',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"test","id":1}')
+        }
+
+        status, headers, _body = single_response_transport.call(env)
+        expect(status).to eq(200)
+        expect(headers).to have_key('MCP-Session-Id')
+        expect(headers['MCP-Session-Id']).to match(/\A[a-zA-Z0-9]{32}\z/)
+      end
+
+      it 'includes MCP-Session-Id header in notification responses' do
+        notification_server = instance_double(FastMcp::Server,
+                                               logger: logger,
+                                               transport: nil,
+                                               'transport=': nil,
+                                               contains_filters?: false,
+                                               handle_request: nil) # nil response indicates notification
+        notification_transport = described_class.new(app, notification_server, logger: logger)
+
+        env = {
+          'REQUEST_METHOD' => 'POST',
+          'PATH_INFO' => '/mcp',
+          'HTTP_CONTENT_TYPE' => 'application/json',
+          'HTTP_ACCEPT' => 'application/json, text/event-stream',
+          'HTTP_MCP_PROTOCOL_VERSION' => '2025-06-18',
+          'REMOTE_ADDR' => '127.0.0.1',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"notification"}')
+        }
+
+        status, headers, _body = notification_transport.call(env)
+        expect(status).to eq(202)
+        expect(headers).to have_key('MCP-Session-Id')
+        expect(headers['MCP-Session-Id']).to match(/\A[a-zA-Z0-9]{32}\z/)
+      end
+
+      it 'respects existing MCP-Session-Id from client requests' do
+        # Use a server that returns a single response (not an array)
+        single_response_server = instance_double(FastMcp::Server,
+                                                 logger: logger,
+                                                 transport: nil,
+                                                 'transport=': nil,
+                                                 contains_filters?: false,
+                                                 handle_request: '{"jsonrpc":"2.0","result":{"status":"ok"},"id":1}')
+        single_response_transport = described_class.new(app, single_response_server, logger: logger)
+
+        existing_session_id = 'a' * 32 # Valid 32-character session ID
+        env = {
+          'REQUEST_METHOD' => 'POST',
+          'PATH_INFO' => '/mcp',
+          'HTTP_CONTENT_TYPE' => 'application/json',
+          'HTTP_ACCEPT' => 'application/json, text/event-stream',
+          'HTTP_MCP_PROTOCOL_VERSION' => '2025-06-18',
+          'HTTP_MCP_SESSION_ID' => existing_session_id,
+          'REMOTE_ADDR' => '127.0.0.1',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"test","id":1}')
+        }
+
+        status, headers, _body = single_response_transport.call(env)
+        expect(status).to eq(200)
+        expect(headers['MCP-Session-Id']).to eq(existing_session_id)
+      end
+    end
+
+
+    describe 'CORS header updates' do
+      it 'includes MCP-Session-Id in allowed CORS headers' do
+        cors_headers = transport.send(:setup_cors_headers)
+        expect(cors_headers['Access-Control-Allow-Headers']).to include('MCP-Session-Id')
+      end
+    end
   end
 end

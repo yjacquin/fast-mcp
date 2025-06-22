@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'token_validator'
+require_relative 'introspection'
 
 module FastMcp
   module OAuth
@@ -18,14 +19,25 @@ module FastMcp
         'mcp:admin' => 'Administrative access to MCP server'
       }.freeze
 
-      attr_reader :token_validator, :logger, :scope_definitions
+      attr_reader :token_validator, :logger, :scope_definitions, :introspector, :resource_identifier
 
       def initialize(options = {})
         @logger = options[:logger] || ::Logger.new($stdout).tap { |l| l.level = ::Logger::FATAL }
         @token_validator = TokenValidator.new(options.merge(logger: @logger))
         @scope_definitions = DEFAULT_SCOPES.merge(options[:custom_scopes] || {})
-        @require_https = options.fetch(:require_https, true)
+        @require_https = options.fetch(:require_https, true) # HTTPS required by default for OAuth 2.1 compliance
+
+        # Resource identifier for audience binding (RFC 8707)
+        @resource_identifier = options[:resource_identifier] || options[:audience]
+
+        # Set up token introspection
         @introspection_endpoint = options[:introspection_endpoint]
+        @introspector = if @introspection_endpoint
+                          Introspection.new(options.merge(logger: @logger))
+                        else
+                          # Use local introspection as fallback
+                          Introspection::LocalIntrospector.new(@token_validator, logger: @logger)
+                        end
       end
 
       # Authorize a request with OAuth 2.1
@@ -42,8 +54,13 @@ module FastMcp
           raise UnauthorizedError, 'Invalid or expired token'
         end
 
-        # Extract and return token information
-        extract_token_info(token)
+        # Extract token information
+        token_info = extract_token_info(token)
+
+        # Validate audience binding if resource identifier is configured
+        validate_audience_binding(token_info) if @resource_identifier
+
+        token_info
       end
 
       # Check if request has sufficient scope
@@ -60,6 +77,15 @@ module FastMcp
       def get_token_info(token)
         return nil unless token
 
+        # Try introspection first (works for both JWT and opaque tokens)
+        begin
+          info = @introspector.token_info(token)
+          return info if info
+        rescue StandardError => e
+          @logger.debug("Introspection failed, falling back to local JWT parsing: #{e.message}")
+        end
+
+        # Fallback to local JWT parsing for backwards compatibility
         claims = @token_validator.extract_claims(token)
         if claims
           {
@@ -71,7 +97,7 @@ module FastMcp
             client_id: claims['client_id']
           }
         else
-          # For opaque tokens, we'd need to call introspection endpoint
+          # Last resort for opaque tokens without introspection
           { subject: 'unknown', scopes: [] }
         end
       end
@@ -101,24 +127,30 @@ module FastMcp
                              'Bearer error="invalid_token"'
                            when 'insufficient_scope'
                              'Bearer error="insufficient_scope"'
+                           when 'invalid_request'
+                             'Bearer error="invalid_request"'
                            else
                              'Bearer'
                            end
 
         www_authenticate += %(, error_description="#{description}") if description
+
+        # Add realm parameter for enhanced security
+        www_authenticate += %(, realm="#{@scope_definitions.keys.join(' ')}") unless @scope_definitions.empty?
+
         www_authenticate
       end
 
       def build_error_response_body(error_type, description, error_data)
-        JSON.generate({
-                        jsonrpc: '2.0',
-                        error: {
-                          code: -32_000,
-                          message: description || error_type.tr('_', ' ').capitalize,
-                          data: error_data
-                        },
-                        id: nil
-                      })
+        # Use OAuth 2.1 standard error response format (RFC 6749 Section 5.2)
+        # instead of JSON-RPC format
+        response = { error: error_type }
+        response[:error_description] = description if description
+
+        # Add optional error URI for more details
+        response[:error_uri] = error_data[:error_uri] if error_data[:error_uri]
+
+        JSON.generate(response)
       end
 
       # Extract Bearer token from request
@@ -180,6 +212,23 @@ module FastMcp
         else
           []
         end
+      end
+
+      # Validate audience binding for enhanced security (RFC 8707)
+      def validate_audience_binding(token_info)
+        token_audience = token_info[:audience]
+        return unless token_audience # Skip validation if no audience in token
+
+        # Normalize audiences to arrays for comparison
+        token_audiences = Array(token_audience)
+
+        # Check if our resource identifier is in the token's audience
+        unless token_audiences.include?(@resource_identifier)
+          @logger.warn("Audience binding validation failed: token audience #{token_audiences} does not include resource #{@resource_identifier}")
+          raise UnauthorizedError, 'Token not intended for this resource server'
+        end
+
+        @logger.debug("Audience binding validation successful: resource #{@resource_identifier} found in token audience")
       end
     end
   end

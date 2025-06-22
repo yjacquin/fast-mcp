@@ -20,7 +20,7 @@ module FastMcp
         # Scope requirements for different MCP operations
         @scope_requirements = {
           tools: options[:tools_scope] || 'mcp:tools',
-          resources: options[:resources_scope] || 'mcp:read',
+          resources: options[:resources_scope] || 'mcp:resources',
           admin: options[:admin_scope] || 'mcp:admin'
         }
 
@@ -60,7 +60,6 @@ module FastMcp
         if @oauth_enabled
           parsed_request = JSON.parse(body)
           required_scope = determine_required_scope(parsed_request)
-
           return oauth_insufficient_scope_response(required_scope) if required_scope && !required_scope?(required_scope)
         end
 

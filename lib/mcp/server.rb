@@ -220,8 +220,6 @@ module FastMcp
 
     private
 
-    PROTOCOL_VERSION = '2025-06-18'
-
     def handle_initialize(params, id)
       # Store client capabilities for later use
       @client_capabilities = params['capabilities'] || {}
@@ -233,7 +231,7 @@ module FastMcp
 
       # Prepare server response
       response = {
-        protocolVersion: PROTOCOL_VERSION, # For now, only version 2024-11-05 is supported.
+        protocolVersion: FastMcp::Transports::BaseTransport::PROTOCOL_VERSION,
         capabilities: @capabilities,
         serverInfo: {
           name: @name,

@@ -16,6 +16,9 @@ module FastMcp
       DEFAULT_ALLOWED_IPS = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].freeze
       SERVER_ENV_KEY = 'fast_mcp.server'
 
+      # StreamableHTTP implements MCP 2025-06-18 specification
+      PROTOCOL_VERSION = '2025-03-28'
+
       # Required headers for MCP 2025-06-18
       REQUIRED_ACCEPT_HEADERS = ['application/json', 'text/event-stream'].freeze
       SSE_CONTENT_TYPE = 'text/event-stream'
@@ -28,7 +31,7 @@ module FastMcp
         'X-Accel-Buffering' => 'no',
         'Access-Control-Allow-Origin' => '*',
         'Access-Control-Allow-Methods' => 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers' => 'Content-Type, Accept, MCP-Protocol-Version',
+        'Access-Control-Allow-Headers' => 'Content-Type, Accept, MCP-Protocol-Version, MCP-Session-Id',
         'Access-Control-Max-Age' => '86400',
         'Keep-Alive' => 'timeout=600',
         'Pragma' => 'no-cache',
@@ -76,10 +79,128 @@ module FastMcp
         @sessions_mutex.synchronize { @sessions.clear }
       end
 
-      def send_message(message)
+      def send_message(message, session_id: nil)
         json_message = message.is_a?(String) ? message : JSON.generate(message)
-        @logger.debug("Broadcasting message to #{@sse_clients.size} SSE clients: #{json_message}")
 
+        if session_id
+          @logger.debug("Sending message to session #{session_id}: #{json_message}")
+          send_message_to_session(json_message, session_id)
+        else
+          @logger.debug("Broadcasting message to #{@sse_clients.size} SSE clients: #{json_message}")
+          broadcast_message_to_all(json_message)
+        end
+
+        [json_message]
+      end
+
+      # Server-controlled streaming API
+      # Initiate a streaming response for the current request
+      # This should be called by server code when it decides to stream instead of returning immediately
+      def initiate_streaming_response(session_id, env)
+        return unless env['rack.hijack']
+
+        @logger.debug("Server-initiated streaming response for session: #{session_id}")
+
+        # Hijack the connection and setup SSE
+        env['rack.hijack'].call
+        io = env['rack.hijack_io']
+
+        setup_server_controlled_sse(session_id, io)
+
+        # Return hijacked response indicator
+        [-1, {}, []]
+      end
+
+      # Send a message to a specific streaming session
+      # This allows the server to send notifications/progress during request processing
+      def send_streaming_message(session_id, message, event_type: 'message')
+        client = @sse_clients[session_id]
+        return false unless client
+
+        stream = client[:stream]
+        mutex = client[:mutex]
+        return false if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?) || mutex.nil?
+
+        json_message = message.is_a?(String) ? message : JSON.generate(message)
+
+        begin
+          mutex.synchronize do
+            stream.write("event: #{event_type}\n") if event_type
+            stream.write("data: #{json_message}\n\n")
+            stream.flush if stream.respond_to?(:flush)
+          end
+          true
+        rescue Errno::EPIPE, IOError => e
+          @logger.info("Streaming client #{session_id} disconnected: #{e.message}")
+          unregister_sse_client(session_id)
+          false
+        rescue StandardError => e
+          @logger.error("Error sending streaming message to client #{session_id}: #{e.message}")
+          unregister_sse_client(session_id)
+          false
+        end
+      end
+
+      # Complete a streaming response by sending the final result and closing the stream
+      def complete_streaming_response(session_id, response, response_id: nil)
+        # Send the final response
+        final_response = if response_id
+                           response.merge(id: response_id)
+                         else
+                           response
+                         end
+
+        success = send_streaming_message(session_id, final_response, event_type: 'response')
+
+        # Send completion event and close stream
+        if success
+          send_streaming_message(session_id, { status: 'completed' }, event_type: 'stream-end')
+
+          # Close the stream after a brief delay
+          Thread.new do
+            sleep(0.1)
+            client = @sse_clients[session_id]
+            if client && client[:stream] && !client[:stream].closed?
+              begin
+                client[:stream].close
+              rescue StandardError
+                nil
+              end
+            end
+            unregister_sse_client(session_id)
+          end
+        end
+
+        success
+      end
+
+      private
+
+      # Send message to specific session
+      def send_message_to_session(json_message, session_id)
+        client = @sse_clients[session_id]
+        return unless client
+
+        stream = client[:stream]
+        mutex = client[:mutex]
+        return if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?) || mutex.nil?
+
+        begin
+          mutex.synchronize do
+            stream.write("data: #{json_message}\n\n")
+            stream.flush if stream.respond_to?(:flush)
+          end
+        rescue Errno::EPIPE, IOError => e
+          @logger.info("Client #{session_id} disconnected: #{e.message}")
+          unregister_sse_client(session_id)
+        rescue StandardError => e
+          @logger.error("Error sending message to client #{session_id}: #{e.message}")
+          unregister_sse_client(session_id)
+        end
+      end
+
+      # Broadcast message to all connected clients
+      def broadcast_message_to_all(json_message)
         clients_to_remove = []
         @sse_clients_mutex.synchronize do
           @sse_clients.each do |client_id, client|
@@ -104,6 +225,8 @@ module FastMcp
 
         clients_to_remove.each { |client_id| unregister_sse_client(client_id) }
       end
+
+      public
 
       # Rack call method - unified endpoint handler
       def call(env)
@@ -217,39 +340,24 @@ module FastMcp
 
         # Determine if this is a notification (no response expected)
         if response.nil? || response.empty?
-          # Return 202 Accepted for notifications
-          [202, { 'Content-Type' => JSON_CONTENT_TYPE }, ['']]
+          # Return 202 Accepted for notifications with session ID
+          session_id = get_or_create_session(request)
+          headers = { 'Content-Type' => JSON_CONTENT_TYPE, 'MCP-Session-Id' => session_id }
+          [202, headers, ['']]
         else
           # Return JSON response or potentially SSE stream
           handle_json_rpc_response(response, request)
         end
       end
 
-      # Handle JSON-RPC response (may be single response or stream)
+      # Handle JSON-RPC response (always single response since batching was removed in MCP 2025-06-18)
       def handle_json_rpc_response(response, request)
-        # Check if client accepts SSE for streaming responses
-        accept_header = request.get_header('HTTP_ACCEPT') || ''
-        supports_sse = accept_header.include?(SSE_CONTENT_TYPE)
+        # Get session ID for header
+        session_id = get_or_create_session(request)
 
-        # If response is an array with multiple messages and client supports SSE, stream them
-        if supports_sse && response.is_a?(Array) && response.length > 1
-          handle_streaming_response(response, request)
-        else
-          # Return single JSON response
-          [200, { 'Content-Type' => JSON_CONTENT_TYPE }, response]
-        end
-      end
-
-      # Handle streaming multi-message responses via SSE
-      def handle_streaming_response(messages, _request)
-        # Generate a unique stream ID for this response
-        stream_id = SecureRandom.hex(8)
-        @logger.debug("Starting streaming response with stream ID: #{stream_id}")
-
-        # For now, return all messages as JSON since implementing full SSE streaming
-        # for POST responses requires more complex handling
-        # TODO: Implement true SSE streaming for multi-message responses
-        [200, { 'Content-Type' => JSON_CONTENT_TYPE }, messages]
+        # Return single JSON response with session ID header
+        headers = { 'Content-Type' => JSON_CONTENT_TYPE, 'MCP-Session-Id' => session_id }
+        [200, headers, response]
       end
 
       # Handle SSE stream setup
@@ -286,6 +394,7 @@ module FastMcp
         mutex.synchronize do
           io.write("HTTP/1.1 200 OK\r\n")
           SSE_HEADERS.each { |k, v| io.write("#{k}: #{v}\r\n") }
+          io.write("MCP-Session-Id: #{session_id}\r\n")
           io.write("\r\n")
           io.flush
         end
@@ -301,10 +410,35 @@ module FastMcp
         end
       end
 
+      # Set up SSE connection for server-controlled streaming
+      def setup_server_controlled_sse(session_id, io)
+        mutex = Mutex.new
+
+        # Send HTTP headers for SSE
+        mutex.synchronize do
+          io.write("HTTP/1.1 200 OK\r\n")
+          SSE_HEADERS.each { |k, v| io.write("#{k}: #{v}\r\n") }
+          io.write("MCP-Session-Id: #{session_id}\r\n")
+          io.write("\r\n")
+          io.flush
+        end
+
+        # Register SSE client
+        register_sse_client(session_id, io, mutex)
+
+        # Send initial connection message
+        mutex.synchronize do
+          io.write(": Server-controlled streaming initialized\n\n")
+          io.write("retry: 1000\n\n")
+          io.flush
+        end
+      end
+
       # Get or create session ID
       def get_or_create_session(request)
-        # Try to get session ID from various sources
-        session_id = request.params['session_id']
+        # Try to get session ID from various sources (MCP-Session-Id header takes precedence)
+        session_id = request.get_header('HTTP_MCP_SESSION_ID')
+        session_id ||= request.params['session_id']
         session_id ||= request.get_header('HTTP_X_SESSION_ID')
         session_id ||= request.get_header('HTTP_LAST_EVENT_ID')
 
@@ -549,7 +683,7 @@ module FastMcp
         {
           'Access-Control-Allow-Origin' => '*',
           'Access-Control-Allow-Methods' => 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers' => 'Content-Type, Accept, MCP-Protocol-Version',
+          'Access-Control-Allow-Headers' => 'Content-Type, Accept, MCP-Protocol-Version, MCP-Session-Id',
           'Access-Control-Max-Age' => '86400',
           'Content-Type' => 'text/plain'
         }
@@ -568,6 +702,21 @@ module FastMcp
       def protocol_version_error
         [400, { 'Content-Type' => JSON_CONTENT_TYPE },
          [JSON.generate(protocol_version_error_response)]]
+      end
+
+      # Override base class to use StreamableHTTP protocol version
+      def protocol_version_error_response(version = nil)
+        message = version ? "Unsupported protocol version: #{version}" : 'Invalid protocol version'
+
+        {
+          jsonrpc: '2.0',
+          error: {
+            code: -32_000,
+            message: message,
+            data: { expected_version: PROTOCOL_VERSION }
+          },
+          id: nil
+        }
       end
 
       def handle_parse_error(error)
