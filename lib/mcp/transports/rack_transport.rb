@@ -7,8 +7,9 @@ require_relative 'base_transport'
 
 module FastMcp
   module Transports
-    # Rack middleware transport for MCP
+    # Legacy Rack middleware transport for MCP - deprecated in favor of StreamableHTTP
     # This transport can be mounted in any Rack-compatible web framework
+    # Maintained for backward compatibility with existing applications
     class RackTransport < BaseTransport # rubocop:disable Metrics/ClassLength
       DEFAULT_PATH_PREFIX = '/mcp'
       DEFAULT_ALLOWED_ORIGINS = ['localhost', '127.0.0.1', '[::1]'].freeze
@@ -45,6 +46,9 @@ module FastMcp
         @sse_clients_mutex = Mutex.new
         @running = false
         @filtered_servers_cache = {}
+
+        # Deprecation warning
+        warn_deprecation if options[:warn_deprecation] != false
       end
 
       # Start the transport
@@ -628,6 +632,13 @@ module FastMcp
           relevant_headers[header] = request.env[header_key] if request.env[header_key]
         end
         relevant_headers
+      end
+
+      def warn_deprecation
+        @logger.warn('DEPRECATION WARNING: RackTransport is deprecated.')
+        @logger.warn('Please migrate to StreamableHttpTransport for MCP 2025-06-18 compliance.')
+        @logger.warn('See https://modelcontextprotocol.io/specification/2025-06-18/basic/')
+        @logger.warn('  transports#streamable-http for details.')
       end
     end
   end

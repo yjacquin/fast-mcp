@@ -26,13 +26,23 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 
 ## ✨ Features
 
-- 🛠️ **Tools API** - Let AI models call your Ruby functions securely, with in-depth argument validation through [Dry-Schema](https://github.com/dry-rb/dry-schema).
-- 📚 **Resources API** - Share data between your app and AI models
+### Core MCP Features
+- 🛠️ **Tools API** - Let AI models call your Ruby functions securely, with in-depth argument validation through [Dry-Schema](https://github.com/dry-rb/dry-schema)
+- 📚 **Resources API** - Share data between your app and AI models with URI templating
 - 🔄 **Multiple Transports** - Choose from STDIO, HTTP, or SSE based on your needs
-- 🧩 **Framework Integration** - Works seamlessly with Rails, Sinatra or any Rack app.
-- 🔒 **Authentication Support** - Secure your AI-powered endpoints with ease
+- 🧩 **Framework Integration** - Works seamlessly with Rails, Sinatra or any Rack app
 - 🚀 **Real-time Updates** - Subscribe to changes for interactive applications
-- 🎯 **Dynamic Filtering** - Control tool/resource access based on request context (permissions, API versions, etc.)
+- 🎯 **Dynamic Filtering** - Control tool/resource access based on request context
+
+### 🔐 OAuth 2.1 Security (NEW!)
+- 🛡️ **Production-Ready OAuth 2.1** - Full RFC compliance with modern security features
+- 🔑 **PKCE Support** - Prevents authorization code interception attacks
+- 🎯 **Audience Binding** - Prevents confused deputy attacks (RFC 8707)
+- 🔍 **Token Introspection** - Both local and remote token validation (RFC 7662)
+- 🚪 **Server Discovery** - Automatic endpoint discovery (RFC 8414)
+- 📋 **Dynamic Client Registration** - Automatic client setup (RFC 7591)
+- 🏷️ **Scope-based Authorization** - Fine-grained access control for MCP operations
+- 📊 **JWT + Opaque Tokens** - Support for both token types with JWKS validation
 
 
 ## 💎 What Makes FastMCP Great
@@ -390,6 +400,87 @@ FastMcp.authenticated_rack_middleware(app,
 )
 ```
 
+## 🔐 OAuth 2.1 Integration
+
+Fast MCP includes production-ready OAuth 2.1 support with modern security features:
+
+### 🚀 Quick OAuth Setup
+
+```ruby
+# OAuth-protected MCP server
+transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
+  app, mcp_server,
+  
+  # OAuth Configuration
+  oauth_enabled: true,
+  require_https: true, # Enforced in production
+  
+  # Token Validation (choose one)
+  
+  # Option 1: JWT tokens with JWKS
+  issuer: 'https://your-auth-server.com',
+  audience: 'https://your-api.com/mcp',
+  jwks_uri: 'https://your-auth-server.com/.well-known/jwks.json',
+  
+  # Option 2: Opaque tokens with custom validator
+  opaque_token_validator: lambda do |token|
+    user = User.find_by(api_token: token)
+    {
+      valid: user&.active?,
+      scopes: user&.mcp_scopes || [],
+      subject: user&.id
+    }
+  end,
+  
+  # Scope Configuration
+  tools_scope: 'mcp:tools',      # Required to execute tools
+  resources_scope: 'mcp:resources', # Required to read resources
+  admin_scope: 'mcp:admin',      # Required for admin operations
+  
+  # Security Features
+  resource_identifier: 'https://your-api.com/mcp' # Audience binding
+)
+```
+
+### 🏗️ Rails OAuth Integration
+
+```ruby
+# config/initializers/fast_mcp.rb
+FastMcp.mount_in_rails(
+  Rails.application,
+  transport: :oauth,
+  
+  # OAuth Security
+  oauth_enabled: true,
+  require_https: Rails.env.production?,
+  issuer: ENV['OAUTH_ISSUER'],
+  audience: ENV['MCP_AUDIENCE'],
+  jwks_uri: ENV['OAUTH_JWKS_URI'],
+  
+  # Scope-based Authorization
+  tools_scope: 'mcp:tools',
+  resources_scope: 'mcp:resources',
+  admin_scope: 'mcp:admin'
+)
+```
+
+### 🔒 Security Features
+
+- **✅ PKCE Support** - Prevents authorization code interception
+- **✅ Audience Binding** - Prevents confused deputy attacks  
+- **✅ JWT + JWKS** - Full signature validation with key rotation
+- **✅ Token Introspection** - Remote and local token validation
+- **✅ Server Discovery** - Automatic endpoint discovery
+- **✅ Standard Errors** - OAuth 2.1 compliant error responses
+
+### 📚 OAuth Documentation
+
+- [🔧 OAuth Configuration Guide](docs/oauth-configuration-guide.md) - Complete setup guide
+- [🔍 OAuth Troubleshooting](docs/oauth-troubleshooting.md) - Debug common issues
+- [📋 OAuth Client Example](examples/oauth_client_example.rb) - Complete client implementation
+- [🚀 OAuth Server Example](examples/server_with_oauth_transport.rb) - Production-ready server
+- [🚂 Rails OAuth Integration](examples/rails_oauth_integration.rb) - Rails-specific examples
+
 ## 📖 Documentation
 
 - [🚀 Getting Started Guide](docs/getting_started.md)
@@ -412,6 +503,11 @@ Check out the [examples directory](examples) for more detailed examples:
 - **🌐 Web Integration**:
   - [Rack Middleware](examples/rack_middleware.rb)
   - [Authenticated Endpoints](examples/authenticated_rack_middleware.rb)
+
+- **🔐 OAuth 2.1 Security**:
+  - [OAuth Server](examples/server_with_oauth_transport.rb) - Production-ready OAuth 2.1 server
+  - [OAuth Client](examples/oauth_client_example.rb) - Complete OAuth 2.1 client flow
+  - [Rails Integration](examples/rails_oauth_integration.rb) - Rails-specific OAuth setup
 
 ## 🧪 Requirements
 

@@ -1,0 +1,173 @@
+# frozen_string_literal: true
+
+RSpec.describe FastMcp::OAuth::TokenValidator do
+  let(:logger) { Logger.new(nil) }
+  let(:validator) { described_class.new(logger: logger) }
+
+  describe '#initialize' do
+    it 'initializes with default options' do
+      expect(validator.logger).to eq(logger)
+      expect(validator.required_scopes).to eq([])
+    end
+
+    it 'accepts configuration options' do
+      validator = described_class.new(
+        issuer: 'https://auth.example.com',
+        audience: 'mcp-api',
+        required_scopes: ['mcp:read', 'mcp:write']
+      )
+
+      expect(validator.issuer).to eq('https://auth.example.com')
+      expect(validator.audience).to eq('mcp-api')
+      expect(validator.required_scopes).to eq(['mcp:read', 'mcp:write'])
+    end
+  end
+
+  describe '#validate_token' do
+    context 'with nil or empty tokens' do
+      it 'returns false for nil token' do
+        expect(validator.validate_token(nil)).to be(false)
+      end
+
+      it 'returns false for empty token' do
+        expect(validator.validate_token('')).to be(false)
+      end
+    end
+
+    context 'with opaque tokens' do
+      let(:opaque_token) { 'abc123def456' }
+
+      it 'returns false when no opaque validator is configured' do
+        expect(validator.validate_token(opaque_token)).to be(false)
+      end
+
+      it 'uses opaque token validator when configured' do
+        opaque_validator = ->(token) { { valid: token == 'valid_token', scopes: ['mcp:read'] } }
+        validator = described_class.new(opaque_token_validator: opaque_validator)
+
+        expect(validator.validate_token('valid_token')).to be(true)
+        expect(validator.validate_token('invalid_token')).to be(false)
+      end
+
+      it 'validates scopes with opaque tokens' do
+        opaque_validator = ->(token) { { valid: true, scopes: ['mcp:read'] } }
+        validator = described_class.new(opaque_token_validator: opaque_validator)
+
+        expect(validator.validate_token('token', required_scopes: ['mcp:read'])).to be(true)
+        expect(validator.validate_token('token', required_scopes: ['mcp:write'])).to be(false)
+      end
+    end
+
+    context 'with JWT tokens' do
+      let(:valid_jwt_header) { Base64.urlsafe_encode64(JSON.generate(typ: 'JWT', alg: 'HS256')) }
+      let(:valid_payload) do
+        {
+          sub: 'user123',
+          iss: 'https://auth.example.com',
+          aud: 'mcp-api',
+          exp: Time.now.to_i + 3600,
+          iat: Time.now.to_i,
+          scope: 'mcp:read mcp:write'
+        }
+      end
+      let(:encoded_payload) { Base64.urlsafe_encode64(JSON.generate(valid_payload)) }
+      let(:signature) { 'fake_signature' }
+      let(:jwt_token) { "#{valid_jwt_header}.#{encoded_payload}.#{signature}" }
+
+      it 'recognizes JWT tokens' do
+        expect(validator.send(:jwt_token?, jwt_token)).to be(true)
+      end
+
+      it 'validates JWT tokens (simplified validation)' do
+        # Note: This test uses simplified validation since we're not implementing
+        # full cryptographic verification in this example
+        allow(validator).to receive(:verify_jwt_signature).and_return(true)
+        
+        expect(validator.validate_token(jwt_token)).to be(true)
+      end
+
+      it 'rejects expired JWT tokens' do
+        expired_payload = valid_payload.merge(exp: Time.now.to_i - 3600)
+        expired_encoded = Base64.urlsafe_encode64(JSON.generate(expired_payload))
+        expired_jwt = "#{valid_jwt_header}.#{expired_encoded}.#{signature}"
+
+        allow(validator).to receive(:verify_jwt_signature).and_return(true)
+        expect(validator.validate_token(expired_jwt)).to be(false)
+      end
+
+      it 'validates JWT token scopes' do
+        allow(validator).to receive(:verify_jwt_signature).and_return(true)
+        
+        expect(validator.validate_token(jwt_token, required_scopes: ['mcp:read'])).to be(true)
+        expect(validator.validate_token(jwt_token, required_scopes: ['mcp:admin'])).to be(false)
+      end
+    end
+  end
+
+  describe '#extract_claims' do
+    let(:jwt_header) { Base64.urlsafe_encode64(JSON.generate(typ: 'JWT', alg: 'HS256')) }
+    let(:payload) { { sub: 'user123', scope: 'mcp:read' } }
+    let(:encoded_payload) { Base64.urlsafe_encode64(JSON.generate(payload)) }
+    let(:jwt_token) { "#{jwt_header}.#{encoded_payload}.signature" }
+
+    it 'extracts claims from JWT tokens' do
+      claims = validator.extract_claims(jwt_token)
+      expect(claims).to include('sub' => 'user123', 'scope' => 'mcp:read')
+    end
+
+    it 'returns nil for non-JWT tokens' do
+      expect(validator.extract_claims('opaque_token')).to be_nil
+    end
+
+    it 'returns nil for malformed tokens' do
+      expect(validator.extract_claims('invalid.jwt')).to be_nil
+    end
+  end
+
+  describe 'scope validation' do
+    it 'handles string scopes' do
+      scopes = validator.send(:extract_scopes, 'mcp:read mcp:write')
+      expect(scopes).to eq(['mcp:read', 'mcp:write'])
+    end
+
+    it 'handles array scopes' do
+      scopes = validator.send(:extract_scopes, ['mcp:read', 'mcp:write'])
+      expect(scopes).to eq(['mcp:read', 'mcp:write'])
+    end
+
+    it 'handles nil scopes' do
+      scopes = validator.send(:extract_scopes, nil)
+      expect(scopes).to eq([])
+    end
+  end
+
+  describe 'error handling' do
+    it 'logs validation failures' do
+      # Use a logger with an actual LogDevice so we can capture logs
+      logger_output = StringIO.new
+      validator = described_class.new(logger: Logger.new(logger_output))
+      
+      # Create a malformed JWT that will trigger an error during validation
+      malformed_jwt = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.invalid_payload.signature'
+      result = validator.validate_token(malformed_jwt)
+      
+      # Check that validation failed and error was logged
+      expect(result).to be(false)
+      logger_output.rewind
+      log_content = logger_output.read
+      expect(log_content).to match(/Unexpected error during token validation/)
+    end
+
+    it 'logs unexpected errors' do
+      logger_output = StringIO.new
+      validator = described_class.new(logger: Logger.new(logger_output))
+      
+      allow(validator).to receive(:jwt_token?).and_raise(StandardError, 'Unexpected error')
+      validator.validate_token('some_token')
+      
+      logger_output.rewind
+      log_content = logger_output.read
+      expect(log_content).to match(/Unexpected error during token validation/)
+    end
+  end
+end
