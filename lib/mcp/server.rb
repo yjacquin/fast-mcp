@@ -14,7 +14,7 @@ module FastMcp
   class Server
     include ServerFiltering
 
-    attr_reader :name, :version, :tools, :resources, :capabilities
+    attr_reader :name, :version, :tools, :resources, :capabilities, :on_error
 
     DEFAULT_CAPABILITIES = {
       resources: {
@@ -26,7 +26,7 @@ module FastMcp
       }
     }.freeze
 
-    def initialize(name:, version:, logger: FastMcp::Logger.new, capabilities: {})
+    def initialize(name:, version:, logger: FastMcp::Logger.new, capabilities: {}, on_error: nil)
       @name = name
       @version = version
       @tools = {}
@@ -39,6 +39,7 @@ module FastMcp
       @capabilities = DEFAULT_CAPABILITIES.dup
       @tool_filters = []
       @resource_filters = []
+      @on_error = on_error
 
       # Merge with provided capabilities
       @capabilities.merge!(capabilities) if capabilities.is_a?(Hash)
@@ -192,6 +193,7 @@ module FastMcp
       end
     rescue StandardError => e
       @logger.error("Error handling request: #{e.message}, #{e.backtrace.join("\n")}")
+      on_error&.call(e)
       send_error(-32_600, "Internal error: #{e.message}, #{e.backtrace.join("\n")}", id)
     end
 
@@ -346,6 +348,7 @@ module FastMcp
         send_error_result(e.message, id)
       rescue StandardError => e
         @logger.error("Error calling tool #{tool_name}: #{e.message}")
+        on_error&.call(e)
         send_error_result("#{e.message}, #{e.backtrace.join("\n")}", id)
       end
     end

@@ -262,6 +262,53 @@ RSpec.describe FastMcp::Server do
         server.handle_request(request)
       end
 
+      context 'with on_error hook defined' do
+        let(:test_tool_class) do
+          Class.new(FastMcp::Tool) do
+            def self.name
+              'test-tool'
+            end
+
+            def self.description
+              'A test tool'
+            end
+
+            arguments do
+              required(:name).filled(:string).description('User name')
+            end
+
+            def call(name:)
+              raise 'Error!'
+            end
+          end
+        end
+        let!(:error_notifier) { double(:error_notifier) }
+        let(:server) do
+          described_class.new(
+            name: 'test-server',
+            version: '1.0.0',
+            logger: Logger.new(nil),
+            on_error: error_notifier
+          ).tap do |s|
+            s.register_tool(test_tool_class)
+          end
+        end
+
+        it 'calls the error notifier when an error is raised from a tool call' do
+          expect(error_notifier).to receive(:call)
+          request = {
+            jsonrpc: '2.0',
+            method: 'tools/call',
+            params: {
+              name: 'test-tool',
+              arguments: { name: 'error' }
+            },
+            id: 1
+          }.to_json
+          server.handle_request(request)
+        end
+      end
+
       it "returns an error if the tool doesn't exist" do
         request = {
           jsonrpc: '2.0',
