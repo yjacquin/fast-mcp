@@ -39,6 +39,7 @@ module FastMcp
   # @option options [String] :messages_route The route for the messages endpoint
   # @option options [String] :sse_route The route for the SSE endpoint
   # @option options [Logger] :logger The logger to use
+  # @option options [#call] :on_error hook called in the event of an error
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
@@ -47,8 +48,9 @@ module FastMcp
     name = options.delete(:name) || 'mcp-server'
     version = options.delete(:version) || '1.0.0'
     logger = options.delete(:logger) || Logger.new
+    on_error = options.delete(:on_error)
 
-    server = FastMcp::Server.new(name: name, version: version, logger: logger)
+    server = FastMcp::Server.new(name: name, version: version, logger: logger, on_error: on_error)
     yield server if block_given?
 
     # Store the server in the Sinatra settings if available
