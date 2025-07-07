@@ -49,6 +49,8 @@ module FastMcp
 
     # Rule for description macro
     class DescriptionRule
+      include Dry::Logic::Operators
+
       def initialize(text)
         @text = text
       end
@@ -64,6 +66,8 @@ module FastMcp
 
     # Rule for hidden macro
     class HiddenRule
+      include Dry::Logic::Operators
+
       def initialize(value)
         @value = value
       end
