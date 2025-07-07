@@ -219,7 +219,7 @@ module FastMcp
       left, right = node
 
       # We need to know the type first to apply filled macro
-      if left[1][0] == :filled?
+      if left[1] && left[1][0] == :filled?
         visit(right, opts)
         visit(left, opts)
       else
@@ -294,11 +294,11 @@ module FastMcp
     end
 
     def visit_hidden(value, *)
-      keys[current_key][:hidden] = value
+      keys[current_key][:hidden] = value if value == true
     end
 
     def visit_description(text, *)
-      keys[current_key][:description] = text
+      keys[current_key][:description] = text if text
     end
 
     # @api private
