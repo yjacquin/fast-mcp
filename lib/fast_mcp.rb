@@ -154,7 +154,7 @@ module FastMcp
     if transport_type == :legacy
       setup_legacy_rails_transport(app, options.merge(name: name, version: version, logger: logger))
     else
-      setup_streamable_rails_transport(app, options.merge(name: name, version: version, logger: logger), transport_type)
+      setup_streamable_rails_transport(app, options.merge(name: name, version: version, logger: logger), transport_type, &block)
     end
   end
 
