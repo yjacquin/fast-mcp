@@ -51,7 +51,7 @@ module FastMcp
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
-  def self.rack_middleware(app, options = {})
+  def self.rack_middleware(app, options = {}, &block)
     name = options.delete(:name) || 'mcp-server'
     version = options.delete(:version) || '1.0.0'
     logger = options.delete(:logger) || Logger.new
@@ -78,7 +78,7 @@ module FastMcp
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
-  def self.authenticated_rack_middleware(app, options = {})
+  def self.authenticated_rack_middleware(app, options = {}, &block)
     name = options.delete(:name) || 'mcp-server'
     version = options.delete(:version) || '1.0.0'
     logger = options.delete(:logger) || Logger.new
@@ -143,7 +143,8 @@ module FastMcp
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
-  def self.mount_in_rails(app, options = {})
+  def self.mount_in_rails(app, options = {}, &block)
+    
     # Default options
     name = options.delete(:name) || app.class.module_parent_name.underscore.dasherize
     version = options.delete(:version) || '1.0.0'
