@@ -17,7 +17,7 @@ module FastMcp
       SERVER_ENV_KEY = 'fast_mcp.server'
 
       # StreamableHTTP implements MCP 2025-06-18 specification
-      PROTOCOL_VERSION = '2025-03-28'
+      PROTOCOL_VERSION = '2025-06-18'
 
       # Required headers for MCP 2025-06-18
       REQUIRED_ACCEPT_HEADERS = ['application/json', 'text/event-stream'].freeze
