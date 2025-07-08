@@ -178,7 +178,7 @@ module FastMcp
     allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
     allowed_ips = options[:allowed_ips] || FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_IPS
 
-    options[:localhost_only] = Rails.env.local? if options[:localhost_only].nil?
+    options[:localhost_only] = Rails.env.development? || Rails.env.test? if options[:localhost_only].nil?
     options[:allowed_ips] = allowed_ips
     options[:allowed_origins] = allowed_origins
 
@@ -211,7 +211,7 @@ module FastMcp
     allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
     allowed_ips = options[:allowed_ips] || ['127.0.0.1', '::1', '::ffff:127.0.0.1']
 
-    options[:localhost_only] = Rails.env.local? if options[:localhost_only].nil?
+    options[:localhost_only] = Rails.env.development? || Rails.env.test? if options[:localhost_only].nil?
     options[:allowed_ips] = allowed_ips
     options[:allowed_origins] = allowed_origins
     options[:require_https] = Rails.env.production? if options[:require_https].nil?
