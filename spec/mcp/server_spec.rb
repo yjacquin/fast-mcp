@@ -314,5 +314,29 @@ RSpec.describe FastMcp::Server do
         server.handle_request(request)
       end
     end
+
+    context 'with an error result' do
+      let(:on_error_result) { ->(message) { message } }
+
+      before {
+        server.on_error_result(&on_error_result)
+        allow_any_instance_of(test_tool_class).to receive(:call).and_raise('test error')
+      }
+
+      it 'calls the on_error_result block' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: {
+            name: 'test-tool',
+            arguments: { name: 'World' }
+          },
+          id: 1
+        }.to_json
+
+        expect(on_error_result).to receive(:call).with(/^test error, /)
+        server.handle_request(request)
+      end
+    end
   end
 end
