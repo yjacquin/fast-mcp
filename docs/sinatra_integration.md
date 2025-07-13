@@ -64,7 +64,7 @@ end
 
 
 # Use the MCP middleware
-use FastMcp::Transports::RackTransport, server
+use FastMcp::Transports::RackTransport, mcp_server
 
 # Define your Sinatra routes
 get '/' do
@@ -117,7 +117,7 @@ end
 
 
 # Use the MCP middleware
-use FastMcp::Transports::AuthenticatedRackTransport, server
+use FastMcp::Transports::AuthenticatedRackTransport, mcp_server
 
 # Define your Sinatra routes
 get '/' do
