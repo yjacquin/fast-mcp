@@ -30,14 +30,8 @@ module FastMcp
         # Resource identifier for audience binding (RFC 8707)
         @resource_identifier = options[:resource_identifier] || options[:audience]
 
-        # Set up token introspection
-        @introspection_endpoint = options[:introspection_endpoint]
-        @introspector = if @introspection_endpoint
-                          Introspection.new(options.merge(logger: @logger))
-                        else
-                          # Use local introspection as fallback
-                          Introspection::LocalIntrospector.new(@token_validator, logger: @logger)
-                        end
+        # Set up local token introspection (resource servers only need local validation)
+        @introspector = LocalIntrospector.new(@token_validator, logger: @logger)
       end
 
       # Authorize a request with OAuth 2.1
@@ -153,18 +147,19 @@ module FastMcp
         JSON.generate(response)
       end
 
-      # Extract Bearer token from request
+      # Extract Bearer token from request (OAuth 2.1 compliant)
       def extract_bearer_token(request)
         auth_header = request.get_header('HTTP_AUTHORIZATION')
         return nil unless auth_header
 
-        # Support both "Bearer token" and "token" formats
-        if auth_header.start_with?('Bearer ')
-          auth_header[7..]
-        elsif auth_header.match?(%r{\A[A-Za-z0-9\-._~+/]+=*\z})
-          # Looks like a token without Bearer prefix
-          auth_header
-        end
+        # OAuth 2.1 requires Bearer prefix and ONLY Authorization header (no query params)
+        return unless auth_header.start_with?('Bearer ')
+
+        token = auth_header[7..]
+        # Validate token format (RFC 6750 Section 2.1)
+        return nil unless token.match?(%r{\A[A-Za-z0-9\-._~+/]+=*\z})
+
+        token
       end
 
       # Validate request security (HTTPS requirement)
@@ -224,11 +219,13 @@ module FastMcp
 
         # Check if our resource identifier is in the token's audience
         unless token_audiences.include?(@resource_identifier)
-          @logger.warn("Audience binding validation failed: token audience #{token_audiences} does not include resource #{@resource_identifier}")
+          @logger.warn("Audience binding validation failed: token audience #{token_audiences} " \
+                       "does not include resource #{@resource_identifier}")
           raise UnauthorizedError, 'Token not intended for this resource server'
         end
 
-        @logger.debug("Audience binding validation successful: resource #{@resource_identifier} found in token audience")
+        @logger.debug("Audience binding validation successful: resource #{@resource_identifier} " \
+                      'found in token audience')
       end
     end
   end

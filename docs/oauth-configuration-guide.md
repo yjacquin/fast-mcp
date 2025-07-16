@@ -9,6 +9,7 @@ This guide provides comprehensive information on configuring OAuth 2.1 authentic
 - [Quick Start](#quick-start)
 - [Configuration Options](#configuration-options)
 - [Token Validation](#token-validation)
+- [Protected Resource Metadata](#protected-resource-metadata)
 - [Scope Management](#scope-management)
 - [Security Best Practices](#security-best-practices)
 - [Production Deployment](#production-deployment)
@@ -20,9 +21,8 @@ Fast MCP implements OAuth 2.1 (RFC 6749 + security enhancements) to provide secu
 
 - **PKCE (Proof Key for Code Exchange)** - Prevents authorization code interception attacks
 - **Audience Binding** - Prevents confused deputy attacks using resource parameters
-- **Token Introspection** - Both local and remote token validation
-- **Authorization Server Discovery** - Automatic endpoint discovery per RFC 8414
-- **Dynamic Client Registration** - RFC 7591 compliant client registration
+- **Token Introspection** - Local token validation for resource servers
+- **Protected Resource Metadata** - RFC 9728 compliant resource server discovery
 - **Scope-based Authorization** - Fine-grained access control for MCP operations
 
 ## Security Features
@@ -31,12 +31,11 @@ Fast MCP implements OAuth 2.1 (RFC 6749 + security enhancements) to provide secu
 
 | Feature | Status | RFC | Description |
 |---------|--------|-----|-------------|
-| ✅ PKCE | Implemented | RFC 7636 | Prevents code interception attacks |
 | ✅ Audience Binding | Implemented | RFC 8707 | Prevents confused deputy attacks |
 | ✅ JWT Verification | Implemented | RFC 7519 | Full signature validation with JWKS |
-| ✅ Token Introspection | Implemented | RFC 7662 | Remote and local token validation |
-| ✅ Server Discovery | Implemented | RFC 8414 | Automatic endpoint discovery |
-| ✅ Client Registration | Implemented | RFC 7591 | Dynamic client registration |
+| ✅ Token Introspection | Implemented | RFC 7662 | Local token validation for resource servers |
+| ✅ Protected Resource Metadata | Implemented | RFC 9728 | Resource server discovery and metadata |
+| ✅ WWW-Authenticate Headers | Implemented | RFC 9728 | Enhanced error responses with metadata URLs |
 | ✅ Standard Error Responses | Implemented | RFC 6749 | OAuth 2.1 compliant error handling |
 
 ### 🛡️ Security Enhancements
@@ -87,7 +86,12 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   admin_scope: 'mcp:admin',
   
   # Security
-  resource_identifier: 'https://your-domain.com/mcp'
+  resource_identifier: 'https://your-domain.com/mcp',
+  
+  # Authorization Servers (for protected resource metadata endpoint)
+  authorization_servers: [
+    'https://auth.your-domain.com'
+  ]
 )
 ```
 
@@ -248,6 +252,87 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   client_id: 'mcp_server_client',
   client_secret: ENV['INTROSPECTION_SECRET']
 )
+```
+
+## Protected Resource Metadata
+
+Fast MCP implements RFC 9728 to provide a standardized way for clients to discover authorization servers and resource server metadata.
+
+### Metadata Endpoint
+
+The protected resource metadata endpoint is automatically available at:
+
+```
+GET /.well-known/oauth-protected-resource
+```
+
+### Configuration
+
+Configure authorization servers that can issue tokens for your MCP server:
+
+```ruby
+transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
+  app, server,
+  oauth_enabled: true,
+  resource_identifier: 'https://mcp-server.example.com',
+  
+  # Authorization servers that can issue tokens for this resource server
+  authorization_servers: [
+    'https://auth.example.com',
+    'https://secondary-auth.example.com'
+  ]
+)
+```
+
+### Metadata Response
+
+The endpoint returns JSON with resource server information:
+
+```json
+{
+  "resource": "https://mcp-server.example.com",
+  "authorization_servers": [
+    "https://auth.example.com",
+    "https://secondary-auth.example.com"
+  ]
+}
+```
+
+### Enhanced Error Responses
+
+When OAuth authentication fails, error responses include WWW-Authenticate headers with metadata URLs:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer error="invalid_token", 
+                  resource_metadata="https://mcp-server.example.com/.well-known/oauth-protected-resource"
+```
+
+This allows clients to automatically discover authorization servers and retry authentication.
+
+### Security Considerations
+
+- **Authorization Server Trust**: Only list authorization servers you trust
+- **Resource Identifier**: Must match the `aud` claim in access tokens
+- **HTTPS Required**: Metadata endpoint enforces HTTPS in production
+- **Public Endpoint**: The metadata endpoint is publicly accessible (no authentication required)
+
+### Testing the Endpoint
+
+Test the metadata endpoint with curl:
+
+```bash
+# Test metadata endpoint
+curl -X GET https://your-mcp-server.com/.well-known/oauth-protected-resource \
+  -H "Accept: application/json"
+```
+
+Expected response:
+```json
+{
+  "resource": "https://your-mcp-server.com",
+  "authorization_servers": ["https://auth.your-domain.com"]
+}
 ```
 
 ## Scope Management

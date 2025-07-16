@@ -25,12 +25,9 @@ Dir[File.join(File.dirname(__FILE__), 'mcp/transports', '*.rb')].each do |file|
   require file
 end
 
-# Require OAuth components
-require_relative 'mcp/oauth/pkce'
-require_relative 'mcp/oauth/discovery'
+# Require OAuth resource server components
 require_relative 'mcp/oauth/token_validator'
 require_relative 'mcp/oauth/introspection'
-require_relative 'mcp/oauth/client_registration'
 require_relative 'mcp/oauth/resource_server'
 
 # Version information

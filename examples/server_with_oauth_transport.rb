@@ -162,9 +162,6 @@ end
 #   issuer: 'https://your-auth-server.com',
 #   audience: 'http://localhost:3001/mcp', # Should match resource_identifier
 #
-#   # Optional: Authorization server discovery
-#   # The system can auto-discover endpoints from the issuer
-#   # issuer: 'https://your-auth-server.com' # Will auto-discover from /.well-known/openid-configuration
 # }
 
 # OAuth 2.1 Transport Configuration
@@ -203,6 +200,11 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 
   # Optional: Authorization Server Discovery
   # issuer: 'https://your-auth-server.com', # Auto-discovers endpoints
+
+  # Protected Resource Metadata (RFC 9728) - Authorization servers that can issue tokens for this resource server
+  authorization_servers: [
+    'http://localhost:3000' # Your authorization server URL - set to HTTPS in production!
+  ]
 )
 
 if __FILE__ == $0
@@ -213,6 +215,7 @@ if __FILE__ == $0
   puts '   GET  /           - Main application with token information and examples'
   puts '   POST /mcp        - OAuth 2.1 protected JSON-RPC endpoint'
   puts '   GET  /mcp        - OAuth 2.1 protected SSE streaming (Accept: text/event-stream)'
+  puts '   GET  /.well-known/oauth-protected-resource - Protected resource metadata (RFC 9728)'
   puts ''
   puts '🔑 Demo Tokens (for testing):'
   puts '   admin_token_123  - Full administrative access (admin + resources + tools)'
@@ -224,6 +227,7 @@ if __FILE__ == $0
   puts '   ✅ Scope-based authorization (admin, resources, tools)'
   puts '   ✅ Audience binding for enhanced security'
   puts '   ✅ Token introspection with local fallback'
+  puts '   ✅ Protected resource metadata endpoint (RFC 9728)'
   puts '   ⚠️  HTTPS enforcement disabled (development mode)'
   puts ''
   puts '🧪 Testing Options:'
@@ -232,7 +236,13 @@ if __FILE__ == $0
   puts '   npx @modelcontextprotocol/inspector http://localhost:3001/mcp'
   puts '   → Add token in Inspector settings before connecting'
   puts ''
-  puts '2. Command Line Examples:'
+  puts '2. Protected Resource Metadata (RFC 9728):'
+  puts ''
+  puts '   # Get authorization server discovery information'
+  puts '   curl -X GET http://localhost:3001/.well-known/oauth-protected-resource \\'
+  puts '        -H "Accept: application/json"'
+  puts ''
+  puts '3. Command Line Examples:'
   puts ''
   puts '   # Test server capabilities (requires admin scope)'
   puts '   curl -H "Authorization: Bearer admin_token_123" \\'
@@ -266,7 +276,7 @@ if __FILE__ == $0
   puts '        -X POST http://localhost:3001/mcp \\'
   puts '        -d \'{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_files","arguments":{"directory":"."}},"id":1}\''
   puts ''
-  puts '3. Error Testing (demonstrating OAuth 2.1 error responses):'
+  puts '4. Error Testing (demonstrating OAuth 2.1 error responses):'
   puts ''
   puts '   # Test with invalid token'
   puts '   curl -H "Authorization: Bearer invalid_token" \\'

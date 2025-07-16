@@ -17,6 +17,9 @@ module FastMcp
         @oauth_enabled = options.fetch(:oauth_enabled, true)
         @oauth_server = FastMcp::OAuth::ResourceServer.new(options.merge(logger: @logger))
 
+        # Authorization servers for metadata endpoint (RFC 9728)
+        @authorization_servers = options[:authorization_servers] || []
+
         # Scope requirements for different MCP operations
         @scope_requirements = {
           tools: options[:tools_scope] || 'mcp:tools',
@@ -109,23 +112,73 @@ module FastMcp
         @token_info[:scopes].include?(required_scope)
       end
 
-      # Generate OAuth unauthorized response
+      # Generate OAuth unauthorized response with RFC 9728 compliance
       def oauth_unauthorized_response(message)
         error_response = @oauth_server.oauth_error_response('invalid_token', message, 401)
+
+        # Add resource metadata URL per RFC 9728 Section 5.1
+        www_authenticate = error_response[:headers]['WWW-Authenticate'] || 'Bearer'
+        resource_metadata_url = build_resource_metadata_url
+
+        # Enhance WWW-Authenticate header with resource_metadata parameter
+        www_authenticate += %(, resource_metadata="#{resource_metadata_url}") if resource_metadata_url
+
+        error_response[:headers]['WWW-Authenticate'] = www_authenticate
         [error_response[:status], error_response[:headers], [error_response[:body]]]
       end
 
-      # Generate OAuth forbidden response
+      # Generate OAuth forbidden response with RFC 9728 compliance
       def oauth_forbidden_response(message)
         error_response = @oauth_server.oauth_error_response('insufficient_scope', message, 403)
+
+        # Add resource metadata URL per RFC 9728 Section 5.1
+        www_authenticate = error_response[:headers]['WWW-Authenticate'] || 'Bearer'
+        resource_metadata_url = build_resource_metadata_url
+
+        # Enhance WWW-Authenticate header with resource_metadata parameter
+        www_authenticate += %(, resource_metadata="#{resource_metadata_url}") if resource_metadata_url
+
+        error_response[:headers]['WWW-Authenticate'] = www_authenticate
         [error_response[:status], error_response[:headers], [error_response[:body]]]
       end
 
-      # Generate insufficient scope response
+      # Generate insufficient scope response with RFC 9728 compliance
       def oauth_insufficient_scope_response(required_scope)
         message = "Required scope: #{required_scope}"
         error_response = @oauth_server.oauth_error_response('insufficient_scope', message, 403)
+
+        # Add resource metadata URL per RFC 9728 Section 5.1
+        www_authenticate = error_response[:headers]['WWW-Authenticate'] || 'Bearer'
+        resource_metadata_url = build_resource_metadata_url
+
+        # Enhance WWW-Authenticate header with resource_metadata parameter
+        www_authenticate += %(, resource_metadata="#{resource_metadata_url}") if resource_metadata_url
+
+        error_response[:headers]['WWW-Authenticate'] = www_authenticate
         [error_response[:status], error_response[:headers], [error_response[:body]]]
+      end
+
+      # Override authorization servers method to return configured servers
+      attr_reader :authorization_servers
+
+      # Build resource metadata URL for WWW-Authenticate header
+      def build_resource_metadata_url
+        # Only include metadata URL if we have authorization servers configured
+        return nil if @authorization_servers.empty?
+
+        # Construct the resource metadata endpoint URL
+        scheme = ENV.fetch('HTTPS', 'false').downcase == 'true' ? 'https' : 'http'
+        host = ENV.fetch('HOST', 'localhost')
+        port = ENV.fetch('PORT', scheme == 'https' ? '443' : '80').to_i
+
+        # Only include port if it's non-standard
+        base_url = if (scheme == 'https' && port == 443) || (scheme == 'http' && port == 80)
+                     "#{scheme}://#{host}"
+                   else
+                     "#{scheme}://#{host}:#{port}"
+                   end
+
+        "#{base_url}/.well-known/oauth-protected-resource"
       end
 
       # Override SSE handling to include OAuth validation

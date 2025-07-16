@@ -38,6 +38,9 @@ Rails.application.configure do
       require_https: Rails.env.production?, # HTTPS required in production
       resource_identifier: "#{Rails.application.routes.url_helpers.root_url}api/mcp",
       
+      # Authorization Servers (for RFC 9728 protected resource metadata)
+      authorization_servers: ENV.fetch('OAUTH_AUTHORIZATION_SERVERS', '').split(',').map(&:strip).reject(&:empty?),
+      
       # Token Validation Configuration
       **oauth_token_config,
       
@@ -260,6 +263,7 @@ end
 # OAUTH_ISSUER=https://your-auth-server.com
 # OAUTH_JWKS_URI=https://your-auth-server.com/.well-known/jwks.json
 # MCP_AUDIENCE=https://your-app.com/api/mcp
+# OAUTH_AUTHORIZATION_SERVERS=https://your-auth-server.com,https://backup-auth.com
 
 # Optional Configuration  
 # JWT_VALIDATION_ENABLED=true
@@ -313,6 +317,7 @@ services:
       - OAUTH_ISSUER=https://your-auth-server.com
       - OAUTH_JWKS_URI=https://your-auth-server.com/.well-known/jwks.json
       - MCP_AUDIENCE=https://your-app.com/api/mcp
+      - OAUTH_AUTHORIZATION_SERVERS=https://your-auth-server.com
       - DATABASE_URL=postgresql://user:pass@db:5432/myapp
     depends_on:
       - db
@@ -326,6 +331,26 @@ services:
 
 volumes:
   postgres_data:
+
+# API Endpoints Available
+# ========================
+#
+# The OAuth-enabled MCP server provides these endpoints:
+#
+# GET /.well-known/oauth-protected-resource
+#   - RFC 9728 protected resource metadata
+#   - Returns authorization server discovery information
+#   - Public endpoint (no authentication required)
+#
+# POST /api/mcp  
+#   - Main MCP JSON-RPC endpoint
+#   - Requires valid OAuth token with appropriate scopes
+#   - Supports tools execution and resource access
+#
+# GET /api/mcp (with Accept: text/event-stream)
+#   - Server-Sent Events streaming endpoint  
+#   - Requires valid OAuth token with read scope
+#   - Real-time updates and notifications
 
 # Testing Configuration
 # =====================
@@ -356,6 +381,25 @@ end
 # spec/requests/mcp_api_spec.rb
 RSpec.describe 'MCP API', type: :request do
   include OAuthHelpers
+  
+  describe 'GET /.well-known/oauth-protected-resource' do
+    it 'returns protected resource metadata' do
+      get '/.well-known/oauth-protected-resource',
+        headers: { 'Accept' => 'application/json' }
+      
+      expect(response).to have_http_status(:success)
+      expect(response.content_type).to include('application/json')
+      
+      metadata = JSON.parse(response.body)
+      expect(metadata['resource']).to be_present
+      expect(metadata['authorization_servers']).to be_an(Array)
+    end
+    
+    it 'only accepts GET requests' do
+      post '/.well-known/oauth-protected-resource'
+      expect(response).to have_http_status(:method_not_allowed)
+    end
+  end
   
   describe 'GET /api/mcp' do
     context 'with valid token' do
