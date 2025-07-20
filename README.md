@@ -27,6 +27,7 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 ## ✨ Features
 
 ### Core MCP Features
+
 - 🛠️ **Tools API** - Let AI models call your Ruby functions securely, with in-depth argument validation through [Dry-Schema](https://github.com/dry-rb/dry-schema)
 - 📚 **Resources API** - Share data between your app and AI models with URI templating
 - 🔄 **Multiple Transports** - Choose from STDIO, HTTP, or SSE based on your needs
@@ -35,6 +36,7 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 - 🎯 **Dynamic Filtering** - Control tool/resource access based on request context
 
 ### 🔐 OAuth 2.1 Resource Server (NEW!)
+
 - 🛡️ **OAuth 2.1 Resource Server** - RFC compliant token validation and resource protection
 - 🎯 **Audience Binding** - Prevents confused deputy attacks (RFC 8707)
 - 📍 **Protected Resource Metadata** - RFC 9728 compliant discovery endpoint
@@ -44,8 +46,8 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 - ⚡ **Enhanced Error Responses** - WWW-Authenticate headers with resource metadata URLs
 - 🔒 **HTTPS Enforcement** - Production-ready security with localhost development support
 
-
 ## 💎 What Makes FastMCP Great
+
 ```ruby
 # Define tools for AI models to use
 server = FastMcp::Server.new(name: 'popular-users', version: '1.0.0')
@@ -141,6 +143,7 @@ end
 ```
 
 ### 🚂 Fast Ruby on Rails implementation
+
 ```shell
 bundle add fast-mcp
 bin/rails generate fast_mcp:install
@@ -178,7 +181,9 @@ FastMcp.mount_in_rails(
   end
 end
 ```
+
 The install script will also:
+
 - add app/resources folder
 - add app/tools folder
 - add app/tools/sample_tool.rb
@@ -230,6 +235,7 @@ end
 ```
 
 ### Easy Sinatra setup
+
 I'll let you check out the dedicated [sinatra integration docs](./docs/sinatra_integration.md).
 
 ## 🚀 Quick Start
@@ -292,17 +298,21 @@ Clone this project, then give it a go !
 ```shell
 npx @modelcontextprotocol/inspector examples/server_with_stdio_transport.rb
 ```
+
 Or to test with an SSE transport using a rack middleware:
+
 ```shell
 npx @modelcontextprotocol/inspector examples/rack_middleware.rb
 ```
 
 Or to test over SSE with an authenticated rack middleware:
+
 ```shell
 npx @modelcontextprotocol/inspector examples/authenticated_rack_middleware.rb
 ```
 
 You can test your custom implementation with the official MCP inspector by using:
+
 ```shell
 # Test with a stdio transport:
 npx @modelcontextprotocol/inspector path/to/your_ruby_file.rb
@@ -331,6 +341,7 @@ end
 ### Integrating with Claude Desktop
 
 Add your server to your Claude Desktop configuration at:
+
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
@@ -339,28 +350,27 @@ Add your server to your Claude Desktop configuration at:
   "mcpServers": {
     "my-great-server": {
       "command": "ruby",
-      "args": [
-        "/Users/path/to/your/awesome/fast-mcp/server.rb"
-      ]
+      "args": ["/Users/path/to/your/awesome/fast-mcp/server.rb"]
     }
   }
 }
 ```
 
 ## How to add a MCP server to Claude, Cursor, or other MCP clients?
+
 Please refer to [configuring_mcp_clients](docs/configuring_mcp_clients.md)
 
 ## 📊 Supported Specifications
 
-| Feature | Status |
-|---------|--------|
-| ✅ **JSON-RPC 2.0** | Full implementation for communication |
-| ✅ **Tool Definition & Calling** | Define and call tools with rich argument types |
-| ✅ **Resource & Resource Templates Management** | Create, read, update, and subscribe to resources |
-| ✅ **Transport Options** | STDIO, HTTP, and SSE for flexible integration |
-| ✅ **Framework Integration** | Rails, Sinatra, Hanami, and any Rack-compatible framework |
-| ✅ **Authentication** | Secure your AI endpoints with token authentication |
-| ✅ **Schema Support** | Full JSON Schema for tool arguments with validation |
+| Feature                                         | Status                                                    |
+| ----------------------------------------------- | --------------------------------------------------------- |
+| ✅ **JSON-RPC 2.0**                             | Full implementation for communication                     |
+| ✅ **Tool Definition & Calling**                | Define and call tools with rich argument types            |
+| ✅ **Resource & Resource Templates Management** | Create, read, update, and subscribe to resources          |
+| ✅ **Transport Options**                        | STDIO, HTTP, and SSE for flexible integration             |
+| ✅ **Framework Integration**                    | Rails, Sinatra, Hanami, and any Rack-compatible framework |
+| ✅ **Authentication**                           | Secure your AI endpoints with token authentication        |
+| ✅ **Schema Support**                           | Full JSON Schema for tool arguments with validation       |
 
 ## 🗺️ Use Cases
 
@@ -425,7 +435,7 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 
   # Option 1: JWT tokens with JWKS
   jwks_uri: 'https://your-auth-server.com/.well-known/jwks.json',
-  jwt_audience: 'https://your-api.com/mcp',
+  audience: 'https://your-api.com/mcp',
 
   # Option 2: Opaque tokens with custom validator
   opaque_token_validator: lambda do |token|
@@ -463,7 +473,7 @@ FastMcp.mount_in_rails(
 
   # JWT Token Validation
   jwks_uri: ENV['OAUTH_JWKS_URI'],
-  jwt_audience: ENV['MCP_JWT_AUDIENCE'],
+  audience: ENV['MCP_JWT_AUDIENCE'],
 
   # Scope-based Authorization
   tools_scope: 'mcp:tools',
@@ -505,10 +515,12 @@ FastMcp.mount_in_rails(
 Check out the [examples directory](examples) for more detailed examples:
 
 - **🔨 Basic Examples**:
+
   - [Simple Server](examples/server_with_stdio_transport.rb)
   - [Tool Examples](examples/tool_examples.rb)
 
 - **🌐 Web Integration**:
+
   - [Rack Middleware](examples/rack_middleware.rb)
   - [Authenticated Endpoints](examples/authenticated_rack_middleware.rb)
 

@@ -68,61 +68,7 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 )
 ```
 
-### 3. Update Client Code
-
-#### Legacy Client
-
-```javascript
-// Before: Separate endpoints
-const messagesUrl = 'http://localhost:3001/mcp/messages';
-const sseUrl = 'http://localhost:3001/mcp/sse';
-
-fetch(messagesUrl, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 })
-});
-
-const eventSource = new EventSource(sseUrl);
-```
-
-#### StreamableHTTP Client
-
-```javascript
-// After: Single endpoint
-const mcpUrl = 'http://localhost:3001/mcp';
-
-// JSON-RPC request
-fetch(mcpUrl, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'MCP-Protocol-Version': '2025-06-18'
-  },
-  body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 })
-});
-
-// SSE connection
-const eventSource = new EventSource(mcpUrl, {
-  headers: {
-    'Accept': 'text/event-stream',
-    'MCP-Protocol-Version': '2025-06-18'
-  }
-});
-```
-
-#### With Authentication
-
-```javascript
-// Add Authorization header
-headers: {
-  'Authorization': 'Bearer your-token-here',
-  'MCP-Protocol-Version': '2025-06-18'
-}
-```
-
-### 4. Update Configuration
+### 3. Update Configuration
 
 ```ruby
 # config/initializers/fast_mcp.rb
@@ -146,24 +92,6 @@ end
 ```
 
 ## Common Issues
-
-### Missing Protocol Version Header
-Add the required header:
-```javascript
-headers: {
-  'MCP-Protocol-Version': '2025-06-18'
-}
-```
-
-### Authentication Format
-Ensure proper token format:
-```javascript
-// OAuth (with Bearer prefix)
-'Authorization': 'Bearer ' + token
-
-// Basic auth (no Bearer prefix)
-'Authorization': token
-```
 
 ### CORS Configuration
 Update allowed origins:

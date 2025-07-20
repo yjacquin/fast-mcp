@@ -46,13 +46,13 @@ Fast MCP operates as an **OAuth 2.1 Resource Server** that validates access toke
 
 Fast MCP implements the following OAuth 2.1 and related RFCs:
 
-| RFC | Title | Implementation | Status |
-|-----|-------|----------------|--------|
-| [RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749) | OAuth 2.0 Authorization Framework | Resource Server components | ✅ Complete |
-| [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519) | JSON Web Token (JWT) | JWT validation with JWKS | ✅ Complete |
-| [RFC 7662](https://datatracker.ietf.org/doc/html/rfc7662) | Token Introspection | Local token validation | ✅ Complete |
-| [RFC 8707](https://datatracker.ietf.org/doc/html/rfc8707) | Resource Indicators | Audience binding | ✅ Complete |
-| [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) | Protected Resource Metadata | Discovery endpoint | ✅ Complete |
+| RFC                                                                         | Title                             | Implementation               | Status      |
+| --------------------------------------------------------------------------- | --------------------------------- | ---------------------------- | ----------- |
+| [RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749)                   | OAuth 2.0 Authorization Framework | Resource Server components   | ✅ Complete |
+| [RFC 7519](https://datatracker.ietf.org/doc/html/rfc7519)                   | JSON Web Token (JWT)              | JWT validation with JWKS     | ✅ Complete |
+| [RFC 7662](https://datatracker.ietf.org/doc/html/rfc7662)                   | Token Introspection               | Local token validation       | ✅ Complete |
+| [RFC 8707](https://datatracker.ietf.org/doc/html/rfc8707)                   | Resource Indicators               | Audience binding             | ✅ Complete |
+| [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728)                   | Protected Resource Metadata       | Discovery endpoint           | ✅ Complete |
 | [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-12) | OAuth 2.1 Security Best Practices | Resource server requirements | ✅ Complete |
 
 ## Architecture
@@ -139,7 +139,7 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 
   # JWT Configuration
   jwt_algorithm: 'RS256',
-  jwt_audience: 'https://api.example.com/mcp',
+  audience: 'https://api.example.com/mcp',
   jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
 
   # Security
@@ -165,7 +165,7 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 
   # JWT from environment
   jwks_uri: ENV['OAUTH_JWKS_URI'],
-  jwt_audience: ENV['OAUTH_JWT_AUDIENCE'],
+  audience: ENV['OAUTH_JWT_AUDIENCE'],
   jwt_algorithm: ENV.fetch('OAUTH_JWT_ALGORITHM', 'RS256')
 )
 ```
@@ -198,25 +198,6 @@ GET /.well-known/oauth-protected-resource
 HTTP/1.1 200 OK
 Content-Type: application/json
 Cache-Control: public, max-age=3600
-```
-
-### Usage by Clients
-
-Clients can discover authorization servers automatically:
-
-```javascript
-// Client-side discovery
-async function discoverAuthServers(resourceUrl) {
-  const metadataUrl = `${resourceUrl}/.well-known/oauth-protected-resource`;
-  const response = await fetch(metadataUrl);
-  const metadata = await response.json();
-
-  return metadata.authorization_servers;
-}
-
-// Usage
-const authServers = await discoverAuthServers('https://api.example.com');
-// Returns: ['https://auth.example.com', 'https://backup-auth.example.com']
 ```
 
 ### Configuration Options
@@ -666,4 +647,4 @@ For implementation questions or issues:
 
 ---
 
-*This documentation covers Fast MCP v1.0+ OAuth 2.1 Resource Server implementation. For older versions, see the migration guide.*
+_This documentation covers Fast MCP v1.0+ OAuth 2.1 Resource Server implementation. For older versions, see the migration guide._

@@ -155,7 +155,7 @@ The `mount_in_rails` method automatically detects which transport to use:
 ```ruby
 # These options trigger OAuth transport:
 FastMcp.mount_in_rails(Rails.application, oauth_enabled: true)
-FastMcp.mount_in_rails(Rails.application, opaque_token_validator: proc)
+FastMcp.mount_in_rails(Rails.application, opaque_token_validator: method(:validate_token))
 
 # These options trigger legacy transport (with deprecation warning):
 FastMcp.mount_in_rails(Rails.application, path_prefix: '/mcp')
@@ -216,10 +216,10 @@ FastMcp.mount_in_rails(
   oauth_enabled: true,
   require_https: Rails.env.production?,
 
-  # JWT validation
-  issuer: 'https://auth.example.com',
-  audience: 'rails-app',
+  # JWT validation (if using JWT tokens)
+  resource_identifier: 'https://api.example.com/mcp',  # For audience binding
   jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
+  authorization_servers: ['https://auth.example.com'],
 
   # Or opaque token validation
   opaque_token_validator: lambda do |token|
@@ -305,8 +305,8 @@ FastMcp.mount_in_rails(
   allowed_origins: Rails.application.config.hosts,
 
   # OAuth configuration from credentials
-  issuer: Rails.application.credentials.oauth[:issuer],
-  audience: Rails.application.credentials.oauth[:audience],
+  authorization_servers: [Rails.application.credentials.oauth[:issuer]],
+  resource_identifier: Rails.application.credentials.oauth[:resource_identifier],
   jwks_uri: Rails.application.credentials.oauth[:jwks_uri],
 
   # Logging
@@ -492,21 +492,27 @@ location /mcp {
 ### Common Issues
 
 1. **Deprecation Warnings**
+
    ```
    DEPRECATION WARNING: Legacy MCP transport detected in mount_in_rails.
    ```
+
    **Solution**: Remove `path_prefix`, `messages_route`, and `sse_route` options
 
 2. **404 Not Found**
+
    ```
    GET /mcp/messages -> 404
    ```
+
    **Solution**: Update client to use unified `/mcp` endpoint
 
 3. **Authentication Failures**
+
    ```
    401 Unauthorized
    ```
+
    **Solution**: Ensure authentication is properly configured and tokens are valid
 
 4. **CORS Issues**
@@ -531,11 +537,13 @@ FastMcp.mount_in_rails(
 ## Best Practices for Rails
 
 1. **Use Environment-Specific Configuration**
+
    - Development: Basic StreamableHTTP
    - Staging: Authenticated StreamableHTTP
    - Production: OAuth StreamableHTTP
 
 2. **Secure Credentials Management**
+
    ```bash
    # Store sensitive data in Rails credentials
    rails credentials:edit
@@ -550,6 +558,7 @@ FastMcp.mount_in_rails(
    ```
 
 3. **Monitor Performance**
+
    ```ruby
    # Add metrics collection
    FastMcp.mount_in_rails(
