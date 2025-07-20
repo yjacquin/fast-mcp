@@ -79,10 +79,13 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
       end
 
       it 'validates JWT tokens (simplified validation)' do
-        # Note: This test uses simplified validation since we're not implementing
-        # full cryptographic verification in this example
-        allow(validator).to receive(:verify_jwt_signature).and_return(true)
-        
+        # Configure validator with HMAC secret for HS256 algorithm
+        validator = described_class.new(hmac_secret: 'test_secret', logger: logger)
+
+        # Mock JWT.decode to return valid payload with string keys
+        valid_payload_with_string_keys = valid_payload.transform_keys(&:to_s)
+        allow(JWT).to receive(:decode).and_return([valid_payload_with_string_keys, { 'alg' => 'HS256' }])
+
         expect(validator.validate_token(jwt_token)).to be(true)
       end
 
@@ -91,13 +94,20 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
         expired_encoded = Base64.urlsafe_encode64(JSON.generate(expired_payload))
         expired_jwt = "#{valid_jwt_header}.#{expired_encoded}.#{signature}"
 
-        allow(validator).to receive(:verify_jwt_signature).and_return(true)
+        validator = described_class.new(hmac_secret: 'test_secret', logger: logger)
+        # Mock JWT decode to return expired payload with string keys, then let validation logic run
+        expired_payload_with_string_keys = expired_payload.transform_keys(&:to_s)
+        allow(JWT).to receive(:decode).and_return([expired_payload_with_string_keys, { 'alg' => 'HS256' }])
+
         expect(validator.validate_token(expired_jwt)).to be(false)
       end
 
       it 'validates JWT token scopes' do
-        allow(validator).to receive(:verify_jwt_signature).and_return(true)
-        
+        validator = described_class.new(hmac_secret: 'test_secret', logger: logger)
+        # Mock JWT decode to return valid payload with string keys
+        valid_payload_with_string_keys = valid_payload.transform_keys(&:to_s)
+        allow(JWT).to receive(:decode).and_return([valid_payload_with_string_keys, { 'alg' => 'HS256' }])
+
         expect(validator.validate_token(jwt_token, required_scopes: ['mcp:read'])).to be(true)
         expect(validator.validate_token(jwt_token, required_scopes: ['mcp:admin'])).to be(false)
       end
@@ -111,6 +121,10 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
     let(:jwt_token) { "#{jwt_header}.#{encoded_payload}.signature" }
 
     it 'extracts claims from JWT tokens' do
+      # Mock JWT.decode to return the payload when called without verification
+      payload_with_string_keys = payload.transform_keys(&:to_s)
+      allow(JWT).to receive(:decode).with(jwt_token, nil, false).and_return([payload_with_string_keys, { 'alg' => 'HS256' }])
+
       claims = validator.extract_claims(jwt_token)
       expect(claims).to include('sub' => 'user123', 'scope' => 'mcp:read')
     end
@@ -146,25 +160,25 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
       # Use a logger with an actual LogDevice so we can capture logs
       logger_output = StringIO.new
       validator = described_class.new(logger: Logger.new(logger_output))
-      
+
       # Create a malformed JWT that will trigger an error during validation
       malformed_jwt = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.invalid_payload.signature'
       result = validator.validate_token(malformed_jwt)
-      
+
       # Check that validation failed and error was logged
       expect(result).to be(false)
       logger_output.rewind
       log_content = logger_output.read
-      expect(log_content).to match(/Unexpected error during token validation/)
+      expect(log_content).to match(/Token validation failed: HMAC secret not configured/)
     end
 
     it 'logs unexpected errors' do
       logger_output = StringIO.new
       validator = described_class.new(logger: Logger.new(logger_output))
-      
+
       allow(validator).to receive(:jwt_token?).and_raise(StandardError, 'Unexpected error')
       validator.validate_token('some_token')
-      
+
       logger_output.rewind
       log_content = logger_output.read
       expect(log_content).to match(/Unexpected error during token validation/)
