@@ -37,7 +37,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
   describe 'WWW-Authenticate Header Support (OAuth 2.1 Section 5.3)' do
     context 'when token is missing' do
       before do
-        allow(oauth_server).to receive(:authorize_request)
+        allow(oauth_server).to receive(:authorize_request!)
           .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Missing authentication token')
         allow(oauth_server).to receive(:oauth_error_response)
           .and_return({
@@ -70,7 +70,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
 
     context 'when token is invalid' do
       before do
-        allow(oauth_server).to receive(:authorize_request)
+        allow(oauth_server).to receive(:authorize_request!)
           .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Invalid token')
         allow(oauth_server).to receive(:oauth_error_response)
           .and_return({
@@ -113,7 +113,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
       end
 
       before do
-        allow(oauth_server).to receive(:authorize_request).and_return(token_info)
+        allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
         allow(oauth_server).to receive(:oauth_error_response)
           .and_return({
                         status: 403,
@@ -156,7 +156,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
           client_id: 'client123'
         }
 
-        allow(oauth_server).to receive(:authorize_request).and_return(token_info)
+        allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
 
         # Should accept via Authorization header with Bearer prefix
         env = {
@@ -174,7 +174,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
       end
 
       it 'rejects tokens without Bearer prefix' do
-        allow(oauth_server).to receive(:authorize_request)
+        allow(oauth_server).to receive(:authorize_request!)
           .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Missing authentication token')
         allow(oauth_server).to receive(:oauth_error_response)
           .and_return({
@@ -203,7 +203,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
   describe 'Error Response Handling (OAuth 2.1 Section 5.3)' do
     context 'missing tokens' do
       before do
-        allow(oauth_server).to receive(:authorize_request)
+        allow(oauth_server).to receive(:authorize_request!)
           .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Missing authentication token')
         allow(oauth_server).to receive(:oauth_error_response)
           .and_return({
@@ -230,7 +230,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
 
     context 'invalid tokens' do
       before do
-        allow(oauth_server).to receive(:authorize_request)
+        allow(oauth_server).to receive(:authorize_request!)
           .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Invalid token')
         allow(oauth_server).to receive(:oauth_error_response)
           .and_return({
@@ -266,7 +266,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
       end
 
       before do
-        allow(oauth_server).to receive(:authorize_request).and_return(token_info)
+        allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
         allow(oauth_server).to receive(:oauth_error_response)
           .and_return({
                         status: 403,
@@ -302,7 +302,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
       end
 
       before do
-        allow(oauth_server).to receive(:authorize_request).and_return(token_info)
+        allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
       end
 
       it 'returns 400 for malformed JSON' do
@@ -349,7 +349,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
 
       expect(status).to eq(200)
       expect(headers['Content-Type']).to eq('application/json')
-      
+
       response_data = JSON.parse(body.first)
       expect(response_data['resource']).to eq('https://mcp-server.example.com')
       expect(response_data['authorization_servers']).to eq(['https://auth.example.com'])
@@ -381,7 +381,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
       end
 
       before do
-        allow(oauth_server).to receive(:authorize_request).and_return(token_info)
+        allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
       end
 
       it 'allows access to MCP endpoints' do

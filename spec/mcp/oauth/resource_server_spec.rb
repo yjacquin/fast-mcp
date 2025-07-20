@@ -23,12 +23,12 @@ RSpec.describe FastMcp::OAuth::ResourceServer do
       custom_server = described_class.new(
         custom_scopes: { 'custom:scope' => 'Custom scope description' }
       )
-      
+
       expect(custom_server.scope_definitions).to include('custom:scope' => 'Custom scope description')
     end
   end
 
-  describe '#authorize_request' do
+  describe '#authorize_request!' do
     let(:mock_request) do
       double('request',
              get_header: nil)
@@ -37,8 +37,8 @@ RSpec.describe FastMcp::OAuth::ResourceServer do
     context 'with missing token' do
       it 'raises UnauthorizedError when no token is present' do
         allow(mock_request).to receive(:get_header).with('HTTP_AUTHORIZATION').and_return(nil)
-        
-        expect { resource_server.authorize_request(mock_request) }
+
+        expect { resource_server.authorize_request!(mock_request) }
           .to raise_error(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Missing authentication token')
       end
     end
@@ -60,8 +60,8 @@ RSpec.describe FastMcp::OAuth::ResourceServer do
       end
 
       it 'successfully authorizes request with valid token' do
-        result = resource_server.authorize_request(mock_request)
-        
+        result = resource_server.authorize_request!(mock_request)
+
         expect(result).to include(
           subject: 'user123',
           scopes: ['mcp:read', 'mcp:write'],
@@ -74,13 +74,13 @@ RSpec.describe FastMcp::OAuth::ResourceServer do
           .with('valid_jwt_token', required_scopes: ['mcp:admin'])
           .and_return(true)
 
-        resource_server.authorize_request(mock_request, required_scopes: ['mcp:admin'])
+        resource_server.authorize_request!(mock_request, required_scopes: ['mcp:admin'])
       end
 
       it 'raises UnauthorizedError for invalid token' do
         allow(token_validator).to receive(:validate_token).and_return(false)
-        
-        expect { resource_server.authorize_request(mock_request) }
+
+        expect { resource_server.authorize_request!(mock_request) }
           .to raise_error(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Invalid or expired token')
       end
     end
@@ -107,8 +107,8 @@ RSpec.describe FastMcp::OAuth::ResourceServer do
 
       it 'rejects HTTP requests when HTTPS is required' do
         server = described_class.new(require_https: true)
-        
-        expect { server.authorize_request(http_request) }
+
+        expect { server.authorize_request!(http_request) }
           .to raise_error(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'HTTPS required for OAuth requests')
       end
 
@@ -133,7 +133,7 @@ RSpec.describe FastMcp::OAuth::ResourceServer do
         allow(token_validator).to receive(:validate_token).and_return(true)
         allow(token_validator).to receive(:extract_claims).and_return({ 'sub' => 'user123' })
 
-        expect { resource_server.authorize_request(localhost_request) }.not_to raise_error
+        expect { resource_server.authorize_request!(localhost_request) }.not_to raise_error
       end
     end
   end
@@ -172,11 +172,11 @@ RSpec.describe FastMcp::OAuth::ResourceServer do
   describe '#oauth_error_response' do
     it 'generates invalid_token error response' do
       response = resource_server.oauth_error_response('invalid_token', 'Token has expired')
-      
+
       expect(response[:status]).to eq(401)
       expect(response[:headers]['WWW-Authenticate']).to include('Bearer error="invalid_token"')
       expect(response[:headers]['Content-Type']).to eq('application/json')
-      
+
       body = JSON.parse(response[:body])
       expect(body['error']['code']).to eq(-32_000)
       expect(body['error']['message']).to eq('Token has expired')
@@ -184,10 +184,10 @@ RSpec.describe FastMcp::OAuth::ResourceServer do
 
     it 'generates insufficient_scope error response' do
       response = resource_server.oauth_error_response('insufficient_scope', 'Missing mcp:admin scope', 403)
-      
+
       expect(response[:status]).to eq(403)
       expect(response[:headers]['WWW-Authenticate']).to include('Bearer error="insufficient_scope"')
-      
+
       body = JSON.parse(response[:body])
       expect(body['error']['data']['error']).to eq('insufficient_scope')
     end

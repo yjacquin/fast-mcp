@@ -233,9 +233,6 @@ module FastMcp
         request = Rack::Request.new(env)
         path = request.path
 
-        # Check for OAuth protected resource metadata endpoint (RFC 9728)
-        return handle_oauth_protected_resource_metadata(request) if path == '/.well-known/oauth-protected-resource'
-
         # Check if this is our MCP endpoint
         if path == @path
           @logger.debug('Setting server transport to StreamableHttpTransport')
@@ -248,54 +245,6 @@ module FastMcp
       end
 
       private
-
-      # Handle OAuth Protected Resource Metadata endpoint (RFC 9728)
-      def handle_oauth_protected_resource_metadata(request)
-        # Only GET method is allowed for metadata endpoint
-        unless request.request_method == 'GET'
-          return [405, { 'Content-Type' => JSON_CONTENT_TYPE, 'Allow' => 'GET' },
-                  [JSON.generate(create_error_response(-32_601, 'Method not allowed'))]]
-        end
-
-        # Basic security validations
-        return forbidden_response('Forbidden: Remote IP not allowed') unless validate_client_ip(request)
-
-        # Construct the resource identifier
-        scheme = request.scheme
-        host = request.host
-        port = request.port
-
-        # Only include port if it's non-standard
-        resource_uri = if (scheme == 'https' && port == 443) || (scheme == 'http' && port == 80)
-                         "#{scheme}://#{host}"
-                       else
-                         "#{scheme}://#{host}:#{port}"
-                       end
-
-        # Get authorization servers (can be overridden in subclasses)
-        auth_servers = authorization_servers
-
-        metadata = {
-          resource: resource_uri,
-          authorization_servers: auth_servers
-        }
-
-        @logger.debug("Serving OAuth protected resource metadata: #{metadata}")
-
-        headers = {
-          'Content-Type' => JSON_CONTENT_TYPE,
-          'Cache-Control' => 'public, max-age=3600'
-        }
-
-        [200, headers, [JSON.generate(metadata)]]
-      end
-
-      # Get authorization servers for metadata response
-      # Default implementation - override in OAuth-enabled transports
-      def authorization_servers
-        # Return empty array for base transport (no OAuth)
-        []
-      end
 
       # Handle MCP requests at the unified endpoint
       def handle_mcp_request(request, env)
@@ -383,8 +332,7 @@ module FastMcp
         JSON.parse(body) unless body.empty?
 
         # Extract headers
-        headers = request.env.select { |k, _v| k.start_with?('HTTP_') }
-                         .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
+        headers = extract_headers_from_request
 
         # Handle the request
         response = server.handle_request(body, headers: headers)
@@ -399,6 +347,11 @@ module FastMcp
           # Return JSON response or potentially SSE stream
           handle_json_rpc_response(response, request)
         end
+      end
+
+      def extract_headers_from_request(request)
+        request.env.select { |k, _v| k.start_with?('HTTP_') }
+               .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
       end
 
       # Handle JSON-RPC response (always single response since batching was removed in MCP 2025-06-18)

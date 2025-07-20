@@ -2,15 +2,13 @@
 
 require_relative 'token_validator'
 require_relative 'introspection'
+require_relative 'errors'
 
 module FastMcp
   module OAuth
     # OAuth 2.1 Resource Server
     # Provides OAuth-based authorization for MCP servers
     class ResourceServer
-      class UnauthorizedError < StandardError; end
-      class ForbiddenError < StandardError; end
-
       # OAuth 2.1 standard scopes for MCP
       DEFAULT_SCOPES = {
         'mcp:read' => 'Read access to MCP resources',
@@ -19,9 +17,11 @@ module FastMcp
         'mcp:admin' => 'Administrative access to MCP server'
       }.freeze
 
-      attr_reader :token_validator, :logger, :scope_definitions, :introspector, :resource_identifier
+      attr_reader :authorization_servers, :token_validator, :logger, :scope_definitions, :introspector,
+                  :resource_identifier
 
-      def initialize(options = {})
+      def initialize(authorization_servers, options = {})
+        @authorization_servers = authorization_servers
         @logger = options[:logger] || ::Logger.new($stdout).tap { |l| l.level = ::Logger::FATAL }
         @token_validator = TokenValidator.new(options.merge(logger: @logger))
         @scope_definitions = DEFAULT_SCOPES.merge(options[:custom_scopes] || {})
@@ -35,24 +35,24 @@ module FastMcp
       end
 
       # Authorize a request with OAuth 2.1
-      def authorize_request(request, required_scopes: nil)
+      def authorize_request!(request, required_scopes: nil)
         # Extract token from request
         token = extract_bearer_token(request)
-        raise UnauthorizedError, 'Missing authentication token' unless token
+        raise InvalidRequestError, 'Missing authentication token' unless token
 
         # Validate security requirements
-        validate_request_security(request) if @require_https
+        validate_request_security!(request) if @require_https
 
         # Validate token and scopes
         unless @token_validator.validate_token(token, required_scopes: required_scopes)
-          raise UnauthorizedError, 'Invalid or expired token'
+          raise InvalidRequestError, 'Invalid or expired token'
         end
 
         # Extract token information
         token_info = extract_token_info(token)
 
         # Validate audience binding if resource identifier is configured
-        validate_audience_binding(token_info) if @resource_identifier
+        validate_audience_binding!(token_info) if @resource_identifier
 
         token_info
       end
@@ -96,12 +96,25 @@ module FastMcp
         end
       end
 
+      def oauth_invalid_request_response(message, status:)
+        oauth_error_response(:invalid_request, message, status)
+      end
+
+      def oauth_invalid_scope_response(required_scope, status:)
+        message = "Required scope: #{required_scope}"
+        oauth_error_response(:invalid_scope, message, status, required_scope)
+      end
+
+      def oauth_server_error_response(message, status: 500)
+        oauth_error_response(:server_error, message, status)
+      end
+
       # Generate OAuth error responses
-      def oauth_error_response(error_type, description = nil, status = 401)
+      def oauth_error_response(error_type, description = nil, status = 401, realm = nil)
         error_data = { error: error_type }
         error_data[:error_description] = description if description
 
-        www_authenticate = build_www_authenticate_header(error_type, description)
+        www_authenticate = build_www_authenticate_header(error_type, description, realm)
 
         {
           status: status,
@@ -115,24 +128,43 @@ module FastMcp
 
       private
 
-      def build_www_authenticate_header(error_type, description)
-        www_authenticate = case error_type
-                           when 'invalid_token'
-                             'Bearer error="invalid_token"'
-                           when 'insufficient_scope'
-                             'Bearer error="insufficient_scope"'
-                           when 'invalid_request'
-                             'Bearer error="invalid_request"'
-                           else
-                             'Bearer'
-                           end
+      BEARER_ERRORS = {
+        invalid_request: 'Bearer error="invalid_request"',
+        invalid_scope: 'Bearer error="invalid_scope"',
+        server_error: 'Bearer error="server_error"'
+      }.freeze
+      private_constant :BEARER_ERRORS
+
+      def build_www_authenticate_header(error_type, description, realm)
+        www_authenticate = BEARER_ERRORS[error_type] || 'Bearer'
 
         www_authenticate += %(, error_description="#{description}") if description
-
-        # Add realm parameter for enhanced security
-        www_authenticate += %(, realm="#{@scope_definitions.keys.join(' ')}") unless @scope_definitions.empty?
+        www_authenticate += %(, realm="#{realm}") if realm
+        www_authenticate += %(, resource_metadata="#{resource_metadata_url}") if resource_metadata_url
 
         www_authenticate
+      end
+
+      # Build resource metadata URL for WWW-Authenticate header
+      def resource_metadata_url
+        # Only include metadata URL if we have authorization servers configured
+        return nil if authorization_servers.empty?
+
+        @resource_metadata_url ||= begin
+          # Construct the resource metadata endpoint URL
+          scheme = ENV.fetch('HTTPS', 'false').downcase == 'true' ? 'https' : 'http'
+          host = ENV.fetch('HOST', 'localhost')
+          port = ENV.fetch('PORT', scheme == 'https' ? '443' : '80').to_i
+
+          # Only include port if it's non-standard
+          base_url = if (scheme == 'https' && port == 443) || (scheme == 'http' && port == 80)
+                       "#{scheme}://#{host}"
+                     else
+                       "#{scheme}://#{host}:#{port}"
+                     end
+
+          "#{base_url}/.well-known/oauth-protected-resource"
+        end
       end
 
       def build_error_response_body(error_type, description, error_data)
@@ -163,28 +195,14 @@ module FastMcp
       end
 
       # Validate request security (HTTPS requirement)
-      def validate_request_security(request)
+      def validate_request_security!(request)
         # Check if request is over HTTPS (simplified check)
         scheme = request.get_header('HTTP_X_FORWARDED_PROTO') ||
                  request.get_header('rack.url_scheme') || 'http'
 
-        return unless scheme != 'https' && !localhost_request?(request)
+        return unless scheme != 'https'
 
         raise UnauthorizedError, 'HTTPS required for OAuth requests'
-      end
-
-      # Check if request is from localhost (HTTPS not required)
-      def localhost_request?(request)
-        host = request.get_header('HTTP_HOST') || request.get_header('SERVER_NAME')
-        return false unless host
-
-        localhost_patterns = [
-          /\Alocalhost(:\d+)?\z/,
-          /\A127\.0\.0\.1(:\d+)?\z/,
-          /\A\[::1\](:\d+)?\z/
-        ]
-
-        localhost_patterns.any? { |pattern| host.match?(pattern) }
       end
 
       # Extract token information from validated token
@@ -210,7 +228,7 @@ module FastMcp
       end
 
       # Validate audience binding for enhanced security (RFC 8707)
-      def validate_audience_binding(token_info)
+      def validate_audience_binding!(token_info)
         token_audience = token_info[:audience]
         return unless token_audience # Skip validation if no audience in token
 

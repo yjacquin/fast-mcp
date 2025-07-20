@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../protocol_version'
+
 module FastMcp
   module Transports
     # Base class for all MCP transports
@@ -7,7 +9,7 @@ module FastMcp
     class BaseTransport
       attr_reader :server, :logger
 
-      PROTOCOL_VERSION = FastMcp::Server::PROTOCOL_VERSION
+      PROTOCOL_VERSION = FastMcp::Protocol::VERSION
 
       def initialize(server, logger: nil)
         @server = server

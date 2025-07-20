@@ -11,7 +11,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
                     handle_request: ['test response'])
   end
   let(:app) { ->(env) { [404, {}, ['Not Found']] } }
-  
+
   let(:oauth_server) { instance_double(FastMcp::OAuth::ResourceServer) }
   let(:transport) do
     allow(FastMcp::OAuth::ResourceServer).to receive(:new).and_return(oauth_server)
@@ -55,7 +55,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
       end
 
       before do
-        allow(oauth_server).to receive(:authorize_request).and_return(token_info)
+        allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
       end
 
       it 'allows requests with valid OAuth token' do
@@ -65,7 +65,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
           'HTTP_AUTHORIZATION' => 'Bearer valid_token',
           'REMOTE_ADDR' => '127.0.0.1'
         }
-        
+
         status, _headers, _body = transport.call(env)
         expect(status).to eq(200)
       end
@@ -97,7 +97,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
 
     context 'with invalid OAuth token' do
       before do
-        allow(oauth_server).to receive(:authorize_request)
+        allow(oauth_server).to receive(:authorize_request!)
           .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Invalid token')
         allow(oauth_server).to receive(:oauth_error_response)
           .and_return({
@@ -114,7 +114,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
           'HTTP_AUTHORIZATION' => 'Bearer invalid_token',
           'REMOTE_ADDR' => '127.0.0.1'
         }
-        
+
         status, headers, body = transport.call(env)
         expect(status).to eq(401)
         expect(headers['WWW-Authenticate']).to include('Bearer error="invalid_token"')
@@ -131,7 +131,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
       end
 
       before do
-        allow(oauth_server).to receive(:authorize_request).and_return(token_info)
+        allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
       end
 
       it 'returns 403 for insufficient scope on tools methods' do
@@ -161,7 +161,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
 
         status, headers, body = transport.call(env)
         expect(status).to eq(403)
-        
+
         response_body = JSON.parse(body.first)
         expect(response_body['error']['message']).to include('Required scope: mcp:tools')
       end
@@ -194,7 +194,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
           'PATH_INFO' => '/mcp',
           'REMOTE_ADDR' => '127.0.0.1'
         }
-        
+
         status, _headers, _body = transport.call(env)
         expect(status).to eq(200)
       end
@@ -231,7 +231,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
     end
 
     before do
-      allow(oauth_server).to receive(:authorize_request).and_return(token_info)
+      allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
     end
 
     it 'determines correct scope for tools methods' do
@@ -266,7 +266,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
     end
 
     before do
-      allow(oauth_server).to receive(:authorize_request).and_return(token_info)
+      allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
     end
 
     it 'validates OAuth for SSE connections' do
@@ -277,7 +277,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
         'HTTP_AUTHORIZATION' => 'Bearer valid_token',
         'REMOTE_ADDR' => '127.0.0.1'
       }
-      
+
       status, headers, _body = transport.call(env)
       expect(status).to eq(200)
       expect(headers['Content-Type']).to include('text/event-stream')
@@ -286,8 +286,8 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
     it 'rejects SSE connections with insufficient scope' do
       token_info_limited = token_info.dup
       token_info_limited[:scopes] = ['mcp:write'] # Missing mcp:read
-      allow(oauth_server).to receive(:authorize_request).and_return(token_info_limited)
-      
+      allow(oauth_server).to receive(:authorize_request!).and_return(token_info_limited)
+
       # Mock the oauth_error_response method
       allow(oauth_server).to receive(:oauth_error_response)
         .with('insufficient_scope', 'Required scope: mcp:read', 403)
@@ -300,7 +300,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
             id: nil
           })
         })
-      
+
       env = {
         'REQUEST_METHOD' => 'GET',
         'PATH_INFO' => '/mcp',
@@ -308,10 +308,10 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
         'HTTP_AUTHORIZATION' => 'Bearer valid_token',
         'REMOTE_ADDR' => '127.0.0.1'
       }
-      
+
       status, _headers, body = transport.call(env)
       expect(status).to eq(403)
-      
+
       response_body = JSON.parse(body.first)
       expect(response_body['error']['message']).to include('Required scope: mcp:read')
     end
@@ -327,7 +327,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
     end
 
     before do
-      allow(oauth_server).to receive(:authorize_request).and_return(token_info)
+      allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
     end
 
     it 'maintains all security validations from parent transport' do
@@ -339,10 +339,10 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
         'HTTP_ORIGIN' => 'http://evil.com',
         'REMOTE_ADDR' => '127.0.0.1'
       }
-      
+
       status, _headers, body = transport.call(env)
       expect(status).to eq(403) # Origin validation failure, not OAuth failure
-      
+
       response_body = JSON.parse(body.first)
       expect(response_body['error']['message']).to include('Origin validation failed')
     end
@@ -355,10 +355,10 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
         'HTTP_MCP_PROTOCOL_VERSION' => '2024-11-05',
         'REMOTE_ADDR' => '127.0.0.1'
       }
-      
+
       status, _headers, body = transport.call(env)
       expect(status).to eq(400) # Protocol version error
-      
+
       response_body = JSON.parse(body.first)
       expect(response_body['error']['data']['expected_version']).to eq('2025-06-18')
     end

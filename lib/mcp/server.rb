@@ -9,11 +9,11 @@ require_relative 'transports/rack_transport'
 require_relative 'transports/authenticated_rack_transport'
 require_relative 'logger'
 require_relative 'server_filtering'
+require_relative 'protocol_version'
 
 module FastMcp
   class Server
     include ServerFiltering
-    PROTOCOL_VERSION = '2025-06-18'
 
     attr_reader :name, :version, :tools, :resources, :capabilities
 
@@ -232,7 +232,7 @@ module FastMcp
 
       # Prepare server response
       response = {
-        protocolVersion: PROTOCOL_VERSION,
+        protocolVersion: FastMcp::Protocol::VERSION,
         capabilities: @capabilities,
         serverInfo: {
           name: @name,

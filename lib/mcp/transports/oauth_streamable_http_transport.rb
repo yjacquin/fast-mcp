@@ -2,23 +2,30 @@
 
 require_relative 'streamable_http'
 require_relative '../oauth/resource_server'
+require_relative '../oauth/errors'
+require 'forwardable'
 
 module FastMcp
   module Transports
     # OAuth 2.1 enabled StreamableHTTP transport for MCP 2025-06-18
     # Provides comprehensive OAuth 2.1 authorization with scope-based access control
     class OAuthStreamableHttpTransport < StreamableHttpTransport
-      attr_reader :oauth_server, :oauth_enabled, :scope_requirements
+      extend Forwardable
+
+      attr_reader :oauth_resource_server, :oauth_enabled, :scope_requirements
 
       def initialize(app, server, options = {})
         super
 
         # OAuth configuration
+        # oauth_enabled can be set to false to disable OAuth authorization for development purposes
+        # oauth_enabled needs to be true for production environments, otherwise use StreamableHttpTransport
         @oauth_enabled = options.fetch(:oauth_enabled, true)
-        @oauth_server = FastMcp::OAuth::ResourceServer.new(options.merge(logger: @logger))
+        @authorization_servers = options.fetch(:authorization_servers, [])
+        @oauth_resource_server = FastMcp::OAuth::ResourceServer.new(authorization_servers,
+                                                                    options.merge(logger: @logger))
 
         # Authorization servers for metadata endpoint (RFC 9728)
-        @authorization_servers = options[:authorization_servers] || []
 
         # Scope requirements for different MCP operations
         @scope_requirements = {
@@ -31,19 +38,71 @@ module FastMcp
         @logger.debug("Scope requirements: #{@scope_requirements}") if @oauth_enabled
       end
 
+      def call(env)
+        request = Rack::Request.new(env)
+        path = request.path
+
+        # Check for OAuth protected resource metadata endpoint (RFC 9728)
+        return handle_oauth_protected_resource_metadata(request) if path == '/.well-known/oauth-protected-resource'
+
+        super
+      end
+
       private
+
+      def_delegators :@oauth_resource_server, :oauth_unauthorized_response, :oauth_invalid_scope_response,
+                     :oauth_server_error_response
+
+      # Handle OAuth Protected Resource Metadata endpoint (RFC 9728)
+      def handle_oauth_protected_resource_metadata(request)
+        # Only GET method is allowed for metadata endpoint
+        unless request.request_method == 'GET'
+          return [405, { 'Content-Type' => JSON_CONTENT_TYPE, 'Allow' => 'GET' },
+                  [JSON.generate(create_error_response(-32_601, 'Method not allowed'))]]
+        end
+
+        # Basic security validations
+        return forbidden_response('Forbidden: Remote IP not allowed') unless validate_client_ip(request)
+
+        # Construct the resource identifier
+        scheme = request.scheme
+        host = request.host
+        port = request.port
+
+        # Only include port if it's non-standard
+        resource_uri = if (scheme == 'https' && port == 443) || (scheme == 'http' && port == 80)
+                         "#{scheme}://#{host}"
+                       else
+                         "#{scheme}://#{host}:#{port}"
+                       end
+
+        # Get authorization servers (can be overridden in subclasses)
+        auth_servers = authorization_servers
+
+        metadata = {
+          resource: resource_uri,
+          authorization_servers: auth_servers
+        }
+
+        @logger.debug("Serving OAuth protected resource metadata: #{metadata}")
+
+        headers = {
+          'Content-Type' => JSON_CONTENT_TYPE,
+          'Cache-Control' => 'public, max-age=3600'
+        }
+
+        [200, headers, [JSON.generate(metadata)]]
+      end
 
       # Override MCP request handler to add OAuth 2.1 authorization
       def handle_mcp_request(request, env)
         # Perform OAuth authorization if enabled
         if @oauth_enabled
           begin
-            @token_info = @oauth_server.authorize_request(request)
+            @token_info = @oauth_resource_server.authorize_request!(request)
             @logger.debug("OAuth authorization successful for subject: #{@token_info[:subject]}")
-          rescue FastMcp::OAuth::ResourceServer::UnauthorizedError => e
-            return oauth_unauthorized_response(e.message)
-          rescue FastMcp::OAuth::ResourceServer::ForbiddenError => e
-            return oauth_forbidden_response(e.message)
+          rescue OAuth::InvalidRequestError => e
+            return oauth_invalid_request_response(e.message, status: e.status)
           end
         end
 
@@ -57,18 +116,13 @@ module FastMcp
         @logger.debug("Processing OAuth-protected JSON-RPC request: #{body}")
 
         # Validate JSON first
-        JSON.parse(body) unless body.empty?
+        parsed_request = JSON.parse(body)
 
-        # Extract method and validate scopes if OAuth is enabled
-        if @oauth_enabled
-          parsed_request = JSON.parse(body)
-          required_scope = determine_required_scope(parsed_request)
-          return oauth_insufficient_scope_response(required_scope) if required_scope && !required_scope?(required_scope)
-        end
+        # validate scopes if OAuth is enabled
+        validate_scope!(parsed_request) if @oauth_enabled
 
         # Extract headers
-        headers = request.env.select { |k, _v| k.start_with?('HTTP_') }
-                         .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
+        headers = extract_headers_from_request
 
         # Add OAuth token info to headers for server processing
         if @oauth_enabled && @token_info
@@ -86,6 +140,21 @@ module FastMcp
         else
           handle_json_rpc_response(response, request)
         end
+      rescue OAuth::InvalidRequestError => e
+        oauth_invalid_request_response(e.message, status: e.status)
+      rescue OAuth::InvalidScopeError => e
+        oauth_invalid_scope_response(e.required_scope, status: e.status)
+      rescue OAuth::ServerError => e
+        oauth_server_error_response(e.message, status: e.status)
+      rescue StandardError => e
+        oauth_server_error_response(e.message)
+      end
+
+      def validate_scope!(parsed_request)
+        required_scope = determine_required_scope(parsed_request)
+        return unless required_scope && !required_scope?(required_scope)
+
+        raise OAuth::InvalidRequestError.new('Invalid scope', required_scope: required_scope, status: 401)
       end
 
       # Determine required scope based on JSON-RPC method
@@ -112,80 +181,16 @@ module FastMcp
         @token_info[:scopes].include?(required_scope)
       end
 
-      # Generate OAuth unauthorized response with RFC 9728 compliance
-      def oauth_unauthorized_response(message)
-        error_response = @oauth_server.oauth_error_response('invalid_token', message, 401)
-
-        # Add resource metadata URL per RFC 9728 Section 5.1
-        www_authenticate = error_response[:headers]['WWW-Authenticate'] || 'Bearer'
-        resource_metadata_url = build_resource_metadata_url
-
-        # Enhance WWW-Authenticate header with resource_metadata parameter
-        www_authenticate += %(, resource_metadata="#{resource_metadata_url}") if resource_metadata_url
-
-        error_response[:headers]['WWW-Authenticate'] = www_authenticate
-        [error_response[:status], error_response[:headers], [error_response[:body]]]
-      end
-
-      # Generate OAuth forbidden response with RFC 9728 compliance
-      def oauth_forbidden_response(message)
-        error_response = @oauth_server.oauth_error_response('insufficient_scope', message, 403)
-
-        # Add resource metadata URL per RFC 9728 Section 5.1
-        www_authenticate = error_response[:headers]['WWW-Authenticate'] || 'Bearer'
-        resource_metadata_url = build_resource_metadata_url
-
-        # Enhance WWW-Authenticate header with resource_metadata parameter
-        www_authenticate += %(, resource_metadata="#{resource_metadata_url}") if resource_metadata_url
-
-        error_response[:headers]['WWW-Authenticate'] = www_authenticate
-        [error_response[:status], error_response[:headers], [error_response[:body]]]
-      end
-
-      # Generate insufficient scope response with RFC 9728 compliance
-      def oauth_insufficient_scope_response(required_scope)
-        message = "Required scope: #{required_scope}"
-        error_response = @oauth_server.oauth_error_response('insufficient_scope', message, 403)
-
-        # Add resource metadata URL per RFC 9728 Section 5.1
-        www_authenticate = error_response[:headers]['WWW-Authenticate'] || 'Bearer'
-        resource_metadata_url = build_resource_metadata_url
-
-        # Enhance WWW-Authenticate header with resource_metadata parameter
-        www_authenticate += %(, resource_metadata="#{resource_metadata_url}") if resource_metadata_url
-
-        error_response[:headers]['WWW-Authenticate'] = www_authenticate
-        [error_response[:status], error_response[:headers], [error_response[:body]]]
-      end
-
-      # Override authorization servers method to return configured servers
-      attr_reader :authorization_servers
-
-      # Build resource metadata URL for WWW-Authenticate header
-      def build_resource_metadata_url
-        # Only include metadata URL if we have authorization servers configured
-        return nil if @authorization_servers.empty?
-
-        # Construct the resource metadata endpoint URL
-        scheme = ENV.fetch('HTTPS', 'false').downcase == 'true' ? 'https' : 'http'
-        host = ENV.fetch('HOST', 'localhost')
-        port = ENV.fetch('PORT', scheme == 'https' ? '443' : '80').to_i
-
-        # Only include port if it's non-standard
-        base_url = if (scheme == 'https' && port == 443) || (scheme == 'http' && port == 80)
-                     "#{scheme}://#{host}"
-                   else
-                     "#{scheme}://#{host}:#{port}"
-                   end
-
-        "#{base_url}/.well-known/oauth-protected-resource"
-      end
-
       # Override SSE handling to include OAuth validation
       def handle_sse_stream(request, env)
-        # For SSE streams, we need read access at minimum
-        if @oauth_enabled && !required_scope?(@scope_requirements[:resources])
-          return oauth_insufficient_scope_response(@scope_requirements[:resources])
+        # Perform OAuth authorization if enabled
+        if @oauth_enabled
+          begin
+            @token_info = @oauth_resource_server.authorize_request!(request)
+            @logger.debug("OAuth authorization successful for subject: #{@token_info[:subject]}")
+          rescue OAuth::InvalidRequestError => e
+            return oauth_invalid_request_response(e.message, status: e.status)
+          end
         end
 
         super
