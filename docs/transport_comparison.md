@@ -287,11 +287,11 @@ transport = FastMcp::Transports::StreamableHttpTransport.new(
   # Connection pooling
   max_sessions_per_client: 10,
   session_timeout: 3600,
-  
+
   # Performance tuning
   json_parser: :oj,  # Use faster JSON parser
   keep_alive_timeout: 300,
-  
+
   # Memory optimization
   session_cleanup_interval: 60,
   max_cached_sessions: 1000
@@ -307,11 +307,11 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   # Token caching
   token_cache_ttl: 300,
   token_cache_size: 1000,
-  
+
   # JWT optimization
   jwt_cache_enabled: true,
   jwks_cache_ttl: 3600,
-  
+
   # Connection reuse
   oauth_client_pool_size: 10,
   oauth_timeout: 5
@@ -335,14 +335,14 @@ class TransportMetrics
       monitor_oauth_metrics
     end
   end
-  
+
   def self.monitor_http_metrics
     # HTTP-specific metrics
     StatsD.gauge('mcp.transport.active_sessions')
     StatsD.timing('mcp.transport.request_duration')
     StatsD.counter('mcp.transport.requests_total')
   end
-  
+
   def self.monitor_oauth_metrics
     # OAuth-specific metrics
     StatsD.counter('mcp.oauth.token_validations')
@@ -367,7 +367,7 @@ class HealthCheck
       check_oauth_health(transport)
     end
   end
-  
+
   def self.check_http_health(transport)
     {
       status: 'healthy',
@@ -376,7 +376,7 @@ class HealthCheck
       uptime: transport.uptime
     }
   end
-  
+
   def self.check_oauth_health(transport)
     {
       status: 'healthy',
@@ -415,23 +415,23 @@ class MultiTransportServer
     @server = FastMcp::Server.new(name: 'Multi-Transport Server', version: '1.0.0')
     setup_tools_and_resources
   end
-  
+
   def start
     # STDIO for command-line usage
     if ENV['MCP_STDIO'] == 'true'
       stdio_transport = FastMcp::Transports::StdioTransport.new(@server)
       stdio_transport.start
     end
-    
+
     # HTTP for web usage
     if ENV['MCP_HTTP'] == 'true'
       http_transport = create_http_transport
       start_http_server(http_transport)
     end
   end
-  
+
   private
-  
+
   def create_http_transport
     if ENV['MCP_OAUTH_ENABLED'] == 'true'
       FastMcp::Transports::OAuthStreamableHttpTransport.new(
@@ -462,11 +462,11 @@ upstream mcp_servers {
 server {
     listen 443 ssl http2;
     server_name api.example.com;
-    
+
     # SSL configuration
     ssl_certificate /etc/ssl/certs/api.example.com.crt;
     ssl_certificate_key /etc/ssl/private/api.example.com.key;
-    
+
     # MCP endpoint
     location /mcp {
         proxy_pass http://mcp_servers;
@@ -477,7 +477,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
+
         # SSE support
         proxy_cache_bypass $http_upgrade;
         proxy_buffering off;
@@ -493,33 +493,33 @@ server {
 # Test suite for multiple transports
 RSpec.describe 'Transport Compatibility' do
   let(:server) { create_test_server }
-  
+
   shared_examples 'transport functionality' do |transport|
     it 'handles basic requests' do
       response = send_request(transport, 'ping')
       expect(response['result']).to eq({})
     end
-    
+
     it 'lists tools correctly' do
       response = send_request(transport, 'tools/list')
       expect(response['result']['tools']).to be_an(Array)
     end
   end
-  
+
   describe 'STDIO Transport' do
     let(:transport) { FastMcp::Transports::StdioTransport.new(server) }
     include_examples 'transport functionality', :stdio
   end
-  
+
   describe 'StreamableHTTP Transport' do
     let(:transport) { FastMcp::Transports::StreamableHttpTransport.new(nil, server) }
     include_examples 'transport functionality', :http
   end
-  
+
   describe 'OAuth Transport' do
     let(:transport) { create_oauth_transport(server) }
     include_examples 'transport functionality', :oauth
-    
+
     it 'enforces OAuth scopes' do
       response = send_authenticated_request(transport, 'admin/status', limited_token)
       expect(response['error']['code']).to eq(-32000)

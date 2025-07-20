@@ -54,10 +54,10 @@ end
 module FastMcp
   module Metadata
     RESERVED_PREFIXES = ['mcp:', 'mcp-'].freeze
-    
+
     def validate_meta_field(meta_data)
       return unless meta_data.is_a?(Hash)
-      
+
       meta_data.each_key do |key|
         if RESERVED_PREFIXES.any? { |prefix| key.to_s.start_with?(prefix) }
           raise ReservedMetadataError, "Key '#{key}' uses reserved prefix"
@@ -121,7 +121,7 @@ module FastMcp
 
     def normalize_content_item(item)
       return item if item.is_a?(Hash) && item.key?(:type)
-      
+
       case item
       when String
         { type: 'text', text: item }
@@ -226,20 +226,20 @@ end
 # In Server class
 def request_elicitation(prompt, context: {}, options: {})
   return nil unless @transport.supports_elicitation?
-  
+
   elicitation_request = Elicitation::ElicitationRequest.new(
     prompt: prompt,
     context: context,
     options: options
   )
-  
+
   @transport.send_elicitation_request(elicitation_request)
 end
 
 # In Tool class
 def elicit_user_input(prompt, context: {})
   return nil unless server&.supports_elicitation?
-  
+
   server.request_elicitation(prompt, context: context)
 end
 ```

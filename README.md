@@ -119,7 +119,7 @@ Control which tools and resources are available based on request context:
 class AdminTool < FastMcp::Tool
   tags :admin, :dangerous
   description "Perform admin operations"
-  
+
   def call
     # Admin only functionality
   end
@@ -128,7 +128,7 @@ end
 # Filter tools based on user permissions
 server.filter_tools do |request, tools|
   user_role = request.params['role']
-  
+
   case user_role
   when 'admin'
     tools # Admins see all tools
@@ -410,23 +410,23 @@ Fast MCP includes production-ready OAuth 2.1 support with modern security featur
 # OAuth-protected MCP server
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, mcp_server,
-  
+
   # OAuth Resource Server Configuration
   oauth_enabled: true,
   require_https: true, # Enforced in production
   resource_identifier: 'https://your-api.com/mcp', # Must match token audience
-  
+
   # Authorization Servers (for RFC 9728 metadata endpoint)
   authorization_servers: [
     'https://your-auth-server.com'
   ],
-  
+
   # Token Validation (choose one)
-  
+
   # Option 1: JWT tokens with JWKS
   jwks_uri: 'https://your-auth-server.com/.well-known/jwks.json',
   jwt_audience: 'https://your-api.com/mcp',
-  
+
   # Option 2: Opaque tokens with custom validator
   opaque_token_validator: lambda do |token|
     user = User.find_by(api_token: token)
@@ -436,12 +436,12 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
       subject: user&.id
     }
   end,
-  
+
   # Scope Configuration
   tools_scope: 'mcp:tools',      # Required to execute tools
   resources_scope: 'mcp:resources', # Required to read resources
   admin_scope: 'mcp:admin',      # Required for admin operations
-  
+
   # Security Features
   resource_identifier: 'https://your-api.com/mcp' # Audience binding
 )
@@ -454,17 +454,17 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 FastMcp.mount_in_rails(
   Rails.application,
   transport: :oauth,
-  
+
   # OAuth Resource Server Configuration
   oauth_enabled: true,
   require_https: Rails.env.production?,
   resource_identifier: ENV['MCP_RESOURCE_IDENTIFIER'],
   authorization_servers: ENV['OAUTH_AUTHORIZATION_SERVERS'].split(','),
-  
+
   # JWT Token Validation
   jwks_uri: ENV['OAUTH_JWKS_URI'],
   jwt_audience: ENV['MCP_JWT_AUDIENCE'],
-  
+
   # Scope-based Authorization
   tools_scope: 'mcp:tools',
   resources_scope: 'mcp:resources',
@@ -477,7 +477,7 @@ FastMcp.mount_in_rails(
 - **✅ Protected Resource Metadata** - RFC 9728 compliant discovery endpoint (`/.well-known/oauth-protected-resource`)
 - **✅ Audience Binding** - Prevents confused deputy attacks (RFC 8707)
 - **✅ JWT + JWKS** - Full signature validation with key rotation
-- **✅ Token Validation** - Local JWT and opaque token validation  
+- **✅ Token Validation** - Local JWT and opaque token validation
 - **✅ Enhanced Error Responses** - WWW-Authenticate headers with resource metadata URLs
 - **✅ HTTPS Enforcement** - Production security with development flexibility
 

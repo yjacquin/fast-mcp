@@ -33,10 +33,10 @@ puts "Token claims: #{claims}"
 ### Step 3: Verify Connectivity
 
 ```ruby
-# Test JWKS endpoint (if using JWT)
+# Test external authorization server JWKS endpoint (if using JWT)
 require 'net/http'
 
-jwks_uri = "https://your-auth-server.com/.well-known/jwks.json"
+jwks_uri = "https://your-auth-server.com/.well-known/jwks.json"  # External auth server
 response = Net::HTTP.get_response(URI(jwks_uri))
 
 puts "JWKS Status: #{response.code}"
@@ -61,7 +61,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```bash
    # ❌ Missing header
    curl -X POST http://localhost:3001/mcp
-   
+
    # ✅ Correct usage
    curl -H "Authorization: Bearer your_token" -X POST http://localhost:3001/mcp
    ```
@@ -70,7 +70,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```bash
    # ❌ Wrong format
    curl -H "Authorization: your_token" -X POST http://localhost:3001/mcp
-   
+
    # ✅ Correct format
    curl -H "Authorization: Bearer your_token" -X POST http://localhost:3001/mcp
    ```
@@ -80,7 +80,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    # Check token extraction
    auth_header = request.headers['Authorization']
    puts "Auth header: '#{auth_header}'"
-   
+
    token = auth_header&.sub(/^Bearer /, '')
    puts "Extracted token: '#{token}'"
    ```
@@ -90,7 +90,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 **Error Response:**
 ```json
 {
-  "error": "invalid_token", 
+  "error": "invalid_token",
   "error_description": "Invalid or expired token"
 }
 ```
@@ -102,15 +102,15 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    def debug_token(token)
      puts "Token length: #{token&.length}"
      puts "Token format: #{token&.class}"
-     
+
      if token&.include?('.')
        parts = token.split('.')
        puts "JWT parts count: #{parts.length}"
-       
+
        if parts.length == 3
          header = JSON.parse(Base64.urlsafe_decode64(parts[0]))
          payload = JSON.parse(Base64.urlsafe_decode64(parts[1]))
-         
+
          puts "JWT header: #{header}"
          puts "JWT payload: #{payload}"
          puts "Expires at: #{Time.at(payload['exp']) if payload['exp']}"
@@ -122,7 +122,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    rescue => e
      puts "Token parsing error: #{e.message}"
    end
-   
+
    debug_token("your_token_here")
    ```
 
@@ -131,17 +131,17 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    # Test your validator directly
    validator = lambda do |token|
      puts "Validating token: #{token}"
-     
+
      result = {
        valid: token == 'admin_token_123',
        scopes: ['mcp:admin', 'mcp:resources', 'mcp:tools'],
        subject: 'test_user'
      }
-     
+
      puts "Validation result: #{result}"
      result
    end
-   
+
    # Test
    result = validator.call('admin_token_123')
    puts "Test result: #{result}"
@@ -152,9 +152,9 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    # Verify JWKS accessibility
    def test_jwks_connectivity(jwks_uri)
      response = Net::HTTP.get_response(URI(jwks_uri))
-     
+
      puts "JWKS Response: #{response.code} #{response.message}"
-     
+
      if response.code == '200'
        jwks = JSON.parse(response.body)
        puts "Available keys: #{jwks['keys']&.length || 0}"
@@ -167,7 +167,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    rescue => e
      puts "JWKS Connection Error: #{e.message}"
    end
-   
+
    test_jwks_connectivity("https://your-auth-server.com/.well-known/jwks.json")
    ```
 
@@ -196,14 +196,14 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
        result = your_token_validator.call(token)
        scopes = result[:scopes] || []
      end
-     
+
      puts "Token scopes: #{scopes}"
      scopes
    end
-   
+
    token_scopes = check_token_scopes("your_token")
    required_scope = "mcp:tools"
-   
+
    puts "Has required scope: #{token_scopes.include?(required_scope)}"
    ```
 
@@ -211,7 +211,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```ruby
    # Check transport scope requirements
    transport = your_oauth_transport
-   
+
    puts "Tools scope: #{transport.scope_requirements[:tools]}"
    puts "Resources scope: #{transport.scope_requirements[:resources]}"
    puts "Admin scope: #{transport.scope_requirements[:admin]}"
@@ -225,14 +225,14 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
      { token: 'read_token_456', expected_scopes: ['mcp:resources'] },
      { token: 'tools_token_789', expected_scopes: ['mcp:tools', 'mcp:resources'] }
    ]
-   
+
    test_cases.each do |test_case|
      puts "\nTesting token: #{test_case[:token]}"
-     
+
      # Make test request
      response = make_test_request('/mcp', 'tools/list', test_case[:token])
      puts "Response: #{response.code}"
-     
+
      if response.code == '403'
        error = JSON.parse(response.body)
        puts "Error: #{error['error_description']}"
@@ -276,7 +276,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
      puts "rack.url_scheme: #{request.get_header('rack.url_scheme')}"
      puts "HTTP_HOST: #{request.get_header('HTTP_HOST')}"
      puts "SERVER_NAME: #{request.get_header('SERVER_NAME')}"
-     
+
      # Check if detected as localhost
      host = request.get_header('HTTP_HOST') || request.get_header('SERVER_NAME')
      localhost_patterns = [
@@ -284,7 +284,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
        /\A127\.0\.0\.1(:\d+)?\z/,
        /\A\[::1\](:\d+)?\z/
      ]
-     
+
      is_localhost = localhost_patterns.any? { |pattern| host&.match?(pattern) }
      puts "Detected as localhost: #{is_localhost}"
    end
@@ -310,7 +310,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
      puts "Token algorithm: #{header['alg']}"
      header['kid']
    end
-   
+
    token_kid = check_token_kid("your_jwt_token")
    ```
 
@@ -319,15 +319,15 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    def check_jwks_keys(jwks_uri)
      response = Net::HTTP.get_response(URI(jwks_uri))
      jwks = JSON.parse(response.body)
-     
+
      puts "Available keys in JWKS:"
      jwks['keys'].each do |key|
        puts "  Kid: #{key['kid']}, Algorithm: #{key['alg']}, Type: #{key['kty']}, Use: #{key['use']}"
      end
-     
+
      jwks['keys']
    end
-   
+
    available_keys = check_jwks_keys("https://your-auth-server.com/.well-known/jwks.json")
    puts "Token kid '#{token_kid}' available: #{available_keys.any? { |k| k['kid'] == token_kid }}"
    ```
@@ -339,12 +339,12 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
      jwks_uri: "https://your-auth-server.com/.well-known/jwks.json",
      logger: Logger.new(STDOUT, level: Logger::DEBUG)
    )
-   
+
    # Force cache refresh by creating new instance
    validator = FastMcp::OAuth::TokenValidator.new(
      jwks_uri: "https://your-auth-server.com/.well-known/jwks.json"
    )
-   
+
    result = validator.validate_token("your_jwt_token")
    puts "Validation after cache refresh: #{result}"
    ```
@@ -391,19 +391,19 @@ curl -k -I https://your-auth-server.com/.well-known/jwks.json
 # Measure validation performance
 def benchmark_validation(token, iterations = 100)
   require 'benchmark'
-  
+
   validator = FastMcp::OAuth::TokenValidator.new(
     jwks_uri: "https://your-auth-server.com/.well-known/jwks.json"
   )
-  
+
   # Warm up
   validator.validate_token(token)
-  
+
   # Benchmark
   time = Benchmark.measure do
     iterations.times { validator.validate_token(token) }
   end
-  
+
   puts "Average validation time: #{(time.real / iterations * 1000).round(2)}ms"
 end
 
@@ -418,12 +418,12 @@ class DebugTokenValidator < FastMcp::OAuth::TokenValidator
   def fetch_jwks
     puts "Fetching JWKS from #{@jwks_uri}"
     start_time = Time.now
-    
+
     result = super
-    
+
     elapsed = Time.now - start_time
     puts "JWKS fetch took #{(elapsed * 1000).round(2)}ms"
-    
+
     result
   end
 end
@@ -441,40 +441,40 @@ validator = DebugTokenValidator.new(
 class OAuthDebugger
   def self.debug_request(request)
     puts "\n=== OAuth Debug Information ==="
-    
+
     # Extract token
     auth_header = request.headers['Authorization']
     puts "Authorization header: #{auth_header ? 'Present' : 'Missing'}"
-    
+
     if auth_header
       token = auth_header.sub(/^Bearer /, '')
       puts "Token format: #{token.include?('.') ? 'JWT' : 'Opaque'}"
       puts "Token length: #{token.length}"
-      
+
       if token.include?('.')
         debug_jwt(token)
       end
     end
-    
+
     # Check other headers
     puts "MCP-Protocol-Version: #{request.headers['MCP-Protocol-Version']}"
     puts "Content-Type: #{request.headers['Content-Type']}"
     puts "Accept: #{request.headers['Accept']}"
-    
+
     puts "=== End Debug Information ===\n"
   end
-  
+
   def self.debug_jwt(token)
     parts = token.split('.')
-    
+
     if parts.length == 3
       header = JSON.parse(Base64.urlsafe_decode64(parts[0]))
       payload = JSON.parse(Base64.urlsafe_decode64(parts[1]))
-      
+
       puts "JWT Header: #{header}"
       puts "JWT Algorithm: #{header['alg']}"
       puts "JWT Key ID: #{header['kid']}"
-      
+
       puts "JWT Subject: #{payload['sub']}"
       puts "JWT Issuer: #{payload['iss']}"
       puts "JWT Audience: #{payload['aud']}"
@@ -498,7 +498,7 @@ OAuthDebugger.debug_request(request)
 class TestTokenGenerator
   def self.generate_jwt(payload = {}, secret = 'test-secret')
     require 'jwt'
-    
+
     default_payload = {
       sub: 'test-user',
       iss: 'test-issuer',
@@ -507,18 +507,18 @@ class TestTokenGenerator
       iat: Time.now.to_i,
       scope: 'mcp:resources mcp:tools mcp:admin'
     }
-    
+
     JWT.encode(default_payload.merge(payload), secret, 'HS256')
   end
-  
+
   def self.generate_expired_jwt
     generate_jwt(exp: 1.hour.ago.to_i)
   end
-  
+
   def self.generate_invalid_audience_jwt
     generate_jwt(aud: 'wrong-audience')
   end
-  
+
   def self.generate_no_scope_jwt
     generate_jwt(scope: '')
   end
@@ -542,7 +542,7 @@ module OAuthTestHelper
       'Accept' => 'application/json',
       'MCP-Protocol-Version' => '2025-06-18'
     }
-    
+
     case method.to_s.downcase
     when 'get'
       get path, headers: headers
@@ -553,7 +553,7 @@ module OAuthTestHelper
     when 'delete'
       delete path, headers: headers
     end
-    
+
     {
       status: response.status,
       body: response.body,
@@ -568,12 +568,12 @@ module OAuthTestHelper
       json: nil
     }
   end
-  
+
   def expect_oauth_error(response, error_type)
     expect(response[:status]).to be >= 400
     expect(response[:json]['error']).to eq(error_type)
   end
-  
+
   def expect_oauth_success(response)
     expect(response[:status]).to be < 400
     expect(response[:json]).to have_key('result')
@@ -583,14 +583,14 @@ end
 # Usage in tests
 RSpec.describe 'OAuth API' do
   include OAuthTestHelper
-  
+
   it 'rejects invalid tokens' do
     response = make_oauth_request(:post, '/mcp', 'invalid_token', {
       jsonrpc: '2.0',
       method: 'tools/list',
       id: 1
     })
-    
+
     expect_oauth_error(response, 'invalid_token')
   end
 end

@@ -29,18 +29,18 @@ Fast MCP operates as an **OAuth 2.1 Resource Server** that validates access toke
 
 ### What Fast MCP Does (Resource Server)
 
-✅ **Validates Access Tokens** - Verifies signatures, expiration, and audience claims  
-✅ **Enforces Authorization** - Scope-based access control for MCP operations  
-✅ **Serves Protected Resources** - Secure access to tools and resources  
-✅ **Provides Resource Metadata** - RFC 9728 discovery endpoint  
-✅ **Error Handling** - OAuth 2.1 compliant error responses  
+✅ **Validates Access Tokens** - Verifies signatures, expiration, and audience claims
+✅ **Enforces Authorization** - Scope-based access control for MCP operations
+✅ **Serves Protected Resources** - Secure access to tools and resources
+✅ **Provides Resource Metadata** - RFC 9728 discovery endpoint
+✅ **Error Handling** - OAuth 2.1 compliant error responses
 
 ### What Fast MCP Does NOT Do (Authorization Server Functions)
 
-❌ **Issue Access Tokens** - Tokens are issued by external authorization servers  
-❌ **Handle Authorization Flows** - No OAuth authorization code or implicit flows  
-❌ **Client Registration** - Dynamic client registration is handled externally  
-❌ **Authorization Server Discovery** - Clients discover authorization servers independently  
+❌ **Issue Access Tokens** - Tokens are issued by external authorization servers
+❌ **Handle Authorization Flows** - No OAuth authorization code or implicit flows
+❌ **Client Registration** - Dynamic client registration is handled externally
+❌ **Authorization Server Discovery** - Clients discover authorization servers independently
 
 ## RFC Compliance
 
@@ -107,23 +107,23 @@ server = FastMcp::Server.new(name: 'My MCP Service', version: '1.0.0')
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, # Your Rack application
   server,
-  
+
   # OAuth Configuration
   oauth_enabled: true,
   require_https: true, # Required in production
-  
+
   # Resource Identity (MUST match audience in tokens)
   resource_identifier: 'https://api.example.com/mcp',
-  
+
   # Authorization Servers
   authorization_servers: [
     'https://auth.example.com',
     'https://backup-auth.example.com'
   ],
-  
+
   # Token Validation
   opaque_token_validator: method(:validate_opaque_token),
-  
+
   # Scope Requirements
   tools_scope: 'mcp:tools',
   resources_scope: 'mcp:resources',
@@ -136,16 +136,16 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 ```ruby
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, server,
-  
+
   # JWT Configuration
   jwt_algorithm: 'RS256',
   jwt_audience: 'https://api.example.com/mcp',
   jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
-  
+
   # Security
   require_https: true,
   clock_skew_tolerance: 60, # seconds
-  
+
   # Authorization Servers
   authorization_servers: ['https://auth.example.com']
 )
@@ -156,13 +156,13 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 ```ruby
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, server,
-  
+
   # Environment-driven configuration
   oauth_enabled: ENV.fetch('OAUTH_ENABLED', 'true') == 'true',
   require_https: ENV.fetch('REQUIRE_HTTPS', Rails.env.production?.to_s) == 'true',
   resource_identifier: ENV.fetch('OAUTH_RESOURCE_IDENTIFIER'),
   authorization_servers: ENV.fetch('OAUTH_AUTHORIZATION_SERVERS', '').split(','),
-  
+
   # JWT from environment
   jwks_uri: ENV['OAUTH_JWKS_URI'],
   jwt_audience: ENV['OAUTH_JWT_AUDIENCE'],
@@ -210,7 +210,7 @@ async function discoverAuthServers(resourceUrl) {
   const metadataUrl = `${resourceUrl}/.well-known/oauth-protected-resource`;
   const response = await fetch(metadataUrl);
   const metadata = await response.json();
-  
+
   return metadata.authorization_servers;
 }
 
@@ -247,21 +247,21 @@ Fast MCP validates JWT tokens according to RFC 7519:
 def validate_jwt_token(token)
   # 1. Parse JWT structure
   header, payload, signature = parse_jwt(token)
-  
+
   # 2. Verify signature using JWKS
   verify_signature(header, payload, signature)
-  
+
   # 3. Validate standard claims
   validate_expiration(payload['exp'])
   validate_not_before(payload['nbf'])
   validate_issued_at(payload['iat'])
-  
+
   # 4. Validate audience (critical for security)
   validate_audience(payload['aud'], @resource_identifier)
-  
+
   # 5. Extract scopes
   scopes = extract_scopes(payload)
-  
+
   {
     valid: true,
     subject: payload['sub'],
@@ -279,9 +279,9 @@ For opaque tokens, implement a custom validator:
 def validate_opaque_token(token)
   # Your validation logic (database lookup, cache check, etc.)
   user = TokenStore.find_by_token(token)
-  
+
   return { valid: false } unless user&.token_valid?
-  
+
   {
     valid: true,
     subject: user.id,
@@ -320,7 +320,7 @@ Fast MCP provides OAuth 2.1 compliant error responses with enhanced WWW-Authenti
 
 ```http
 HTTP/1.1 401 Unauthorized
-WWW-Authenticate: Bearer realm="mcp-server", 
+WWW-Authenticate: Bearer realm="mcp-server",
                   resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"
 Content-Type: application/json
 
@@ -338,7 +338,7 @@ Content-Type: application/json
 
 ```http
 HTTP/1.1 401 Unauthorized
-WWW-Authenticate: Bearer error="invalid_token", 
+WWW-Authenticate: Bearer error="invalid_token",
                   error_description="The access token is invalid or expired",
                   resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"
 Content-Type: application/json
@@ -357,7 +357,7 @@ Content-Type: application/json
 
 ```http
 HTTP/1.1 403 Forbidden
-WWW-Authenticate: Bearer error="insufficient_scope", 
+WWW-Authenticate: Bearer error="insufficient_scope",
                   scope="mcp:tools",
                   resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"
 Content-Type: application/json
@@ -376,7 +376,7 @@ Content-Type: application/json
 
 ```http
 HTTP/1.1 401 Unauthorized
-WWW-Authenticate: Bearer error="invalid_token", 
+WWW-Authenticate: Bearer error="invalid_token",
                   error_description="Token audience does not match resource server",
                   resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"
 Content-Type: application/json
@@ -487,38 +487,38 @@ curl -X POST https://api.example.com/mcp \
 ```ruby
 RSpec.describe 'OAuth 2.1 Resource Server' do
   let(:transport) { create_oauth_transport }
-  
+
   describe 'protected resource metadata' do
     it 'serves metadata endpoint' do
       response = get '/.well-known/oauth-protected-resource'
-      
+
       expect(response.status).to eq(200)
       expect(response.content_type).to eq('application/json')
-      
+
       metadata = JSON.parse(response.body)
       expect(metadata['resource']).to eq('https://api.example.com/mcp')
       expect(metadata['authorization_servers']).to be_an(Array)
     end
   end
-  
+
   describe 'token validation' do
     it 'accepts valid JWT tokens' do
       token = create_valid_jwt_token(audience: 'https://api.example.com/mcp')
-      
+
       response = post '/mcp',
         headers: { 'Authorization' => "Bearer #{token}" },
         json: { jsonrpc: '2.0', method: 'tools/list', id: 1 }
-      
+
       expect(response.status).to eq(200)
     end
-    
+
     it 'rejects tokens with wrong audience' do
       token = create_valid_jwt_token(audience: 'https://other.example.com')
-      
+
       response = post '/mcp',
         headers: { 'Authorization' => "Bearer #{token}" },
         json: { jsonrpc: '2.0', method: 'tools/list', id: 1 }
-      
+
       expect(response.status).to eq(401)
       expect(response.headers['WWW-Authenticate']).to include('invalid_token')
     end
@@ -534,13 +534,13 @@ require 'benchmark'
 
 def benchmark_oauth_requests(count = 1000)
   token = create_valid_jwt_token
-  
+
   Benchmark.measure do
     count.times do
       response = post '/mcp',
         headers: { 'Authorization' => "Bearer #{token}" },
         json: { jsonrpc: '2.0', method: 'ping', id: 1 }
-      
+
       raise 'Unexpected response' unless response.status == 200
     end
   end
@@ -589,7 +589,7 @@ class OAuthMetrics
     StatsD.increment("oauth.error.#{error_type}") if error_type
     StatsD.timing('oauth.token_validation.duration', duration)
   end
-  
+
   def self.track_scope_check(method:, required_scope:, success:)
     StatsD.increment('oauth.scope_check.total')
     StatsD.increment("oauth.scope_check.#{success ? 'allowed' : 'denied'}")
@@ -612,12 +612,12 @@ class HealthCheck
       last_token_validation: last_successful_validation
     }
   end
-  
+
   private
-  
+
   def self.jwks_accessible?
     return true unless ENV['OAUTH_JWKS_URI']
-    
+
     response = Net::HTTP.get_response(URI(ENV['OAUTH_JWKS_URI']))
     response.is_a?(Net::HTTPSuccess)
   rescue
@@ -632,12 +632,12 @@ end
 # Graceful degradation when authorization servers are unavailable
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, server,
-  
+
   # Fallback configuration
   fallback_mode: :read_only, # Options: :disabled, :read_only, :cached_tokens
   cache_valid_tokens: true,
   token_cache_ttl: 300, # 5 minutes
-  
+
   # Circuit breaker for JWKS endpoint
   jwks_circuit_breaker: {
     failure_threshold: 5,

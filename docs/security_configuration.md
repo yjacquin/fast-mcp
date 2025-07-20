@@ -138,15 +138,15 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, server,
   oauth_enabled: true,
   require_https: true,
-  
+
   # JWT validation
   issuer: 'https://auth.example.com',
   audience: 'mcp-api',
   jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
-  
+
   # Opaque token validation
   opaque_token_validator: method(:validate_opaque_token),
-  
+
   # Scope requirements
   tools_scope: 'mcp:tools',
   resources_scope: 'mcp:read',
@@ -164,7 +164,7 @@ def validate_opaque_token(token)
     body: { token: token },
     headers: { 'Authorization' => "Basic #{client_credentials}" }
   )
-  
+
   if response.success? && response['active']
     {
       valid: true,
@@ -192,7 +192,7 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   issuer: 'https://auth.example.com',
   audience: 'mcp-api',
   jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
-  
+
   # Additional JWT validation options
   clock_skew: 60,  # Allow 60 seconds clock skew
   required_scopes: ['mcp:read']  # Default required scopes
@@ -209,7 +209,7 @@ Define granular permissions using OAuth scopes:
 # Standard MCP scopes
 DEFAULT_SCOPES = {
   'mcp:read' => 'Read access to MCP resources',
-  'mcp:write' => 'Write access to MCP resources', 
+  'mcp:write' => 'Write access to MCP resources',
   'mcp:tools' => 'Access to execute MCP tools',
   'mcp:admin' => 'Administrative access to MCP server'
 }
@@ -223,7 +223,7 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
     'system:admin' => 'System administration',
     'analytics:view' => 'View analytics data'
   },
-  
+
   # Map operations to scopes
   tools_scope: 'mcp:tools',
   resources_scope: 'files:read',
@@ -238,10 +238,10 @@ Configure which scopes are required for specific MCP methods:
 ```ruby
 class CustomOAuthTransport < FastMcp::Transports::OAuthStreamableHttpTransport
   private
-  
+
   def determine_required_scope(parsed_request)
     method = parsed_request['method']
-    
+
     case method
     when 'tools/list', 'tools/call'
       'mcp:tools'
@@ -257,7 +257,7 @@ class CustomOAuthTransport < FastMcp::Transports::OAuthStreamableHttpTransport
       'mcp:admin'  # Default to admin for unknown methods
     end
   end
-  
+
   def determine_resource_scope(params)
     uri = params&.dig('uri')
     case uri
@@ -280,7 +280,7 @@ Filter resources based on user permissions:
 server.filter_resources do |resources, request|
   # Get OAuth token info from headers
   oauth_scopes = request.headers['oauth-scopes']&.split(' ') || []
-  
+
   resources.select do |resource|
     case resource.uri
     when /^file:\/\/\/public\//
@@ -315,13 +315,13 @@ transport = FastMcp::Transports::StreamableHttpTransport.new(
 ```ruby
 class VersionEnforcedTransport < FastMcp::Transports::StreamableHttpTransport
   private
-  
+
   def validate_protocol_version(headers)
     version = headers['mcp-protocol-version']
-    
+
     # Allow missing version for backward compatibility
     return true if version.nil? || version.empty?
-    
+
     # Custom validation logic
     case version
     when '2025-06-18'
@@ -360,7 +360,7 @@ Add security headers to all responses:
 ```ruby
 class SecureTransport < FastMcp::Transports::StreamableHttpTransport
   private
-  
+
   def add_security_headers(headers)
     headers.merge!(
       'X-Content-Type-Options' => 'nosniff',
@@ -371,7 +371,7 @@ class SecureTransport < FastMcp::Transports::StreamableHttpTransport
       'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains'
     )
   end
-  
+
   def handle_json_rpc_response(response, request)
     status, headers, body = super
     add_security_headers(headers)
@@ -395,7 +395,7 @@ transport = FastMcp::Transports::StreamableHttpTransport.new(
   cors_methods: ['GET', 'POST', 'OPTIONS'],
   cors_headers: [
     'Content-Type',
-    'Authorization', 
+    'Authorization',
     'MCP-Protocol-Version'
   ],
   cors_max_age: 86400  # 24 hours
@@ -446,17 +446,17 @@ RSpec.describe 'Authentication Security' do
     post '/mcp', params: {}, headers: {}
     expect(response).to have_http_status(401)
   end
-  
+
   it 'rejects invalid tokens' do
-    post '/mcp', 
+    post '/mcp',
          params: { jsonrpc: '2.0', method: 'ping', id: 1 }.to_json,
-         headers: { 
+         headers: {
            'Content-Type' => 'application/json',
            'Authorization' => 'Bearer invalid-token'
          }
     expect(response).to have_http_status(401)
   end
-  
+
   it 'accepts valid tokens' do
     post '/mcp',
          params: { jsonrpc: '2.0', method: 'ping', id: 1 }.to_json,
@@ -475,13 +475,13 @@ end
 RSpec.describe 'Authorization Security' do
   it 'enforces scope requirements' do
     token_with_read_scope = generate_token(scopes: ['mcp:read'])
-    
+
     post '/mcp',
          params: { jsonrpc: '2.0', method: 'tools/call', id: 1 }.to_json,
          headers: {
            'Authorization' => "Bearer #{token_with_read_scope}"
          }
-    
+
     expect(response).to have_http_status(403)
     expect(JSON.parse(response.body)['error']['message']).to include('insufficient_scope')
   end
@@ -534,7 +534,7 @@ class SecurityMetrics
       "ip:#{ip_address}"
     ])
   end
-  
+
   def self.record_auth_success(user_id, scopes)
     StatsD.increment('mcp.auth.success', tags: [
       "user:#{user_id}",
@@ -557,7 +557,7 @@ groups:
           severity: warning
         annotations:
           summary: High authentication failure rate detected
-          
+
       - alert: UnauthorizedAdminAccess
         expr: increase(mcp_auth_failure_total{reason="insufficient_scope",method="admin"}[1m]) > 0
         labels:
@@ -601,14 +601,14 @@ class EmergencyRevocation
   def self.revoke_all_tokens
     # Update revocation list
     TokenRevocationList.add_all_active_tokens
-    
+
     # Clear server-side sessions
     SessionStore.clear_all
-    
+
     # Notify monitoring systems
     SecurityMetrics.record_emergency_revocation
   end
-  
+
   def self.revoke_user_tokens(user_id)
     tokens = TokenStore.find_by_user(user_id)
     tokens.each { |token| TokenRevocationList.add(token.jti) }

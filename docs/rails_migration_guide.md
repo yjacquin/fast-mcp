@@ -215,12 +215,12 @@ FastMcp.mount_in_rails(
   path: '/mcp',
   oauth_enabled: true,
   require_https: Rails.env.production?,
-  
+
   # JWT validation
   issuer: 'https://auth.example.com',
   audience: 'rails-app',
   jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
-  
+
   # Or opaque token validation
   opaque_token_validator: lambda do |token|
     # Your token validation logic
@@ -229,7 +229,7 @@ FastMcp.mount_in_rails(
       body: { token: token },
       headers: { 'Authorization' => "Basic #{client_credentials}" }
     )
-    
+
     if response.success? && response['active']
       {
         valid: true,
@@ -240,7 +240,7 @@ FastMcp.mount_in_rails(
       { valid: false }
     end
   end,
-  
+
   # Scope requirements
   tools_scope: 'mcp:tools',
   resources_scope: 'mcp:read',
@@ -268,15 +268,15 @@ FastMcp.mount_in_rails(
   name: Rails.application.class.module_parent_name.underscore.dasherize,
   version: '1.0.0',
   path: '/mcp',
-  
+
   # Development/test specific
   localhost_only: Rails.env.local?,
   require_https: Rails.env.production?,
-  
+
   # Production OAuth config
   oauth_enabled: Rails.env.production?,
   opaque_token_validator: (method(:validate_oauth_token) if Rails.env.production?),
-  
+
   # Development auth token
   auth_token: (Rails.application.credentials.mcp_token if Rails.env.development?)
 ) do |server|
@@ -297,18 +297,18 @@ FastMcp.mount_in_rails(
   name: Rails.application.class.module_parent_name.underscore.dasherize,
   version: '1.0.0',
   path: '/mcp',
-  
+
   # Production security
   oauth_enabled: true,
   require_https: true,
   localhost_only: false,
   allowed_origins: Rails.application.config.hosts,
-  
+
   # OAuth configuration from credentials
   issuer: Rails.application.credentials.oauth[:issuer],
   audience: Rails.application.credentials.oauth[:audience],
   jwks_uri: Rails.application.credentials.oauth[:jwks_uri],
-  
+
   # Logging
   logger: Rails.logger
 ) do |server|
@@ -327,9 +327,9 @@ def validate_oauth_token(token)
     Rails.application.credentials.oauth[:client_secret],
     site: Rails.application.credentials.oauth[:issuer]
   )
-  
+
   response = oauth_client.request(:post, '/oauth/introspect', body: { token: token })
-  
+
   if response.status == 200 && response.parsed['active']
     {
       valid: true,
@@ -367,15 +367,15 @@ FastMcp.mount_in_rails(
   name: Rails.application.class.module_parent_name.underscore.dasherize,
   version: '1.0.0',
   path: '/mcp',
-  
+
   # Uncomment for authentication:
   # authenticate: true,
   # auth_token: Rails.application.credentials.mcp_token,
-  
+
   # Uncomment for OAuth 2.1:
   # oauth_enabled: true,
   # opaque_token_validator: method(:validate_oauth_token),
-  
+
   # Security settings
   require_https: Rails.env.production?,
   localhost_only: Rails.env.local?
@@ -480,7 +480,7 @@ location /mcp {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    
+
     # SSE support
     proxy_cache_bypass $http_upgrade;
     proxy_buffering off;
@@ -539,7 +539,7 @@ FastMcp.mount_in_rails(
    ```bash
    # Store sensitive data in Rails credentials
    rails credentials:edit
-   
+
    # Add to credentials.yml.enc:
    mcp:
      auth_token: "your-secret-token"

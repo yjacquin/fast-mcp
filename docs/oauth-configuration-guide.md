@@ -17,13 +17,49 @@ This guide provides comprehensive information on configuring OAuth 2.1 authentic
 
 ## Overview
 
-Fast MCP implements OAuth 2.1 (RFC 6749 + security enhancements) to provide secure, standards-based authentication and authorization for MCP servers. This implementation includes:
+Fast MCP implements OAuth 2.1 (RFC 6749 + security enhancements) as a **Resource Server** to provide secure, standards-based token validation and authorization for MCP servers. This implementation includes:
 
-- **PKCE (Proof Key for Code Exchange)** - Prevents authorization code interception attacks
+- **Resource Server Role Only** - Fast MCP validates tokens but does NOT issue them
+- **JWT and Opaque Token Support** - Validates tokens issued by external authorization servers
 - **Audience Binding** - Prevents confused deputy attacks using resource parameters
 - **Token Introspection** - Local token validation for resource servers
 - **Protected Resource Metadata** - RFC 9728 compliant resource server discovery
 - **Scope-based Authorization** - Fine-grained access control for MCP operations
+
+**Important**: Fast MCP acts as a Resource Server and requires an external OAuth 2.1 Authorization Server to issue tokens.
+
+## Architecture Overview
+
+Fast MCP implements the **Resource Server** role in the OAuth 2.1 architecture:
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  External       │    │                 │    │   Fast MCP      │
+│  Authorization  │    │   Client        │    │   Resource      │
+│  Server         │    │   Application   │    │   Server        │
+│                 │    │                 │    │                 │
+│ • Issues tokens │◄───┤ • Gets tokens   │───►│ • Validates     │
+│ • Authenticates │    │ • Makes         │    │   tokens        │
+│   users         │    │   requests      │    │ • Serves MCP    │
+│ • Manages       │    │                 │    │   resources     │
+│   scopes        │    │                 │    │ • Enforces      │
+│                 │    │                 │    │   authorization │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### What Fast MCP Does (Resource Server Role)
+
+✅ **Token Validation** - Verifies JWT signatures and opaque tokens
+✅ **Scope Enforcement** - Checks required scopes for MCP operations
+✅ **Resource Protection** - Secures access to tools and resources
+✅ **Metadata Publishing** - Provides RFC 9728 discovery endpoint
+
+### What Fast MCP Does NOT Do (Authorization Server Functions)
+
+❌ **Token Issuance** - Tokens must be obtained from external authorization servers
+❌ **User Authentication** - User login is handled by external authorization servers
+❌ **Client Registration** - Client apps register with external authorization servers
+❌ **Authorization Flows** - OAuth flows (code, implicit, etc.) handled externally
 
 ## Security Features
 
@@ -48,13 +84,13 @@ Fast MCP implements OAuth 2.1 (RFC 6749 + security enhancements) to provide secu
 
 ## Quick Start
 
-### 1. Basic OAuth Server Setup
+### 1. Basic OAuth Resource Server Setup
 
 ```ruby
 require 'fast_mcp'
 
-# Create MCP server
-server = FastMcp::Server.new(name: 'My OAuth MCP Server', version: '1.0.0')
+# Create MCP server (acts as OAuth Resource Server)
+server = FastMcp::Server.new(name: 'My MCP Resource Server', version: '1.0.0')
 
 # Register your tools and resources
 server.register_tool(MyTool)
@@ -64,11 +100,11 @@ server.register_resource(MyResource)
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, # Your Rack app
   server,
-  
+
   # OAuth Configuration
   oauth_enabled: true,
   require_https: true, # Set to false for development only
-  
+
   # Token Validation
   opaque_token_validator: lambda do |token|
     # Your token validation logic
@@ -79,40 +115,40 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
       subject: user&.id
     }
   end,
-  
+
   # Scope Configuration
   tools_scope: 'mcp:tools',
   resources_scope: 'mcp:resources',
   admin_scope: 'mcp:admin',
-  
+
   # Security
   resource_identifier: 'https://your-domain.com/mcp',
-  
-  # Authorization Servers (for protected resource metadata endpoint)
+
+  # External Authorization Servers that issue tokens for this resource server
   authorization_servers: [
-    'https://auth.your-domain.com'
+    'https://auth.your-domain.com'  # Your external OAuth 2.1 Authorization Server
   ]
 )
 ```
 
-### 2. JWT Token Validation Setup
+### 2. JWT Token Validation Setup (From External Authorization Server)
 
 ```ruby
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, server,
-  
-  # JWT Configuration
+
+  # JWT Configuration - tokens issued by external authorization server
   oauth_enabled: true,
-  issuer: 'https://your-auth-server.com',
-  audience: 'https://your-mcp-server.com/mcp',
-  jwks_uri: 'https://your-auth-server.com/.well-known/jwks.json',
-  
-  # Optional: HMAC secret for shared-secret JWTs
+  issuer: 'https://your-auth-server.com',           # External OAuth server issuer
+  audience: 'https://your-mcp-server.com/mcp',      # This resource server's identifier
+  jwks_uri: 'https://your-auth-server.com/.well-known/jwks.json',  # External server's JWKS
+
+  # Optional: HMAC secret for shared-secret JWTs (if using HMAC with auth server)
   hmac_secret: ENV['JWT_HMAC_SECRET'],
-  
+
   # Security settings
   require_https: true,
-  resource_identifier: 'https://your-mcp-server.com/mcp'
+  resource_identifier: 'https://your-mcp-server.com/mcp'  # Must match audience claim
 )
 ```
 
@@ -120,16 +156,17 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 
 ```ruby
 # config/initializers/fast_mcp.rb
+# Configure Fast MCP as OAuth 2.1 Resource Server
 FastMcp.mount_in_rails(
   Rails.application,
   transport: :oauth,
   oauth_enabled: true,
-  
-  # Production settings
+
+  # Production settings - all point to EXTERNAL authorization server
   require_https: Rails.env.production?,
-  issuer: ENV['OAUTH_ISSUER'],
-  audience: ENV['MCP_AUDIENCE'],
-  jwks_uri: ENV['OAUTH_JWKS_URI']
+  issuer: ENV['OAUTH_ISSUER'],          # External authorization server
+  audience: ENV['MCP_AUDIENCE'],        # This resource server's identifier
+  jwks_uri: ENV['OAUTH_JWKS_URI']       # External authorization server's JWKS
 )
 ```
 
@@ -142,28 +179,28 @@ FastMcp.mount_in_rails(
   # OAuth Control
   oauth_enabled: true,              # Enable/disable OAuth
   require_https: true,              # Enforce HTTPS (except localhost)
-  
+
   # Token Validation
   opaque_token_validator: proc,     # Custom token validator
   issuer: 'https://auth.example.com', # JWT issuer
   audience: 'https://api.example.com', # JWT audience
   jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
   hmac_secret: 'secret',            # HMAC secret for shared JWTs
-  
+
   # Introspection (for opaque tokens)
   introspection_endpoint: 'https://auth.example.com/introspect',
   client_id: 'your_client_id',
   client_secret: 'your_client_secret',
-  
+
   # Security
   resource_identifier: 'https://api.example.com/mcp', # Audience binding
   clock_skew: 60,                   # Clock skew tolerance (seconds)
-  
+
   # Scopes
   tools_scope: 'mcp:tools',         # Required for tool execution
   resources_scope: 'mcp:resources', # Required for resource access
   admin_scope: 'mcp:admin',         # Required for admin operations
-  
+
   # CORS
   cors_enabled: true,
   allowed_origins: ['https://frontend.example.com']
@@ -193,23 +230,23 @@ ALLOWED_ORIGINS=https://app1.com,https://app2.com
 
 ### Option 1: JWT Tokens (Recommended)
 
-JWT tokens provide stateless validation with built-in security features:
+JWT tokens issued by external authorization servers provide stateless validation with built-in security features:
 
 ```ruby
-# Automatic JWKS validation
+# Automatic JWKS validation from external authorization server
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, server,
   oauth_enabled: true,
-  issuer: 'https://auth.example.com',
-  audience: 'https://api.example.com/mcp',
-  jwks_uri: 'https://auth.example.com/.well-known/jwks.json'
+  issuer: 'https://auth.example.com',           # External authorization server
+  audience: 'https://api.example.com/mcp',     # This resource server
+  jwks_uri: 'https://auth.example.com/.well-known/jwks.json'  # External JWKS endpoint
 )
 
-# With authorization server discovery
+# With authorization server discovery (external server)
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, server,
   oauth_enabled: true,
-  issuer: 'https://auth.example.com' # Auto-discovers endpoints
+  issuer: 'https://auth.example.com' # External authorization server - auto-discovers endpoints
 )
 ```
 
@@ -221,9 +258,9 @@ For custom token systems or when you need database validation:
 validator = lambda do |token|
   # Query your database/cache
   token_record = Token.find_by(value: token)
-  
+
   return { valid: false } unless token_record&.active?
-  
+
   {
     valid: true,
     scopes: token_record.scopes,
@@ -242,21 +279,21 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 
 ### Option 3: Token Introspection
 
-For microservices or when you want remote validation:
+For microservices or when you want remote validation against the external authorization server:
 
 ```ruby
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, server,
   oauth_enabled: true,
-  introspection_endpoint: 'https://auth.example.com/oauth/introspect',
-  client_id: 'mcp_server_client',
-  client_secret: ENV['INTROSPECTION_SECRET']
+  introspection_endpoint: 'https://auth.example.com/oauth/introspect',  # External auth server endpoint
+  client_id: 'mcp_server_client',      # This resource server's client ID (registered with auth server)
+  client_secret: ENV['INTROSPECTION_SECRET']  # Secret for authenticating with auth server
 )
 ```
 
 ## Protected Resource Metadata
 
-Fast MCP implements RFC 9728 to provide a standardized way for clients to discover authorization servers and resource server metadata.
+Fast MCP implements RFC 9728 to provide a standardized way for clients to discover which external authorization servers can issue tokens for this resource server, and resource server metadata.
 
 ### Metadata Endpoint
 
@@ -268,18 +305,18 @@ GET /.well-known/oauth-protected-resource
 
 ### Configuration
 
-Configure authorization servers that can issue tokens for your MCP server:
+Configure the external authorization servers that can issue tokens for your MCP resource server:
 
 ```ruby
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, server,
   oauth_enabled: true,
-  resource_identifier: 'https://mcp-server.example.com',
-  
-  # Authorization servers that can issue tokens for this resource server
+  resource_identifier: 'https://mcp-server.example.com',  # This resource server's identifier
+
+  # External authorization servers that can issue tokens for this resource server
   authorization_servers: [
-    'https://auth.example.com',
-    'https://secondary-auth.example.com'
+    'https://auth.example.com',           # Primary external authorization server
+    'https://secondary-auth.example.com' # Secondary external authorization server
   ]
 )
 ```
@@ -304,7 +341,7 @@ When OAuth authentication fails, error responses include WWW-Authenticate header
 
 ```http
 HTTP/1.1 401 Unauthorized
-WWW-Authenticate: Bearer error="invalid_token", 
+WWW-Authenticate: Bearer error="invalid_token",
                   resource_metadata="https://mcp-server.example.com/.well-known/oauth-protected-resource"
 ```
 
@@ -344,7 +381,7 @@ Fast MCP defines standard scopes for common operations:
 ```ruby
 {
   'mcp:resources' => 'Read access to MCP resources',
-  'mcp:tools'     => 'Access to execute MCP tools', 
+  'mcp:tools'     => 'Access to execute MCP tools',
   'mcp:admin'     => 'Administrative access to MCP server'
 }
 ```
@@ -357,12 +394,12 @@ Define application-specific scopes:
 transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   app, server,
   oauth_enabled: true,
-  
+
   # Custom scope mappings
   tools_scope: 'myapp:execute',
   resources_scope: 'myapp:read',
   admin_scope: 'myapp:admin',
-  
+
   # Additional scope definitions
   custom_scopes: {
     'myapp:write' => 'Write access to application data',
@@ -380,11 +417,11 @@ class MyAdminTool < FastMcp::Tool
     # Access OAuth info from headers
     oauth_scopes = headers['oauth-scopes']&.split(' ') || []
     oauth_subject = headers['oauth-subject']
-    
+
     unless oauth_scopes.include?('mcp:admin')
       return error('Insufficient privileges: admin scope required')
     end
-    
+
     # Your tool logic here
     success(message: "Admin operation completed by user #{oauth_subject}")
   end
@@ -417,7 +454,7 @@ hmac_secret: 'hardcoded-secret-123'
 # DO: Use specific audiences
 audience: 'https://api.example.com/mcp'
 
-# DON'T: Use generic audiences  
+# DON'T: Use generic audiences
 audience: 'api'
 
 # DO: Implement token expiration
@@ -451,7 +488,7 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 
 # The transport automatically logs:
 # - Authentication attempts
-# - Authorization failures  
+# - Authorization failures
 # - Token validation errors
 # - Scope violations
 ```
@@ -567,7 +604,7 @@ Implement OAuth-aware health checks:
 # Health check endpoint
 get '/health' do
   content_type :json
-  
+
   health = {
     status: 'ok',
     timestamp: Time.now.iso8601,
@@ -577,14 +614,14 @@ get '/health' do
       jwks_accessible: jwks_accessible?
     }
   }
-  
+
   status 200
   health.to_json
 end
 
 def jwks_accessible?
   return true unless ENV['OAUTH_JWKS_URI']
-  
+
   response = Net::HTTP.get_response(URI(ENV['OAUTH_JWKS_URI']))
   response.is_a?(Net::HTTPSuccess)
 rescue

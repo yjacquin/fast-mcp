@@ -42,7 +42,7 @@ class ExampleTool < Mcp::Tool
   arguments do
    required(:input).filled(:string).description("Input value")
   end
-  
+
   def call(input:)
     "You provided: #{input}"
   end
@@ -53,7 +53,7 @@ class HelloWorld < FastMcp::Resource
   name "Counter"
   description "A simple Hello World resource"
   mime_type "application/txt"
-  
+
   def content
     "Hello, World!"
   end
@@ -93,7 +93,7 @@ class ExampleTool < Mcp::Tool
   arguments do
    required(:input).filled(:string).description("Input value")
   end
-  
+
   def call(input:)
     "You provided: #{input}"
   end
@@ -104,7 +104,7 @@ class HelloWorld < FastMcp::Resource
   name "Counter"
   description "A simple Hello World resource"
   mime_type "application/txt"
-  
+
   def content
     "Hello, World!"
   end
@@ -163,13 +163,13 @@ class ExampleTool < FastMcp::Tool
     required(:api_key).filled(:string)description("API key for authentication")
     required(:input).filled(:string).description("Input value")
   end
-  
+
   def call(api_key:, input)
     # Check the API key
     unless api_key == ENV['API_KEY']
       raise "Invalid API key"
     end
-    
+
     # Process the request
     { output: "You provided: #{input}" }
   end
@@ -213,7 +213,7 @@ class IncrementCounterTool < FastMcp::Tool
   def call
     # Read current value
     current_count = File.exist?('counter.txt') ? File.read('counter.txt').to_i : 0
-    
+
     # Increment and save
     new_count = current_count + 1
     File.write('counter.txt', new_count.to_s)

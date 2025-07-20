@@ -7,7 +7,7 @@ The StreamableHTTP transport implements the MCP 2025-06-18 specification, provid
 ## Key Features
 
 - **Unified Endpoint**: Single `/mcp` endpoint for all communication
-- **Dual Protocol Support**: POST for JSON-RPC, GET for SSE streaming  
+- **Dual Protocol Support**: POST for JSON-RPC, GET for SSE streaming
 - **Session Management**: Cryptographically secure session IDs
 - **OAuth 2.1 Integration**: Comprehensive authorization framework
 - **Security**: Origin validation, DNS rebinding protection
@@ -59,7 +59,9 @@ transport = FastMcp::Transports::AuthenticatedStreamableHttpTransport.new(
 
 ```ruby
 # OAuth 2.1 with scope-based authorization
+# Fast MCP acts as Resource Server - tokens are issued by external Authorization Server
 opaque_validator = lambda do |token|
+  # Validate tokens issued by your external authorization server
   case token
   when 'admin_token'
     { valid: true, scopes: ['mcp:admin', 'mcp:read', 'mcp:write', 'mcp:tools'] }
@@ -76,7 +78,7 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   logger: Logger.new($stdout),
   path: '/mcp',
   oauth_enabled: true,
-  opaque_token_validator: opaque_validator,
+  opaque_token_validator: opaque_validator,  # Your custom validator for external tokens
   require_https: false # Allow HTTP for development
 )
 ```
@@ -158,12 +160,12 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   tools_scope: 'mcp:tools',          # Scope for tool access
   resources_scope: 'mcp:read',       # Scope for resource access
   admin_scope: 'mcp:admin',          # Scope for admin operations
-  
+
   # JWT validation options
   issuer: 'https://auth.example.com',
   audience: 'mcp-api',
   jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
-  
+
   # Opaque token validator
   opaque_token_validator: lambda { |token| validate_token(token) }
 )
@@ -310,7 +312,7 @@ run transport
 Rails.application.routes.draw do
   # Your regular routes
   root 'home#index'
-  
+
   # MCP will be handled by middleware at /mcp
 end
 
@@ -382,7 +384,7 @@ RSpec.describe 'StreamableHTTP Transport' do
       'HTTP_ACCEPT' => 'application/json',
       'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
     }
-    
+
     status, headers, body = transport.call(env)
     expect(status).to eq(200)
   end
