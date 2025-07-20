@@ -4,6 +4,8 @@ require_relative 'rack_transport'
 
 module FastMcp
   module Transports
+    # Legacy authenticated transport - deprecated in favor of StreamableHTTP
+    # This transport is maintained for backward compatibility
     class AuthenticatedRackTransport < RackTransport
       def initialize(app, server, options = {})
         super
@@ -12,6 +14,9 @@ module FastMcp
         @auth_header_name = options[:auth_header_name] || 'Authorization'
         @auth_exempt_paths = options[:auth_exempt_paths] || []
         @auth_enabled = !@auth_token.nil?
+
+        # Deprecation warning
+        warn_deprecation if options[:warn_deprecation] != false
       end
 
       def handle_mcp_request(request, env)
@@ -65,6 +70,13 @@ module FastMcp
         rescue StandardError
           nil
         end
+      end
+
+      def warn_deprecation
+        @logger.warn('DEPRECATION WARNING: AuthenticatedRackTransport is deprecated.')
+        @logger.warn('Please migrate to AuthenticatedStreamableHttpTransport or OAuthStreamableHttpTransport.')
+        @logger.warn('See https://modelcontextprotocol.io/specification/2025-06-18/basic/')
+        @logger.warn('  transports#streamable-http for details.')
       end
     end
   end

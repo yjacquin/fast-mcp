@@ -567,6 +567,9 @@ RSpec.describe FastMcp::Transports::RackTransport do
       end
 
       it 'logs warning for unsupported protocol versions' do
+        # Create transport without deprecation warning for this test
+        transport = described_class.new(app, server, { logger: logger, warn_deprecation: false })
+        
         env = {
           'PATH_INFO' => '/mcp/messages',
           'REQUEST_METHOD' => 'POST',

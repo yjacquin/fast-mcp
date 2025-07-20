@@ -285,17 +285,17 @@ Tool annotations provide additional metadata about a tool's behavior, helping cl
 ```ruby
 class WebSearchTool < FastMcp::Tool
   description 'Search the web for information'
-  
+
   annotations(
     title: 'Web Search',           # Human-readable title for the tool
     read_only_hint: true,          # Indicates the tool doesn't modify its environment
     open_world_hint: true          # The tool interacts with external entities
   )
-  
+
   arguments do
     required(:query).filled(:string).description('Search query')
   end
-  
+
   def call(query:)
     "Searching for: #{query}"
   end
@@ -317,7 +317,7 @@ Example with all annotations:
 ```ruby
 class DeleteFileTool < FastMcp::Tool
   description 'Delete a file from the filesystem'
-  
+
   annotations(
     title: 'Delete File',
     read_only_hint: false,     # This tool modifies the filesystem
@@ -325,11 +325,11 @@ class DeleteFileTool < FastMcp::Tool
     idempotent_hint: true,     # Deleting the same file twice has no additional effect
     open_world_hint: false     # Only interacts with the local filesystem
   )
-  
+
   arguments do
     required(:path).filled(:string).description('File path to delete')
   end
-  
+
   def call(path:)
     File.delete(path) if File.exist?(path)
     "File deleted: #{path}"

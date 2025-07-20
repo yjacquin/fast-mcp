@@ -38,7 +38,7 @@ class ExampleTool < FastMcp::Tool
   arguments  do
    required(:input).filled(:string).description("Input value")
   end
-  
+
   def call(input:)
     "You provided: #{input}"
   end
@@ -91,7 +91,7 @@ class ExampleTool < Mcp::Tool
   arguments  do
    required(:input).filled(:string).description("Input value")
   end
-  
+
   def call(input:)
     "You provided: #{input}"
   end
@@ -144,13 +144,13 @@ use FastMcp.rack_middleware, { name: 'sinatra-mcp-server', version: '1.0.0'} do 
     arguments  do
       required(:input).filled(:string).description("Input value")
     end
-    
+
     def call(input:)
       "You provided: #{input}"
     end
   end
   server.register_tool(tool)
-  
+
   # Register resources
   counter_resource = Class.new(FastMcp::Resource) do
     uri "example/counter"
@@ -208,12 +208,12 @@ use MCP.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server
     arguments do
       required(:input).filled(:string).description("Input data")
     end
-    
+
     def call(input:)
       # Access Sinatra helpers and settings
       api_key = settings.api_key
       formatted_data = helpers.format_data(input)
-      
+
       # Return the result
       { status: "success", result: formatted_data }
     end
@@ -242,16 +242,16 @@ use MCP.rack_middleware(name: 'sinatra-mcp-server', version: '1.0.0') do |server
   server.tool "search_users" do
     description "Search for users by name"
     argument :query, description: "Search query", type: :string, required: true
-    
+
     call do |args|
       # Use ActiveRecord to search for users
       users = User.where("name LIKE ?", "%#{args[:query]}%")
-      
+
       # Return the results
       users.map { |user| { id: user.id, name: user.name, email: user.email } }
     end
   end
-  
+
   # Register a resource that uses ActiveRecord models
   server.register_resource(FastMcp::Resource.new(
     uri: "data/users",
@@ -286,8 +286,8 @@ class Users < Mcp::Resource
   resource_name "Users"
   description "List of all users"
   mime_type "application/json"
-  
-  
+
+
   def content
     JSON.generate(User.all.map { |user| { id: user.id, name: user.name } })
   end
