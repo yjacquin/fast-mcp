@@ -1,13 +1,15 @@
 # frozen_string_literal: true
 
+require_relative '../protocol_version'
+
 module FastMcp
   module Transports
     # Base class for all MCP transports
     # This defines the interface that all transports must implement
     class BaseTransport
-      PROTOCOL_VERSION = '2025-06-18'
-
       attr_reader :server, :logger
+
+      PROTOCOL_VERSION = FastMcp::Protocol::VERSION
 
       def initialize(server, logger: nil)
         @server = server

@@ -10,11 +10,14 @@ require_relative 'transports/authenticated_rack_transport'
 require_relative 'logger'
 require_relative 'metadata'
 require_relative 'server_filtering'
+require_relative 'protocol_version'
 
 module FastMcp
   class Server
     include ServerFiltering
     include Metadata
+
+    PROTOCOL_VERSION = Protocol::VERSION
 
     attr_reader :name, :version, :tools, :resources, :capabilities
 
@@ -222,8 +225,6 @@ module FastMcp
 
     private
 
-    PROTOCOL_VERSION = '2025-06-18'
-
     def handle_initialize(params, id)
       # Store client capabilities for later use
       @client_capabilities = params['capabilities'] || {}
@@ -235,7 +236,7 @@ module FastMcp
 
       # Prepare server response
       response = {
-        protocolVersion: PROTOCOL_VERSION, # For now, only version 2024-11-05 is supported.
+        protocolVersion: FastMcp::Protocol::VERSION,
         capabilities: @capabilities,
         serverInfo: {
           name: @name,
