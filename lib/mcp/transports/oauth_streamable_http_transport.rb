@@ -12,7 +12,7 @@ module FastMcp
     class OAuthStreamableHttpTransport < StreamableHttpTransport
       extend Forwardable
 
-      attr_reader :oauth_resource_server, :oauth_enabled, :scope_requirements
+      attr_reader :oauth_resource_server, :oauth_enabled, :scope_requirements, :authorization_servers
 
       def initialize(app, server, options = {})
         super
@@ -50,7 +50,7 @@ module FastMcp
 
       private
 
-      def_delegators :@oauth_resource_server, :oauth_unauthorized_response, :oauth_invalid_scope_response,
+      def_delegators :@oauth_resource_server, :oauth_invalid_request_response, :oauth_invalid_scope_response,
                      :oauth_server_error_response
 
       # Handle OAuth Protected Resource Metadata endpoint (RFC 9728)
@@ -122,7 +122,7 @@ module FastMcp
         validate_scope!(parsed_request) if @oauth_enabled
 
         # Extract headers
-        headers = extract_headers_from_request
+        headers = extract_headers_from_request(request)
 
         # Add OAuth token info to headers for server processing
         if @oauth_enabled && @token_info
@@ -154,7 +154,8 @@ module FastMcp
         required_scope = determine_required_scope(parsed_request)
         return unless required_scope && !required_scope?(required_scope)
 
-        raise OAuth::InvalidRequestError.new('Invalid scope', required_scope: required_scope, status: 401)
+        raise OAuth::InvalidScopeError.new("Required scope: #{required_scope}", required_scope: required_scope,
+                                                                                status: 403)
       end
 
       # Determine required scope based on JSON-RPC method
@@ -176,7 +177,7 @@ module FastMcp
 
       # Check if current token has required scope
       def required_scope?(required_scope)
-        return true unless @oauth_enabled || !@token_info
+        return true unless @oauth_enabled && @token_info
 
         @token_info[:scopes].include?(required_scope)
       end

@@ -38,14 +38,14 @@ module FastMcp
       def authorize_request!(request, required_scopes: nil)
         # Extract token from request
         token = extract_bearer_token(request)
-        raise InvalidRequestError, 'Missing authentication token' unless token
+        raise InvalidRequestError.new('Missing authentication token', status: 401) unless token
 
         # Validate security requirements
         validate_request_security!(request) if @require_https
 
         # Validate token and scopes
         unless @token_validator.validate_token(token, required_scopes: required_scopes)
-          raise InvalidRequestError, 'Invalid or expired token'
+          raise InvalidRequestError.new('Invalid or expired token', status: 401)
         end
 
         # Extract token information
@@ -116,27 +116,29 @@ module FastMcp
 
         www_authenticate = build_www_authenticate_header(error_type, description, realm)
 
-        {
-          status: status,
-          headers: {
+        [
+          status,
+          {
             'Content-Type' => 'application/json',
             'WWW-Authenticate' => www_authenticate
           },
-          body: build_error_response_body(error_type, description, error_data)
-        }
+          [build_error_response_body(error_type, description, error_data)]
+        ]
       end
 
       private
 
       BEARER_ERRORS = {
-        invalid_request: 'Bearer error="invalid_request"',
-        invalid_scope: 'Bearer error="invalid_scope"',
-        server_error: 'Bearer error="server_error"'
+        'invalid_request' => 'Bearer error="invalid_request"',
+        'invalid_token' => 'Bearer error="invalid_token"',
+        'invalid_scope' => 'Bearer error="invalid_scope"',
+        'insufficient_scope' => 'Bearer error="insufficient_scope"',
+        'server_error' => 'Bearer error="server_error"'
       }.freeze
       private_constant :BEARER_ERRORS
 
       def build_www_authenticate_header(error_type, description, realm)
-        www_authenticate = BEARER_ERRORS[error_type] || 'Bearer'
+        www_authenticate = BEARER_ERRORS[error_type.to_s] || 'Bearer'
 
         www_authenticate += %(, error_description="#{description}") if description
         www_authenticate += %(, realm="#{realm}") if realm
@@ -169,12 +171,11 @@ module FastMcp
 
       def build_error_response_body(error_type, description, error_data)
         # Use OAuth 2.1 standard error response format (RFC 6749 Section 5.2)
-        # instead of JSON-RPC format
         response = { error: error_type }
         response[:error_description] = description if description
 
         # Add optional error URI for more details
-        response[:error_uri] = error_data[:error_uri] if error_data[:error_uri]
+        response[:error_uri] = error_data[:error_uri] if error_data && error_data[:error_uri]
 
         JSON.generate(response)
       end
@@ -188,6 +189,7 @@ module FastMcp
         return unless auth_header.start_with?('Bearer ')
 
         token = auth_header[7..]
+
         # Validate token format (RFC 6750 Section 2.1)
         return nil unless token.match?(%r{\A[A-Za-z0-9\-._~+/]+=*\z})
 
@@ -202,7 +204,7 @@ module FastMcp
 
         return unless scheme != 'https'
 
-        raise UnauthorizedError, 'HTTPS required for OAuth requests'
+        raise FastMcp::OAuth::InvalidRequestError.new('HTTPS required for OAuth requests', status: 400)
       end
 
       # Extract token information from validated token

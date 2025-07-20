@@ -28,26 +28,17 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
   let(:oauth_server) do
     instance_double(FastMcp::OAuth::ResourceServer, resource_identifier: resource_identifier)
   end
+
   let(:oauth_transport) do
     allow(FastMcp::OAuth::ResourceServer).to receive(:new).and_return(oauth_server)
     FastMcp::Transports::OAuthStreamableHttpTransport.new(app, server, oauth_options)
   end
 
-
   describe 'WWW-Authenticate Header Support (OAuth 2.1 Section 5.3)' do
     context 'when token is missing' do
       before do
         allow(oauth_server).to receive(:authorize_request!)
-          .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Missing authentication token')
-        allow(oauth_server).to receive(:oauth_error_response)
-          .and_return({
-                        status: 401,
-                        headers: {
-                          'Content-Type' => 'application/json',
-                          'WWW-Authenticate' => 'Bearer error="invalid_token"'
-                        },
-                        body: JSON.generate({ error: 'invalid_token' })
-                      })
+          .and_raise(FastMcp::OAuth::InvalidRequestError.new('Missing authentication token', status: 401))
       end
 
       it 'returns 401 with WWW-Authenticate header' do
@@ -60,27 +51,30 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
           'rack.input' => StringIO.new('{}')
         }
 
+        expect(oauth_server).to receive(:oauth_invalid_request_response)
+          .with('Missing authentication token', status: 401)
+          .and_return([
+            401,
+            {
+              'Content-Type' => 'application/json',
+              'WWW-Authenticate' => 'Bearer error="invalid_request"'
+            },
+            [JSON.generate({ error: 'invalid_request', error_description: 'Missing authentication token' })]
+          ])
+
         status, headers, _body = oauth_transport.call(env)
 
         expect(status).to eq(401)
         expect(headers['WWW-Authenticate']).not_to be_nil
         expect(headers['WWW-Authenticate']).to include('Bearer')
+        expect(headers['WWW-Authenticate']).to include('error="invalid_request"')
       end
     end
 
     context 'when token is invalid' do
       before do
         allow(oauth_server).to receive(:authorize_request!)
-          .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Invalid token')
-        allow(oauth_server).to receive(:oauth_error_response)
-          .and_return({
-                        status: 401,
-                        headers: {
-                          'Content-Type' => 'application/json',
-                          'WWW-Authenticate' => 'Bearer error="invalid_token"'
-                        },
-                        body: JSON.generate({ error: 'invalid_token' })
-                      })
+          .and_raise(FastMcp::OAuth::InvalidRequestError.new('Invalid or expired token', status: 401))
       end
 
       it 'returns 401 with proper WWW-Authenticate header' do
@@ -94,12 +88,23 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
           'rack.input' => StringIO.new('{}')
         }
 
+        expect(oauth_server).to receive(:oauth_invalid_request_response)
+          .with('Invalid or expired token', status: 401)
+          .and_return([
+            401,
+            {
+              'Content-Type' => 'application/json',
+              'WWW-Authenticate' => 'Bearer error="invalid_request"'
+            },
+            [JSON.generate({ error: 'invalid_request', error_description: 'Invalid or expired token' })]
+          ])
+
         status, headers, _body = oauth_transport.call(env)
 
         expect(status).to eq(401)
         www_auth = headers['WWW-Authenticate']
         expect(www_auth).to include('Bearer')
-        expect(www_auth).to include('error="invalid_token"')
+        expect(www_auth).to include('error="invalid_request"')
       end
     end
 
@@ -114,15 +119,6 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
 
       before do
         allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
-        allow(oauth_server).to receive(:oauth_error_response)
-          .and_return({
-                        status: 403,
-                        headers: {
-                          'Content-Type' => 'application/json',
-                          'WWW-Authenticate' => 'Bearer error="insufficient_scope"'
-                        },
-                        body: JSON.generate({ error: 'insufficient_scope' })
-                      })
       end
 
       it 'returns 403 with proper WWW-Authenticate header' do
@@ -137,12 +133,24 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
           'rack.input' => StringIO.new(request_body)
         }
 
+        # The transport will catch the InvalidScopeError and call oauth_invalid_scope_response
+        expect(oauth_server).to receive(:oauth_invalid_scope_response)
+          .with('mcp:tools', status: 403)
+          .and_return([
+            403,
+            {
+              'Content-Type' => 'application/json',
+              'WWW-Authenticate' => 'Bearer error="invalid_scope", error_description="Required scope: mcp:tools"'
+            },
+            [JSON.generate({ error: 'invalid_scope', error_description: 'Required scope: mcp:tools' })]
+          ])
+
         status, headers, _body = oauth_transport.call(env)
 
         expect(status).to eq(403)
         www_auth = headers['WWW-Authenticate']
         expect(www_auth).to include('Bearer')
-        expect(www_auth).to include('error="insufficient_scope"')
+        expect(www_auth).to include('error="invalid_scope"')
       end
     end
   end
@@ -175,13 +183,18 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
 
       it 'rejects tokens without Bearer prefix' do
         allow(oauth_server).to receive(:authorize_request!)
-          .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Missing authentication token')
-        allow(oauth_server).to receive(:oauth_error_response)
-          .and_return({
-                        status: 401,
-                        headers: { 'Content-Type' => 'application/json' },
-                        body: JSON.generate({ error: 'invalid_token' })
-                      })
+          .and_raise(FastMcp::OAuth::InvalidRequestError.new('Missing authentication token', status: 401))
+
+        expect(oauth_server).to receive(:oauth_invalid_request_response)
+          .with('Missing authentication token', status: 401)
+          .and_return([
+            401,
+            {
+              'Content-Type' => 'application/json',
+              'WWW-Authenticate' => 'Bearer error="invalid_request"'
+            },
+            [JSON.generate({ error: 'invalid_request' })]
+          ])
 
         # Without Bearer prefix should fail
         env = {
@@ -204,13 +217,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
     context 'missing tokens' do
       before do
         allow(oauth_server).to receive(:authorize_request!)
-          .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Missing authentication token')
-        allow(oauth_server).to receive(:oauth_error_response)
-          .and_return({
-                        status: 401,
-                        headers: { 'Content-Type' => 'application/json' },
-                        body: JSON.generate({ error: 'invalid_token' })
-                      })
+          .and_raise(FastMcp::OAuth::InvalidRequestError.new('Missing authentication token', status: 401))
       end
 
       it 'returns 401 for missing tokens' do
@@ -223,6 +230,14 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
           'rack.input' => StringIO.new('{}')
         }
 
+        expect(oauth_server).to receive(:oauth_invalid_request_response)
+          .with('Missing authentication token', status: 401)
+          .and_return([
+            401,
+            { 'Content-Type' => 'application/json' },
+            [JSON.generate({ error: 'invalid_request' })]
+          ])
+
         status, _headers, _body = oauth_transport.call(env)
         expect(status).to eq(401)
       end
@@ -231,13 +246,7 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
     context 'invalid tokens' do
       before do
         allow(oauth_server).to receive(:authorize_request!)
-          .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Invalid token')
-        allow(oauth_server).to receive(:oauth_error_response)
-          .and_return({
-                        status: 401,
-                        headers: { 'Content-Type' => 'application/json' },
-                        body: JSON.generate({ error: 'invalid_token' })
-                      })
+          .and_raise(FastMcp::OAuth::InvalidRequestError.new('Invalid or expired token', status: 401))
       end
 
       it 'returns 401 for invalid/expired tokens' do
@@ -250,6 +259,14 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
           'REMOTE_ADDR' => '127.0.0.1',
           'rack.input' => StringIO.new('{}')
         }
+
+        expect(oauth_server).to receive(:oauth_invalid_request_response)
+          .with('Invalid or expired token', status: 401)
+          .and_return([
+            401,
+            { 'Content-Type' => 'application/json' },
+            [JSON.generate({ error: 'invalid_request' })]
+          ])
 
         status, _headers, _body = oauth_transport.call(env)
         expect(status).to eq(401)
@@ -267,12 +284,6 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
 
       before do
         allow(oauth_server).to receive(:authorize_request!).and_return(token_info)
-        allow(oauth_server).to receive(:oauth_error_response)
-          .and_return({
-                        status: 403,
-                        headers: { 'Content-Type' => 'application/json' },
-                        body: JSON.generate({ error: 'insufficient_scope' })
-                      })
       end
 
       it 'returns 403 for insufficient scope' do
@@ -286,6 +297,14 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
           'REMOTE_ADDR' => '127.0.0.1',
           'rack.input' => StringIO.new(request_body)
         }
+
+        expect(oauth_server).to receive(:oauth_invalid_scope_response)
+          .with('mcp:tools', status: 403)
+          .and_return([
+            403,
+            { 'Content-Type' => 'application/json' },
+            [JSON.generate({ error: 'invalid_scope' })]
+          ])
 
         status, _headers, _body = oauth_transport.call(env)
         expect(status).to eq(403)
@@ -316,7 +335,20 @@ RSpec.describe 'OAuth 2.1 Resource Server Compliance' do
           'rack.input' => StringIO.new('invalid-json')
         }
 
+        # The transport catches JSON parsing errors and calls oauth_server_error_response
+        expect(oauth_server).to receive(:oauth_server_error_response)
+          .with('unexpected character: \'invalid-json\' at line 1 column 1')
+          .and_return([
+            400,
+            { 'Content-Type' => 'application/json' },
+            [JSON.generate({
+              error: 'server_error',
+              error_description: 'unexpected character: \'invalid-json\' at line 1 column 1'
+            })]
+          ])
+
         status, _headers, _body = oauth_transport.call(env)
+
         expect(status).to eq(400)
       end
     end

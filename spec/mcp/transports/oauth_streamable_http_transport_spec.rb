@@ -98,13 +98,14 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
     context 'with invalid OAuth token' do
       before do
         allow(oauth_server).to receive(:authorize_request!)
-          .and_raise(FastMcp::OAuth::ResourceServer::UnauthorizedError, 'Invalid token')
-        allow(oauth_server).to receive(:oauth_error_response)
-          .and_return({
-            status: 401,
-            headers: { 'Content-Type' => 'application/json', 'WWW-Authenticate' => 'Bearer error="invalid_token"' },
-            body: JSON.generate({ error: { code: -32_000, message: 'Invalid token' } })
-          })
+          .and_raise(FastMcp::OAuth::InvalidRequestError.new('Invalid token', status: 401))
+        allow(oauth_server).to receive(:oauth_invalid_request_response)
+          .with('Invalid token', status: 401)
+          .and_return([
+            401,
+            { 'Content-Type' => 'application/json', 'WWW-Authenticate' => 'Bearer error="invalid_token"' },
+            [JSON.generate({ error: { code: -32_000, message: 'Invalid token' } })]
+          ])
       end
 
       it 'returns 401 for invalid OAuth token' do
@@ -135,18 +136,18 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
       end
 
       it 'returns 403 for insufficient scope on tools methods' do
-        # Mock the oauth_error_response method that will be called
-        allow(oauth_server).to receive(:oauth_error_response)
-          .with('insufficient_scope', 'Required scope: mcp:tools', 403)
-          .and_return({
-            status: 403,
-            headers: { 'Content-Type' => 'application/json' },
-            body: JSON.generate({
+        # Mock the oauth_invalid_scope_response method that will be called
+        allow(oauth_server).to receive(:oauth_invalid_scope_response)
+          .with('mcp:tools', status: 403)
+          .and_return([
+            403,
+            { 'Content-Type' => 'application/json' },
+            [JSON.generate({
               jsonrpc: '2.0',
               error: { code: -32_000, message: 'Required scope: mcp:tools' },
               id: nil
-            })
-          })
+            })]
+          ])
 
         request_body = JSON.generate({ jsonrpc: '2.0', method: 'tools/call', id: 1 })
         env = {
@@ -288,18 +289,18 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
       token_info_limited[:scopes] = ['mcp:write'] # Missing mcp:read
       allow(oauth_server).to receive(:authorize_request!).and_return(token_info_limited)
 
-      # Mock the oauth_error_response method
-      allow(oauth_server).to receive(:oauth_error_response)
-        .with('insufficient_scope', 'Required scope: mcp:read', 403)
-        .and_return({
-          status: 403,
-          headers: { 'Content-Type' => 'application/json' },
-          body: JSON.generate({
+      # Mock the oauth_invalid_scope_response method
+      allow(oauth_server).to receive(:oauth_invalid_scope_response)
+        .with('mcp:read', status: 403)
+        .and_return([
+          403,
+          { 'Content-Type' => 'application/json' },
+          [JSON.generate({
             jsonrpc: '2.0',
             error: { code: -32_000, message: 'Required scope: mcp:read' },
             id: nil
-          })
-        })
+          })]
+        ])
 
       env = {
         'REQUEST_METHOD' => 'GET',

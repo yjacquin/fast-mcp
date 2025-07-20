@@ -15,6 +15,8 @@ module FastMcp
   class Server
     include ServerFiltering
 
+    PROTOCOL_VERSION = Protocol::VERSION
+
     attr_reader :name, :version, :tools, :resources, :capabilities
 
     DEFAULT_CAPABILITIES = {

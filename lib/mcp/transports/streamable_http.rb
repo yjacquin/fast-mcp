@@ -4,6 +4,7 @@ require 'json'
 require 'securerandom'
 require 'rack'
 require_relative 'base_transport'
+require_relative '../protocol_version'
 
 module FastMcp
   module Transports
@@ -17,7 +18,7 @@ module FastMcp
       SERVER_ENV_KEY = 'fast_mcp.server'
 
       # StreamableHTTP implements MCP 2025-06-18 specification
-      PROTOCOL_VERSION = '2025-03-28'
+      PROTOCOL_VERSION = Protocol::VERSION
 
       # Required headers for MCP 2025-06-18
       REQUIRED_ACCEPT_HEADERS = ['application/json', 'text/event-stream'].freeze
@@ -332,7 +333,7 @@ module FastMcp
         JSON.parse(body) unless body.empty?
 
         # Extract headers
-        headers = extract_headers_from_request
+        headers = extract_headers_from_request(request)
 
         # Handle the request
         response = server.handle_request(body, headers: headers)
