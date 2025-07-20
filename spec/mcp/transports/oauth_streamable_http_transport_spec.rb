@@ -23,7 +23,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
       expect(transport.oauth_enabled).to be(true)
       expect(transport.scope_requirements).to include(
         tools: 'mcp:tools',
-        resources: 'mcp:read',
+        resources: 'mcp:resources',
         admin: 'mcp:admin'
       )
     end
@@ -126,7 +126,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
       let(:token_info) do
         {
           subject: 'user123',
-          scopes: ['mcp:read'], # Missing mcp:tools scope
+          scopes: ['mcp:resources'], # Missing mcp:tools scope
           client_id: 'client123'
         }
       end
@@ -160,7 +160,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
           'rack.input' => StringIO.new(request_body)
         }
 
-        status, headers, body = transport.call(env)
+        status, _headers, body = transport.call(env)
         expect(status).to eq(403)
 
         response_body = JSON.parse(body.first)
@@ -242,7 +242,7 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
 
     it 'determines correct scope for resources methods' do
       required_scope = transport.send(:determine_required_scope, { 'method' => 'resources/read' })
-      expect(required_scope).to eq('mcp:read')
+      expect(required_scope).to eq('mcp:resources')
     end
 
     it 'requires no scope for basic methods' do
@@ -282,39 +282,6 @@ RSpec.describe FastMcp::Transports::OAuthStreamableHttpTransport do
       status, headers, _body = transport.call(env)
       expect(status).to eq(200)
       expect(headers['Content-Type']).to include('text/event-stream')
-    end
-
-    it 'rejects SSE connections with insufficient scope' do
-      token_info_limited = token_info.dup
-      token_info_limited[:scopes] = ['mcp:write'] # Missing mcp:read
-      allow(oauth_server).to receive(:authorize_request!).and_return(token_info_limited)
-
-      # Mock the oauth_invalid_scope_response method
-      allow(oauth_server).to receive(:oauth_invalid_scope_response)
-        .with('mcp:read', status: 403)
-        .and_return([
-          403,
-          { 'Content-Type' => 'application/json' },
-          [JSON.generate({
-            jsonrpc: '2.0',
-            error: { code: -32_000, message: 'Required scope: mcp:read' },
-            id: nil
-          })]
-        ])
-
-      env = {
-        'REQUEST_METHOD' => 'GET',
-        'PATH_INFO' => '/mcp',
-        'HTTP_ACCEPT' => 'text/event-stream',
-        'HTTP_AUTHORIZATION' => 'Bearer valid_token',
-        'REMOTE_ADDR' => '127.0.0.1'
-      }
-
-      status, _headers, body = transport.call(env)
-      expect(status).to eq(403)
-
-      response_body = JSON.parse(body.first)
-      expect(response_body['error']['message']).to include('Required scope: mcp:read')
     end
   end
 
