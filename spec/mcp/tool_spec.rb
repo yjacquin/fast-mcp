@@ -93,7 +93,7 @@ RSpec.describe FastMcp::Tool do
       expect(test_class.input_schema_to_json).to be_nil
     end
 
-    it 'converts the schema to JSON format using SchemaCompiler' do
+    it 'converts the schema to JSON format using JSONSchemaCompiler' do
       test_class = Class.new(described_class) do
         arguments do
           required(:name).filled(:string)
@@ -484,8 +484,8 @@ RSpec.describe FastMcp::Tool do
     end
   end
 
-  describe 'SchemaCompiler' do
-    let(:compiler) { FastMcp::SchemaCompiler.new }
+  describe 'JSONSchemaCompiler' do
+    let(:compiler) { FastMcp::JSONSchemaCompiler }
 
     describe '#process' do
       it 'converts a basic schema to JSON format' do
@@ -540,6 +540,31 @@ RSpec.describe FastMcp::Tool do
         result = compiler.process(schema)
 
         expect(result[:properties][:tags][:type]).to eq('array')
+      end
+
+      it 'handles arrays of objects' do
+        schema = Dry::Schema.JSON do
+          required(:complex_tags).array(:hash) do
+            required(:id).filled(:integer).description('The ID of the tag')
+            optional(:name).filled(:string).description('The name of the tag')
+          end
+        end
+
+        result = compiler.process(schema)
+
+        expect(result[:properties][:complex_tags]).to eq(
+          {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'number', description: 'The ID of the tag' },
+                name: { type: 'string', description: 'The name of the tag' }
+              },
+              required: ['id']
+            }
+          }
+        )
       end
 
       it 'handles validation constraints' do

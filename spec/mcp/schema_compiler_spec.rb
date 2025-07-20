@@ -2,8 +2,8 @@
 
 require 'spec_helper'
 
-RSpec.describe FastMcp::SchemaCompiler do
-  let(:compiler) { described_class.new }
+RSpec.describe FastMcp::JSONSchemaCompiler do
+  let(:compiler) { described_class }
 
   describe '#process' do
     context 'with simple schema' do
@@ -28,6 +28,7 @@ RSpec.describe FastMcp::SchemaCompiler do
           age: { type: 'number' },
           email: { type: 'string' }
         )
+        expect(result[:properties]).not_to include(:admin)
         expect(result[:required]).to contain_exactly('name', 'age', 'email')
       end
     end
@@ -88,8 +89,7 @@ RSpec.describe FastMcp::SchemaCompiler do
         result = compiler.process(schema)
 
         expect(result[:properties][:tags][:type]).to eq('array')
-        # NOTE: This test might need adjustment to refine the array items
-        expect(result[:properties][:tags][:items]).to eq({})
+        expect(result[:properties][:tags][:items]).to eq({type: 'string'})
       end
     end
 
@@ -183,6 +183,7 @@ RSpec.describe FastMcp::SchemaCompiler do
 
       # This should match the format expected by MCP
       expected_format = {
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
         type: 'object',
         properties: {
           location: { type: 'string' },
