@@ -7,8 +7,9 @@ require_relative 'base_transport'
 
 module FastMcp
   module Transports
-    # Rack middleware transport for MCP
+    # Legacy Rack middleware transport for MCP - deprecated in favor of StreamableHTTP
     # This transport can be mounted in any Rack-compatible web framework
+    # Maintained for backward compatibility with existing applications
     class RackTransport < BaseTransport # rubocop:disable Metrics/ClassLength
       DEFAULT_PATH_PREFIX = '/mcp'
       DEFAULT_ALLOWED_ORIGINS = ['localhost', '127.0.0.1', '[::1]'].freeze
@@ -45,6 +46,9 @@ module FastMcp
         @sse_clients_mutex = Mutex.new
         @running = false
         @filtered_servers_cache = {}
+
+        # Deprecation warning
+        warn_deprecation if options[:warn_deprecation] != false
       end
 
       # Start the transport
@@ -544,6 +548,13 @@ module FastMcp
         headers = request.env.select { |k, _v| k.start_with?('HTTP_') }
                          .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
 
+        # Validate protocol version
+        unless validate_protocol_version(headers)
+          version = headers['mcp-protocol-version']
+          error_response = protocol_version_error_response(version)
+          return [400, { 'Content-Type' => 'application/json' }, [JSON.generate(error_response)]]
+        end
+
         # Let the specific server handle the JSON request directly
         response = server.handle_request(body, headers: headers) || []
 
@@ -621,6 +632,13 @@ module FastMcp
           relevant_headers[header] = request.env[header_key] if request.env[header_key]
         end
         relevant_headers
+      end
+
+      def warn_deprecation
+        @logger.warn('DEPRECATION WARNING: RackTransport is deprecated.')
+        @logger.warn('Please migrate to StreamableHttpTransport for MCP 2025-06-18 compliance.')
+        @logger.warn('See https://modelcontextprotocol.io/specification/2025-06-18/basic/')
+        @logger.warn('  transports#streamable-http for details.')
       end
     end
   end

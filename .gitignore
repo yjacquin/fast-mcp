@@ -4,3 +4,4 @@
 
 # Ignore gem files
 *.gem
+node_modules/
