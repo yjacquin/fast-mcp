@@ -18,6 +18,6 @@ end
 # Gems required for examples
 group :examples do
   gem 'puma'
-  gem 'rackup', '~> 2.2'
+  gem 'rackup'
   gem 'sinatra'
 end
