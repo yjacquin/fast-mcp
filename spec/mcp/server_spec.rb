@@ -34,6 +34,8 @@ RSpec.describe FastMcp::Server do
   end
 
   describe '#handle_request' do
+    let(:client_id) { 'test-client-id' }
+    let(:headers) { { 'client_id' => client_id } }
     let(:test_tool_class) do
       Class.new(FastMcp::Tool) do
         def self.name
@@ -90,8 +92,8 @@ RSpec.describe FastMcp::Server do
       it 'responds with an empty result' do
         request = { jsonrpc: '2.0', method: 'ping', id: 1 }.to_json
 
-        expect(server).to receive(:send_result).with({}, 1)
-        server.handle_request(request)
+        expect(server).to receive(:send_result).with(client_id, {}, 1)
+        server.handle_request(request, headers: headers)
       end
     end
 
@@ -118,7 +120,7 @@ RSpec.describe FastMcp::Server do
       it 'responds with the server info' do
         request = { jsonrpc: '2.0', method: 'initialize', id: 1 }.to_json
 
-        expect(server).to receive(:send_result).with({
+        expect(server).to receive(:send_result).with(client_id, {
                                                        protocolVersion: FastMcp::Server::PROTOCOL_VERSION,
                                                        capabilities: server.capabilities,
                                                        serverInfo: {
@@ -126,7 +128,7 @@ RSpec.describe FastMcp::Server do
                                                          version: server.version
                                                        }
                                                      }, 1)
-        server.handle_request(request)
+        server.handle_request(request, headers: headers)
       end
     end
 
@@ -134,7 +136,7 @@ RSpec.describe FastMcp::Server do
       it 'responds with a list of tools' do
         request = { jsonrpc: '2.0', method: 'tools/list', id: 1 }.to_json
 
-        expect(server).to receive(:send_result) do |result, id|
+        expect(server).to receive(:send_result) do |_client_id, result, id|
           expect(id).to eq(1)
           expect(result[:tools]).to be_an(Array)
           expect(result[:tools].length).to eq(2)
@@ -154,7 +156,7 @@ RSpec.describe FastMcp::Server do
           expect(profile_tool[:inputSchema][:properties][:user][:properties]).to have_key(:last_name)
         end
 
-        server.handle_request(request)
+        server.handle_request(request, headers: headers)
       end
       
       context 'with tool annotations' do
@@ -231,11 +233,12 @@ RSpec.describe FastMcp::Server do
         }.to_json
 
         expect(server).to receive(:send_result).with(
+          client_id,
           { content: [{ text: 'Hello, World!', type: 'text' }], isError: false },
           1,
           metadata: {}
         )
-        server.handle_request(request)
+        server.handle_request(request, headers: headers)
       end
 
       it 'calls a tool with nested properties' do
@@ -255,11 +258,12 @@ RSpec.describe FastMcp::Server do
         }.to_json
 
         expect(server).to receive(:send_result).with(
+          client_id,
           { content: [{ text: 'John Doe', type: 'text' }], isError: false },
           1,
           metadata: {}
         )
-        server.handle_request(request)
+        server.handle_request(request, headers: headers)
       end
 
       it "returns an error if the tool doesn't exist" do
@@ -273,8 +277,8 @@ RSpec.describe FastMcp::Server do
           id: 1
         }.to_json
 
-        expect(server).to receive(:send_error).with(-32_602, 'Tool not found: non-existent-tool', 1)
-        server.handle_request(request)
+        expect(server).to receive(:send_error).with(-32_602, client_id, 'Tool not found: non-existent-tool', 1)
+        server.handle_request(request, headers: headers)
       end
 
       it 'returns an error if the tool name is missing' do
@@ -287,8 +291,8 @@ RSpec.describe FastMcp::Server do
           id: 1
         }.to_json
 
-        expect(server).to receive(:send_error).with(-32_602, 'Invalid params: missing tool name', 1)
-        server.handle_request(request)
+        expect(server).to receive(:send_error).with(-32_602, client_id, 'Invalid params: missing tool name', 1)
+        server.handle_request(request, headers: headers)
       end
     end
 
@@ -296,22 +300,22 @@ RSpec.describe FastMcp::Server do
       it 'returns an error for an unknown method' do
         request = { jsonrpc: '2.0', method: 'unknown', id: 1 }.to_json
 
-        expect(server).to receive(:send_error).with(-32_601, 'Method not found: unknown', 1)
-        server.handle_request(request)
+        expect(server).to receive(:send_error).with(-32_601, client_id, 'Method not found: unknown', 1)
+        server.handle_request(request, headers: headers)
       end
 
       it 'returns an error for an invalid JSON-RPC request' do
         request = { id: 1 }.to_json
 
-        expect(server).to receive(:send_error).with(-32_600, 'Invalid Request', 1)
-        server.handle_request(request)
+        expect(server).to receive(:send_error).with(-32_600, client_id, 'Invalid Request', 1)
+        server.handle_request(request, headers: headers)
       end
 
       it 'returns an error for an invalid JSON request' do
         request = 'invalid json'
 
-        expect(server).to receive(:send_error).with(-32_600, 'Invalid Request', nil)
-        server.handle_request(request)
+        expect(server).to receive(:send_error).with(-32_600, client_id, 'Invalid Request', nil)
+        server.handle_request(request, headers: headers)
       end
     end
   end
