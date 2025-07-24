@@ -10,6 +10,9 @@ module FastMcp
       def initialize(server, logger: nil)
         @server = server
         @logger = logger || server.logger
+        ['INT', 'TERM', 'QUIT'].each do |signal|
+          Signal.trap(signal) { stop }
+        end
       end
 
       # Start the transport
