@@ -150,9 +150,45 @@ module FastMcp
     # Handle transport-specific options
     if transport_type == :legacy
       setup_legacy_rails_transport(app, options.merge(name: name, version: version, logger: logger))
+      authenticate = options.delete(:authenticate) || false
+      path = options.delete(:path) || '/mcp'
+      options.merge!(path: path)
+      transport_klass = if authenticate
+                          FastMcp::Transports::AuthenticatedRackTransport
+                        else
+                          FastMcp::Transports::RackTransport
+                        end
     else
       setup_streamable_rails_transport(app, options.merge(name: name, version: version, logger: logger), transport_type)
+      path_prefix = options.delete(:path_prefix) || '/mcp'
+      messages_route = options.delete(:messages_route) || 'messages'
+      sse_route = options.delete(:sse_route) || 'sse'
+      options.merge!(
+        path_prefix: path_prefix,
+        messages_route: messages_route,
+        sse_route: sse_route,
+        warn_deprecation: true
+      )
+      transport_klass = case transport_type
+                        when :oauth
+                          FastMcp::Transports::OAuthStreamableHttpTransport
+                        when :authenticated
+                          FastMcp::Transports::AuthenticatedStreamableHttpTransport
+                        else
+                          FastMcp::Transports::StreamableHttpTransport
+                        end
     end
+
+    # Create server
+    self.server = FastMcp::Server.new(name: options[:name], version: options[:version], logger: logger)
+    yield self.server if block_given?
+
+    # Insert middleware
+    app.middleware.use(
+      transport_klass,
+      self.server,
+      options
+    )
   end
 
   def self.detect_transport_type(options)
@@ -168,43 +204,15 @@ module FastMcp
     # Legacy transport setup with deprecation warning
     warn_rails_legacy_usage
 
-    path_prefix = options.delete(:path_prefix) || '/mcp'
-    messages_route = options.delete(:messages_route) || 'messages'
-    sse_route = options.delete(:sse_route) || 'sse'
-    authenticate = options.delete(:authenticate) || false
     allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
     allowed_ips = options[:allowed_ips] || FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_IPS
 
     options[:localhost_only] = Rails.env.local? if options[:localhost_only].nil?
     options[:allowed_ips] = allowed_ips
     options[:allowed_origins] = allowed_origins
-
-    # Create server
-    self.server = FastMcp::Server.new(name: options[:name], version: options[:version], logger: options[:logger])
-    yield self.server if block_given?
-
-    # Choose legacy transport
-    transport_klass = if authenticate
-                        FastMcp::Transports::AuthenticatedRackTransport
-                      else
-                        FastMcp::Transports::RackTransport
-                      end
-
-    # Insert middleware
-    app.middleware.use(
-      transport_klass,
-      self.server,
-      options.merge(
-        path_prefix: path_prefix,
-        messages_route: messages_route,
-        sse_route: sse_route,
-        warn_deprecation: true
-      )
-    )
   end
 
   def self.setup_streamable_rails_transport(app, options, transport_type)
-    path = options.delete(:path) || '/mcp'
     allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
     allowed_ips = options[:allowed_ips] || ['127.0.0.1', '::1', '::ffff:127.0.0.1']
 
@@ -213,26 +221,6 @@ module FastMcp
     options[:allowed_origins] = allowed_origins
     options[:require_https] = Rails.env.production? if options[:require_https].nil?
 
-    # Create server
-    self.server = FastMcp::Server.new(name: options[:name], version: options[:version], logger: options[:logger])
-    yield self.server if block_given?
-
-    # Choose modern transport
-    transport_klass = case transport_type
-                      when :oauth
-                        FastMcp::Transports::OAuthStreamableHttpTransport
-                      when :authenticated
-                        FastMcp::Transports::AuthenticatedStreamableHttpTransport
-                      else
-                        FastMcp::Transports::StreamableHttpTransport
-                      end
-
-    # Insert middleware
-    app.middleware.use(
-      transport_klass,
-      self.server,
-      options.merge(path: path)
-    )
   end
 
   def self.warn_rails_legacy_usage
