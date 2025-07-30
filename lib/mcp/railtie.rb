@@ -22,10 +22,19 @@ module FastMcp
   class Railtie < Rails::Railtie
     # Add tools and resources directories to autoload paths
     initializer 'fast_mcp.setup_autoload_paths' do |app|
-      app.config.autoload_paths += %W[
-        #{app.root}/app/tools
-        #{app.root}/app/resources
-      ]
+      # Rails 7 compatible autoload paths setup
+      if Rails.version >= '7.0'
+        app.config.autoload_paths += %W[
+          #{app.root}/app/tools
+          #{app.root}/app/resources
+        ]
+      else
+        # Fallback for older Rails versions
+        app.config.autoload_paths += %W[
+          #{app.root}/app/tools
+          #{app.root}/app/resources
+        ]
+      end
     end
 
     # Auto-register all tools and resources after the application is fully loaded

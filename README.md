@@ -554,3 +554,247 @@ This project is available as open source under the terms of the [MIT License](ht
 - The [Model Context Protocol](https://github.com/modelcontextprotocol) team for creating the specification
 - The [Dry-Schema](https://github.com/dry-rb/dry-schema) team for the argument validation.
 - All contributors to this project
+
+# Fast MCP
+
+A Ruby implementation of the Model Context Protocol (MCP) with multiple transport options and Rails integration.
+
+## Features
+
+- **Multiple Transport Options**: Support for StreamableHTTP, OAuth 2.1, and legacy transports
+- **Rails Integration**: Seamless integration with Rails applications
+- **Tool & Resource Management**: Easy definition and registration of MCP tools and resources
+- **Security**: Built-in security features including origin validation and authentication
+- **Flexible Configuration**: Extensive configuration options for different deployment scenarios
+
+## Installation
+
+### Rails 7.0.8.7 Compatibility
+
+This gem is fully compatible with Rails 7.0.8.7. To use it in your Rails 7 application:
+
+```ruby
+# In your Gemfile
+gem 'fast-mcp', '~> 1.5.0'
+```
+
+Then run:
+```bash
+bundle install
+```
+
+### Rails 8+ Compatibility
+
+For Rails 8+ applications, the gem works out of the box with the same installation method.
+
+## Quick Start
+
+### 1. Install the gem
+
+```bash
+rails generate fast_mcp:install
+```
+
+This will:
+- Add the gem to your Gemfile
+- Create the initializer file
+- Generate base classes for tools and resources
+
+### 2. Create your first tool
+
+```ruby
+# app/tools/hello_tool.rb
+class HelloTool < ApplicationTool
+  def self.name
+    'hello'
+  end
+
+  def self.description
+    'A simple hello world tool'
+  end
+
+  def self.input_schema
+    {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'The name to greet'
+        }
+      },
+      required: ['name']
+    }
+  end
+
+  def call(input)
+    name = input['name']
+    { message: "Hello, #{name}!" }
+  end
+end
+```
+
+### 3. Create your first resource
+
+```ruby
+# app/resources/user_resource.rb
+class UserResource < ApplicationResource
+  def self.name
+    'user'
+  end
+
+  def self.description
+    'User information resource'
+  end
+
+  def self.schema
+    {
+      type: 'object',
+      properties: {
+        id: { type: 'integer' },
+        name: { type: 'string' },
+        email: { type: 'string' }
+      }
+    }
+  end
+
+  def self.uri_scheme
+    'user'
+  end
+
+  def self.get(uri)
+    user_id = uri.split('/').last
+    user = User.find(user_id)
+    
+    {
+      contents: [{
+        uri: uri,
+        mime_type: 'application/json',
+        text: user.to_json
+      }]
+    }
+  end
+end
+```
+
+### 4. Start your server
+
+```bash
+rails server
+```
+
+Your MCP server will be available at `/mcp` (or the path you configured).
+
+## Configuration
+
+The gem is configured through the initializer file created during installation. Here are the main configuration options:
+
+### Basic Configuration
+
+```ruby
+# config/initializers/fast_mcp.rb
+FastMcp.mount_in_rails(
+  Rails.application,
+  name: 'my-app',
+  version: '1.0.0',
+  path: '/mcp'
+) do |server|
+  # Your server configuration here
+end
+```
+
+### Authentication Options
+
+#### No Authentication (Development)
+```ruby
+# Default configuration - no authentication required
+```
+
+#### Token Authentication
+```ruby
+FastMcp.mount_in_rails(
+  Rails.application,
+  transport: :authenticated,
+  auth_token: Rails.application.credentials.mcp_token
+)
+```
+
+#### OAuth 2.1 (Production Recommended)
+```ruby
+FastMcp.mount_in_rails(
+  Rails.application,
+  transport: :oauth,
+  oauth_enabled: true,
+  opaque_token_validator: method(:validate_oauth_token)
+)
+```
+
+### Security Settings
+
+```ruby
+FastMcp.mount_in_rails(
+  Rails.application,
+  require_https: Rails.env.production?,
+  localhost_only: Rails.env.local?,
+  allowed_origins: ['localhost', 'example.com'],
+  allowed_ips: ['127.0.0.1', '::1']
+)
+```
+
+## Transport Types
+
+### StreamableHTTP (Recommended)
+Modern transport compliant with MCP 2025-06-18 specification:
+```ruby
+transport: :streamable_http
+```
+
+### OAuth 2.1
+For production applications with OAuth integration:
+```ruby
+transport: :oauth
+```
+
+### Authenticated
+Simple token-based authentication:
+```ruby
+transport: :authenticated
+```
+
+### Legacy (Deprecated)
+Legacy transport for migration purposes:
+```ruby
+transport: :legacy
+```
+
+## Development
+
+### Running Tests
+
+```bash
+bundle exec rspec
+```
+
+### Code Quality
+
+```bash
+bundle exec rubocop
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for your changes
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+For support and questions:
+- Check the [documentation](docs/)
+- Open an issue on GitHub
+- Review the [examples](examples/) directory
