@@ -23,11 +23,11 @@ You can configure the allowed origins when creating the rack middleware:
 
 ```ruby
 # Configure allowed origins (defaults to ['localhost', '127.0.0.1'])
-FastMcp.rack_middleware(app, 
+FastMcp.rack_middleware(app,
   allowed_origins: [
-    'localhost', 
-    '127.0.0.1', 
-    'your-domain.com', 
+    'localhost',
+    '127.0.0.1',
+    'your-domain.com',
     /.*\.your-domain\.com/  # Regex for subdomains
   ],
   # other options...

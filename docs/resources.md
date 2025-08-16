@@ -42,7 +42,7 @@ class CounterResource < FastMcp::Resource
   resource_name "Counter"
   description "A simple counter resource"
   mime_type "application/json"
-  
+
   def content
     # Read from file or database, or generate dynamically
     count = File.exist?('counter.txt') ? File.read('counter.txt').to_i : 0
@@ -82,7 +82,7 @@ class IncrementCounterTool < FastMcp::Tool
   def call
     # Read current value
     current_count = File.exist?('counter.txt') ? File.read('counter.txt').to_i : 0
-    
+
     # Increment and save
     new_count = current_count + 1
     File.write('counter.txt', new_count.to_s)
@@ -115,7 +115,7 @@ class WeatherResource < FastMcp::Resource
   resource_name "Current Weather"
   description "Current weather conditions"
   mime_type "application/json"
-  
+
   def content
     # Generate dynamic content or read from external source
     JSON.generate({
@@ -169,4 +169,4 @@ For more details on integrating with web frameworks, see:
 
 ## Conclusion
 
-MCP Resources provide a powerful way to share and synchronize data between servers and clients. By keeping resources stateless and using tools for updates, you can build robust, scalable applications that work well in distributed environments. 
+MCP Resources provide a powerful way to share and synchronize data between servers and clients. By keeping resources stateless and using tools for updates, you can build robust, scalable applications that work well in distributed environments.
