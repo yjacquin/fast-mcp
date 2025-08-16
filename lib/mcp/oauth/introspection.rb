@@ -37,7 +37,6 @@ module FastMcp
           )
         end
 
-        @logger.debug("Local introspection result: active=#{is_valid}")
         response
       end
 

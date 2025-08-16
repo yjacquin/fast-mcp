@@ -77,65 +77,65 @@ transport = FastMcp::Transports::AuthenticatedStreamableHttpTransport.new(
   auth_token: 'secret-token-123'
 )
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts 'Starting Authenticated StreamableHTTP MCP Server...'
-puts 'Server will be available at: http://localhost:3001'
-puts 'Available endpoints:'
-puts '  GET  / - Main application'
-puts '  POST /mcp - Token-authenticated JSON-RPC endpoint'
-puts '  GET  /mcp (with Accept: text/event-stream) - Token-authenticated SSE streaming'
-puts ''
-puts 'Authentication token: secret-token-123'
-puts ''
-puts 'Test with MCP Inspector (add Bearer token in settings):'
-puts '  npx @modelcontextprotocol/inspector http://localhost:3001/mcp'
-puts ''
-puts 'Example curl commands:'
-puts '  # Without authentication (should fail)'
-puts '  curl -X POST http://localhost:3001/mcp \\'
-puts '    -H "Content-Type: application/json" \\'
-puts '    -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
-puts ''
-puts '  # With authentication (should succeed)'
-puts '  curl -H "Authorization: Bearer secret-token-123" -X POST http://localhost:3001/mcp \\'
-puts '    -H "Content-Type: application/json" \\'
-puts '    -H "Accept: application/json" \\'
-puts '    -H "MCP-Protocol-Version: 2025-06-18" \\'
-puts '    -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
-puts ''
-puts 'Press Ctrl+C to stop'
+  puts 'Server will be available at: http://localhost:3001'
+  puts 'Available endpoints:'
+  puts '  GET  / - Main application'
+  puts '  POST /mcp - Token-authenticated JSON-RPC endpoint'
+  puts '  GET  /mcp (with Accept: text/event-stream) - Token-authenticated SSE streaming'
+  puts ''
+  puts 'Authentication token: secret-token-123'
+  puts ''
+  puts 'Test with MCP Inspector (add Bearer token in settings):'
+  puts '  npx @modelcontextprotocol/inspector http://localhost:3001/mcp'
+  puts ''
+  puts 'Example curl commands:'
+  puts '  # Without authentication (should fail)'
+  puts '  curl -X POST http://localhost:3001/mcp \\'
+  puts '    -H "Content-Type: application/json" \\'
+  puts '    -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
+  puts ''
+  puts '  # With authentication (should succeed)'
+  puts '  curl -H "Authorization: Bearer secret-token-123" -X POST http://localhost:3001/mcp \\'
+  puts '    -H "Content-Type: application/json" \\'
+  puts '    -H "Accept: application/json" \\'
+  puts '    -H "MCP-Protocol-Version: 2025-06-18" \\'
+  puts '    -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
+  puts ''
+  puts 'Press Ctrl+C to stop'
 
-# Start the HTTP server using Puma
-begin
-  require 'puma'
-  
-  # Create the Rack application
-  app = Rack::Builder.new do
-    run transport
+  # Start the HTTP server using Puma
+  begin
+    require 'puma'
+
+    # Create the Rack application
+    app = Rack::Builder.new do
+      run transport
+    end
+
+    # Create Puma server with proper configuration
+    server = Puma::Server.new(app)
+    server.add_tcp_listener('localhost', 3001)
+
+    # Set up signal handlers
+    Signal.trap('INT') do
+      puts "\nShutting down..."
+      server.stop
+    end
+
+    Signal.trap('TERM') do
+      puts "\nShutting down..."
+      server.stop
+    end
+
+    puts 'Server started successfully!'
+    server.run.join
+  rescue LoadError
+    puts 'Puma gem not available. Please install it with: gem install puma'
+    exit 1
+  rescue StandardError => e
+    puts "Error starting server: #{e.message}"
+    exit 1
   end
-  
-  # Create Puma server with proper configuration
-  server = Puma::Server.new(app)
-  server.add_tcp_listener('localhost', 3001)
-  
-  # Set up signal handlers
-  Signal.trap('INT') do
-    puts "\nShutting down..."
-    server.stop
-  end
-  
-  Signal.trap('TERM') do
-    puts "\nShutting down..."
-    server.stop
-  end
-  
-  puts "Server started successfully!"
-  server.run.join
-rescue LoadError
-  puts "Puma gem not available. Please install it with: gem install puma"
-  exit 1
-rescue StandardError => e
-  puts "Error starting server: #{e.message}"
-  exit 1
-end
 end

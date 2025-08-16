@@ -20,6 +20,33 @@
 require_relative '../lib/fast_mcp'
 require 'rack'
 require 'puma'
+require 'jwt'
+
+# -----------------------------------------------------------------------------
+# JWT Token Setup (shared secret HS256) - define constants & demo tokens early
+# -----------------------------------------------------------------------------
+JWT_SECRET   = 'my_demo_jwt_secret_key'
+JWT_ISSUER   = 'fast_mcp_example_auth_server'
+JWT_AUDIENCE = 'http://localhost:3001/mcp'
+JWT_EXPIRY   = 24 * 60 * 60 # 24 hours
+
+# Helper to create demo tokens
+
+def build_token(subject:, scopes:)
+  payload = {
+    sub: subject,
+    scope: scopes.join(' '),
+    iss: JWT_ISSUER,
+    aud: JWT_AUDIENCE,
+    jti: SecureRandom.uuid,
+    exp: Time.now.to_i + JWT_EXPIRY
+  }
+  JWT.encode(payload, JWT_SECRET, 'HS256')
+end
+
+ADMIN_TOKEN = build_token(subject: 'admin_user', scopes: %w[mcp:admin mcp:resources mcp:tools])
+READ_TOKEN  = build_token(subject: 'readonly_user', scopes: %w[mcp:resources])
+TOOLS_TOKEN = build_token(subject: 'developer_user', scopes: %w[mcp:tools mcp:resources])
 
 # Example admin tool (requires mcp:admin scope)
 class ServerStatusTool < FastMcp::Tool
@@ -59,7 +86,7 @@ class ListFilesTool < FastMcp::Tool
   end
 
   def call(directory:, pattern: nil)
-    return error('Directory not found') unless Dir.exist?(directory)
+    raise 'Directory not found' unless Dir.exist?(directory)
 
     files = if pattern
               Dir.glob(File.join(directory, pattern))
@@ -67,9 +94,7 @@ class ListFilesTool < FastMcp::Tool
               Dir.entries(directory).reject { |f| f.start_with?('.') }
             end
 
-    success(files: files.map { |f| File.basename(f) })
-  rescue StandardError => e
-    error("Failed to list files: #{e.message}")
+    { files: files.map { |f| File.basename(f) } }.to_json
   end
 end
 
@@ -95,9 +120,9 @@ main_app = lambda do |_env|
     '<p>Test with: <code>npx @modelcontextprotocol/inspector http://localhost:3001/mcp</code></p>',
     '<h3>Test Tokens:</h3>',
     '<ul>',
-    '<li><code>admin_token_123</code> - Full access (admin, read, write, tools)</li>',
-    '<li><code>read_token_456</code> - Read-only access</li>',
-    '<li><code>tools_token_789</code> - Tools and read access</li>',
+    "<li><code>#{ADMIN_TOKEN}</code> - Full access (admin, read, tools)</li>",
+    "<li><code>#{READ_TOKEN}</code> - Read-only access</li>",
+    "<li><code>#{TOOLS_TOKEN}</code> - Tools and read access</li>",
     '</ul>',
     '</body></html>'
   ]]
@@ -114,55 +139,9 @@ mcp_server.register_tools(ServerStatusTool, ListFilesTool)
 mcp_server.register_resource(FileResource)
 
 # Enhanced OAuth Token Validator Examples
-# In production, these would connect to your OAuth authorization server
-
-# Example 1: Opaque Token Validator (for custom tokens)
-# This simulates checking tokens against a database or authorization server
-opaque_token_validator = lambda do |token|
-  # In production, this would validate against your OAuth server's database
-  case token
-  when 'admin_token_123'
-    # Full administrative access
-    {
-      valid: true,
-      scopes: ['mcp:admin', 'mcp:resources', 'mcp:tools'],
-      subject: 'admin_user',
-      client_id: 'mcp_admin_client'
-    }
-  when 'read_token_456'
-    # Read-only access to resources
-    {
-      valid: true,
-      scopes: ['mcp:resources'],
-      subject: 'readonly_user',
-      client_id: 'mcp_readonly_client'
-    }
-  when 'tools_token_789'
-    # Can execute tools and read resources
-    {
-      valid: true,
-      scopes: ['mcp:tools', 'mcp:resources'],
-      subject: 'developer_user',
-      client_id: 'mcp_developer_client'
-    }
-  else
-    { valid: false }
-  end
-end
-
-# Example 2: JWT Token Configuration (for standards-based tokens)
-# Uncomment and configure these options for JWT token validation:
-#
-# jwt_config = {
-#   # For HMAC-signed JWTs (shared secret)
-#   hmac_secret: ENV['JWT_HMAC_SECRET'],
-#
-#   # For RSA/ECDSA-signed JWTs (public key validation)
-#   jwks_uri: 'https://your-auth-server.com/.well-known/jwks.json',
-#   issuer: 'https://your-auth-server.com',
-#   audience: 'http://localhost:3001/mcp', # Should match resource_identifier
-#
-# }
+# -----------------------------------------------------------------------------
+# Transport configuration now relies solely on JWT validation. No opaque-token
+# validator is used.
 
 # OAuth 2.1 Transport Configuration
 # This demonstrates all available security options
@@ -177,9 +156,10 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   oauth_enabled: true,
 
   # Token Validation Options
-  opaque_token_validator: opaque_token_validator,
-  # For JWT tokens, merge jwt_config here instead:
-  # **jwt_config,
+  hmac_secret: JWT_SECRET,
+  issuer: JWT_ISSUER,
+  audience: JWT_AUDIENCE,
+  sub: ['admin_user', 'readonly_user', 'developer_user'], # Example subjects for demo tokens
 
   # Security Configuration
   require_https: false, # ⚠️  Set to true in production! Allow HTTP for local development only
@@ -191,8 +171,8 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   admin_scope: 'mcp:admin', # Required for administrative operations
 
   # CORS Configuration (for web clients)
-  cors_enabled: true,
-  allowed_origins: ['localhost', '127.0.0.1']
+  cors_enabled: false,
+  allowed_origins: ['localhost', '127.0.0.1'],
   # Optional: Token Introspection (for remote token validation)
   # introspection_endpoint: 'https://your-auth-server.com/oauth/introspect',
   # client_id: 'your_mcp_server_client_id',
@@ -218,9 +198,12 @@ if __FILE__ == $0
   puts '   GET  /.well-known/oauth-protected-resource - Protected resource metadata (RFC 9728)'
   puts ''
   puts '🔑 Demo Tokens (for testing):'
-  puts '   admin_token_123  - Full administrative access (admin + resources + tools)'
-  puts '   read_token_456   - Read-only access to resources'
-  puts '   tools_token_789  - Can execute tools and read resources'
+  puts '   ADMIN_TOKEN  - Full administrative access (admin + resources + tools):'
+  puts "     #{ADMIN_TOKEN}"
+  puts '   READ_TOKEN   - Read-only access to resources:'
+  puts "     #{READ_TOKEN}"
+  puts '   TOOLS_TOKEN  - Can execute tools and read resources:'
+  puts "     #{TOOLS_TOKEN}"
   puts ''
   puts '🔒 Security Features Enabled:'
   puts '   ✅ OAuth 2.1 compliance with PKCE support'
@@ -245,7 +228,7 @@ if __FILE__ == $0
   puts '3. Command Line Examples:'
   puts ''
   puts '   # Test server capabilities (requires admin scope)'
-  puts '   curl -H "Authorization: Bearer admin_token_123" \\'
+  puts "   curl -H \"Authorization: Bearer #{ADMIN_TOKEN}\" \\"
   puts '        -H "Content-Type: application/json" \\'
   puts '        -H "Accept: application/json" \\'
   puts '        -H "MCP-Protocol-Version: 2025-06-18" \\'
@@ -253,7 +236,7 @@ if __FILE__ == $0
   puts '        -d \'{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}\''
   puts ''
   puts '   # List available tools (requires tools scope)'
-  puts '   curl -H "Authorization: Bearer admin_token_123" \\'
+  puts "   curl -H \"Authorization: Bearer #{ADMIN_TOKEN}\" \\"
   puts '        -H "Content-Type: application/json" \\'
   puts '        -H "Accept: application/json" \\'
   puts '        -H "MCP-Protocol-Version: 2025-06-18" \\'
@@ -261,7 +244,7 @@ if __FILE__ == $0
   puts '        -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
   puts ''
   puts '   # List available resources (requires resources scope)'
-  puts '   curl -H "Authorization: Bearer read_token_456" \\'
+  puts "   curl -H \"Authorization: Bearer #{READ_TOKEN}\" \\"
   puts '        -H "Content-Type: application/json" \\'
   puts '        -H "Accept: application/json" \\'
   puts '        -H "MCP-Protocol-Version: 2025-06-18" \\'
@@ -269,7 +252,7 @@ if __FILE__ == $0
   puts '        -d \'{"jsonrpc":"2.0","method":"resources/list","id":1}\''
   puts ''
   puts '   # Execute a tool (requires tools scope)'
-  puts '   curl -H "Authorization: Bearer tools_token_789" \\'
+  puts "   curl -H \"Authorization: Bearer #{TOOLS_TOKEN}\" \\"
   puts '        -H "Content-Type: application/json" \\'
   puts '        -H "Accept: application/json" \\'
   puts '        -H "MCP-Protocol-Version: 2025-06-18" \\'
@@ -284,7 +267,7 @@ if __FILE__ == $0
   puts '        -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
   puts ''
   puts '   # Test with insufficient scope (read token trying to access tools)'
-  puts '   curl -H "Authorization: Bearer read_token_456" \\'
+  puts "   curl -H \"Authorization: Bearer #{READ_TOKEN}\" \\"
   puts '        -X POST http://localhost:3001/mcp \\'
   puts '        -d \'{"jsonrpc":"2.0","method":"tools/list","id":1}\''
   puts ''

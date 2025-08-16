@@ -236,7 +236,6 @@ module FastMcp
 
         # Check if this is our MCP endpoint
         if path == @path
-          @logger.debug('Setting server transport to StreamableHttpTransport')
           @server.transport = self
           handle_mcp_request(request, env)
         else

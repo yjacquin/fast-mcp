@@ -6,7 +6,7 @@ PATH
       base64
       dry-schema (~> 1.14)
       json (~> 2.0)
-      jwt (~> 2.8)
+      jwt (~> 3.1)
       mime-types (~> 3.4)
       rack (>= 2.0, < 4.0)
 
@@ -51,7 +51,7 @@ GEM
       dry-logic (~> 1.4)
       zeitwerk (~> 2.6)
     json (2.12.2)
-    jwt (2.10.1)
+    jwt (3.1.2)
       base64
     language_server-protocol (3.17.0.5)
     lint_roller (1.1.0)

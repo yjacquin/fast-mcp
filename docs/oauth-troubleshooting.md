@@ -48,6 +48,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 ### ❌ "Missing authentication token"
 
 **Error Response:**
+
 ```json
 {
   "error": "invalid_token",
@@ -58,6 +59,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 **Causes & Solutions:**
 
 1. **Missing Authorization Header**
+
    ```bash
    # ❌ Missing header
    curl -X POST http://localhost:3001/mcp
@@ -67,6 +69,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```
 
 2. **Incorrect Header Format**
+
    ```bash
    # ❌ Wrong format
    curl -H "Authorization: your_token" -X POST http://localhost:3001/mcp
@@ -76,6 +79,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```
 
 3. **Empty Token**
+
    ```ruby
    # Check token extraction
    auth_header = request.headers['Authorization']
@@ -88,6 +92,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 ### ❌ "Invalid or expired token"
 
 **Error Response:**
+
 ```json
 {
   "error": "invalid_token",
@@ -98,6 +103,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 **Diagnosis Steps:**
 
 1. **Check Token Format**
+
    ```ruby
    def debug_token(token)
      puts "Token length: #{token&.length}"
@@ -127,6 +133,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```
 
 2. **Verify Opaque Token Validator**
+
    ```ruby
    # Test your validator directly
    validator = lambda do |token|
@@ -148,6 +155,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```
 
 3. **Check JWT Configuration**
+
    ```ruby
    # Verify JWKS accessibility
    def test_jwks_connectivity(jwks_uri)
@@ -174,6 +182,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 ### ❌ "Insufficient scope"
 
 **Error Response:**
+
 ```json
 {
   "error": "insufficient_scope",
@@ -184,6 +193,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 **Diagnosis Steps:**
 
 1. **Check Token Scopes**
+
    ```ruby
    # Extract scopes from token
    def check_token_scopes(token)
@@ -208,6 +218,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```
 
 2. **Verify Scope Configuration**
+
    ```ruby
    # Check transport scope requirements
    transport = your_oauth_transport
@@ -218,6 +229,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```
 
 3. **Test Different Scope Combinations**
+
    ```ruby
    # Test with different tokens
    test_cases = [
@@ -243,6 +255,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 ### ❌ "HTTPS required for OAuth requests"
 
 **Error Response:**
+
 ```json
 {
   "error": "invalid_request",
@@ -253,6 +266,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 **Solutions:**
 
 1. **For Development (Temporary)**
+
    ```ruby
    # Disable HTTPS requirement for local development
    transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
@@ -263,12 +277,14 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```
 
 2. **For Production (Recommended)**
+
    ```bash
    # Use HTTPS URLs
    curl -H "Authorization: Bearer token" https://your-domain.com/mcp
    ```
 
 3. **Check Request Headers**
+
    ```ruby
    def debug_https_detection(request)
      puts "Request scheme: #{request.scheme}"
@@ -293,6 +309,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 ### ❌ "Key with kid 'xyz' not found in JWKS"
 
 **Error Response:**
+
 ```json
 {
   "error": "invalid_token",
@@ -303,6 +320,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
 **Diagnosis Steps:**
 
 1. **Check Token Key ID**
+
    ```ruby
    def check_token_kid(token)
      header = JSON.parse(Base64.urlsafe_decode64(token.split('.')[0]))
@@ -315,6 +333,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```
 
 2. **Verify JWKS Keys**
+
    ```ruby
    def check_jwks_keys(jwks_uri)
      response = Net::HTTP.get_response(URI(jwks_uri))
@@ -333,6 +352,7 @@ puts "JWKS Body: #{response.body}" if response.code == '200'
    ```
 
 3. **Force JWKS Cache Refresh**
+
    ```ruby
    # Clear JWKS cache if using custom validator
    validator = FastMcp::OAuth::TokenValidator.new(

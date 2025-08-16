@@ -68,7 +68,7 @@ module FastMcp
       end
 
       # Get token information for debugging/logging
-      def get_token_info(token)
+      def extract_token_info(token)
         return nil unless token
 
         # Try introspection first (works for both JWT and opaque tokens)
@@ -115,6 +115,8 @@ module FastMcp
         error_data[:error_description] = description if description
 
         www_authenticate = build_www_authenticate_header(error_type, description, realm)
+
+        @logger.debug("Oauth error: #{error_data.inspect}")
 
         [
           status,
@@ -207,16 +209,6 @@ module FastMcp
         raise FastMcp::OAuth::InvalidRequestError.new('HTTPS required for OAuth requests', status: 400)
       end
 
-      # Extract token information from validated token
-      def extract_token_info(token)
-        info = get_token_info(token)
-
-        @logger.debug("OAuth authorization successful for subject: #{info[:subject]}")
-        @logger.debug("Granted scopes: #{info[:scopes].join(', ')}") unless info[:scopes].empty?
-
-        info
-      end
-
       # Extract scopes from token claims
       def extract_scopes(scope_claim)
         case scope_claim
@@ -238,14 +230,12 @@ module FastMcp
         token_audiences = Array(token_audience)
 
         # Check if our resource identifier is in the token's audience
-        unless token_audiences.include?(@resource_identifier)
-          @logger.warn("Audience binding validation failed: token audience #{token_audiences} " \
-                       "does not include resource #{@resource_identifier}")
-          raise UnauthorizedError, 'Token not intended for this resource server'
-        end
+        return unless token_audiences.include?(@resource_identifier)
 
-        @logger.debug("Audience binding validation successful: resource #{@resource_identifier} " \
-                      'found in token audience')
+        @logger.warn(
+          "Audience binding validation failed: token audience #{token_audiences} does not include resource #{@resource_identifier}"
+        )
+        raise UnauthorizedError, 'Token not intended for this resource server'
       end
     end
   end

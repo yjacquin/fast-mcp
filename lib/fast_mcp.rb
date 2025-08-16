@@ -173,11 +173,7 @@ module FastMcp
     yield self.server if block_given?
 
     # Choose legacy transport
-    transport_klass = if authenticate
-                        FastMcp::Transports::AuthenticatedRackTransport
-                      else
-                        FastMcp::Transports::RackTransport
-                      end
+    transport_klass = authenticate ? FastMcp::Transports::AuthenticatedRackTransport : FastMcp::Transports::RackTransport
 
     # Insert middleware
     app.middleware.use(
