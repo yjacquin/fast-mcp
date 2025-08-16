@@ -267,6 +267,7 @@ module FastMcp
 
     class << self
       include Metadata
+
       attr_accessor :server
 
       # Add tagging support for tools

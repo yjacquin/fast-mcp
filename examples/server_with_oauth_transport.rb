@@ -187,7 +187,7 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
   ]
 )
 
-if __FILE__ == $0
+if __FILE__ == $PROGRAM_NAME
   puts '🚀 Starting OAuth 2.1 Enabled MCP Server...'
   puts '   Server will be available at: http://localhost:3001'
   puts ''

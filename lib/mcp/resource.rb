@@ -14,6 +14,7 @@ module FastMcp
 
     class << self
       include Metadata
+
       attr_accessor :server
 
       # Define URI for this resource
