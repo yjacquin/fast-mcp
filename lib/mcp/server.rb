@@ -14,7 +14,7 @@ module FastMcp
   class Server
     include ServerFiltering
 
-    attr_reader :name, :version, :tools, :resources, :capabilities
+    attr_reader :name, :version, :tools, :resources, :capabilities, :prompts
 
     DEFAULT_CAPABILITIES = {
       resources: {
@@ -22,6 +22,9 @@ module FastMcp
         listChanged: true
       },
       tools: {
+        listChanged: true
+      },
+      prompts: {
         listChanged: true
       }
     }.freeze
@@ -31,6 +34,7 @@ module FastMcp
       @version = version
       @tools = {}
       @resources = []
+      @prompts = {}
       @resource_subscriptions = {}
       @logger = logger
       @request_id = 0
@@ -39,6 +43,7 @@ module FastMcp
       @capabilities = DEFAULT_CAPABILITIES.dup
       @tool_filters = []
       @resource_filters = []
+      @prompt_filters = []
 
       # Merge with provided capabilities
       @capabilities.merge!(capabilities) if capabilities.is_a?(Hash)
@@ -97,12 +102,32 @@ module FastMcp
       end
     end
 
+    # Register multiple prompts at once
+    # @param prompts [Array<Prompt>] Prompts to register
+    def register_prompts(*prompts)
+      prompts.each do |prompt|
+        register_prompt(prompt)
+      end
+    end
+
+    # Register a prompt with the server
+    def register_prompt(prompt)
+      @prompts[prompt.prompt_name] = prompt
+      @logger.info("Registered prompt: #{prompt.prompt_name}")
+      prompt.server = self
+      # Notify subscribers about the list change
+      notify_prompt_list_changed if @transport
+
+      prompt
+    end
+
     # Start the server using stdio transport
     def start
       @logger.transport = :stdio
       @logger.info("Starting MCP server: #{@name} v#{@version}")
       @logger.info("Available tools: #{@tools.keys.join(', ')}")
       @logger.info("Available resources: #{@resources.map(&:resource_name).join(', ')}")
+      @logger.info("Available prompts: #{@prompts.keys.join(', ')}")
 
       # Use STDIO transport by default
       @transport_klass = FastMcp::Transports::StdioTransport
@@ -115,6 +140,7 @@ module FastMcp
       @logger.info("Starting MCP server as Rack middleware: #{@name} v#{@version}")
       @logger.info("Available tools: #{@tools.keys.join(', ')}")
       @logger.info("Available resources: #{@resources.map(&:resource_name).join(', ')}")
+      @logger.info("Available prompts: #{@prompts.keys.join(', ')}")
 
       # Use Rack transport
       transport_klass = FastMcp::Transports::RackTransport
@@ -129,6 +155,7 @@ module FastMcp
       @logger.info("Starting MCP server as Authenticated Rack middleware: #{@name} v#{@version}")
       @logger.info("Available tools: #{@tools.keys.join(', ')}")
       @logger.info("Available resources: #{@resources.map(&:resource_name).join(', ')}")
+      @logger.info("Available prompts: #{@prompts.keys.join(', ')}")
 
       # Use Rack transport
       transport_klass = FastMcp::Transports::AuthenticatedRackTransport
@@ -174,6 +201,10 @@ module FastMcp
         handle_tools_list(id)
       when 'tools/call'
         handle_tools_call(params, headers, id)
+      when 'prompts/list'
+        handle_prompts_list(params, id)
+      when 'prompts/get'
+        handle_prompts_get(params, id)
       when 'resources/list'
         handle_resources_list(id)
       when 'resources/templates/list'
@@ -200,7 +231,9 @@ module FastMcp
       @logger.warn("Notifying subscribers about resource update: #{uri}, #{@resource_subscriptions.inspect}")
       return unless @client_initialized && @resource_subscriptions.key?(uri)
 
-      resource = @resources[uri]
+      resource = @resources.find { |r| r.uri == uri }
+      return unless resource
+
       notification = {
         jsonrpc: '2.0',
         method: 'notifications/resources/updated',
@@ -216,6 +249,18 @@ module FastMcp
 
     def read_resource(uri)
       @resources.find { |r| r.match(uri) }
+    end
+
+    # Notify clients about prompt list changes
+    def notify_prompt_list_changed
+      return unless @client_initialized
+
+      notification = {
+        jsonrpc: '2.0',
+        method: 'notifications/prompts/listChanged'
+      }
+
+      @transport.send_message(notification)
     end
 
     private
@@ -431,6 +476,95 @@ module FastMcp
       end
 
       send_result({ unsubscribed: true }, id)
+    end
+
+    # Handle prompts/list request
+    def handle_prompts_list(params, id)
+      # We acknowledge the cursor parameter but don't use it for pagination in this implementation
+      # The cursor is included in the response for compatibility with the spec
+
+      # TODO: We don't have pagination utils
+      # next_cursor = params['cursor']
+
+      # Apply filtering if prompt filters are configured
+      prompts_to_list = if @prompt_filters.any?
+                          apply_prompt_filters(
+                            {
+                              'method' => 'prompts/list',
+                              'params' => params,
+                              'id' => id
+                            }
+                          )
+                        else
+                          @prompts.values
+                        end
+
+      prompts_list = prompts_to_list.map do |prompt|
+        prompt_data = {
+          name: prompt.prompt_name,
+          description: prompt.description || ''
+        }
+
+        # Add arguments if the prompt has an input schema
+        if prompt.input_schema_to_json
+          arguments = []
+          properties = prompt.input_schema_to_json[:properties] || {}
+          required = prompt.input_schema_to_json[:required] || []
+
+          properties.each do |name, property|
+            arg = {
+              name: name.to_s,
+              description: property[:description] || '',
+              required: required.include?(name.to_s)
+            }
+            arguments << arg
+          end
+
+          prompt_data[:arguments] = arguments unless arguments.empty?
+        end
+
+        prompt_data
+      end
+
+      # TODO: we don't pagination utils
+      # send_result({ prompts: prompts_list, nextCursor: next_cursor }, id)
+      send_result({ prompts: prompts_list }, id)
+    end
+
+    # Handle prompts/get request
+    def handle_prompts_get(params, id)
+      prompt_name = params['name']
+      arguments = params['arguments'] || {}
+
+      return send_error(-32_602, 'Invalid params: missing prompt name', id) unless prompt_name
+
+      prompt = @prompts[prompt_name]
+      return send_error(-32_602, "Prompt not found: #{prompt_name}", id) unless prompt
+
+      begin
+        # Convert string keys to symbols for Ruby
+        symbolized_args = symbolize_keys(arguments)
+        result = prompt.new.call_with_schema_validation!(**symbolized_args)
+
+        # Ensure the result has the expected structure
+        unless result.is_a?(Array) && result.all? { |msg| msg[:role] && msg[:content] }
+          raise "Invalid prompt result format: #{result.inspect}"
+        end
+
+        # Format the response according to the MCP specification
+        formatted_result = {
+          description: prompt.description || '',
+          messages: result
+        }
+
+        send_result(formatted_result, id)
+      rescue FastMcp::Prompt::InvalidArgumentsError => e
+        @logger.error("Invalid arguments for prompt #{prompt_name}: #{e.message}")
+        send_error(-32_602, e.message, id)
+      rescue StandardError => e
+        @logger.error("Error executing prompt #{prompt_name}: #{e.message}")
+        send_error(-32_603, "Internal error: #{e.message}", id)
+      end
     end
 
     # Notify clients about resource list changes

@@ -6,9 +6,11 @@
 # In Rails applications, you can use:
 # - ActionTool::Base as an alias for FastMcp::Tool
 # - ActionResource::Base as an alias for FastMcp::Resource
+# - ActionPrompt::Base as an alias for FastMcp::Prompt
 #
 # All your tools should inherit from ApplicationTool which already uses ActionTool::Base,
-# and all your resources should inherit from ApplicationResource which uses ActionResource::Base.
+# all your resources should inherit from ApplicationResource which uses ActionResource::Base,
+# and all your prompts should inherit from ApplicationPrompt which uses ActionPrompt::Base.
 
 # Mount the MCP middleware in your Rails application
 # You can customize the options below to fit your needs.
@@ -33,10 +35,13 @@ FastMcp.mount_in_rails(
     # FastMcp will automatically discover and register:
     # - All classes that inherit from ApplicationTool (which uses ActionTool::Base)
     # - All classes that inherit from ApplicationResource (which uses ActionResource::Base)
+    # - All classes that inherit from ApplicationPrompt (which uses ActionPrompt::Base)
     server.register_tools(*ApplicationTool.descendants)
     server.register_resources(*ApplicationResource.descendants)
-    # alternatively, you can register tools and resources manually:
+    server.register_prompts(*ApplicationPrompt.descendants)
+    # alternatively, you can register tools, resources, and prompts manually:
     # server.register_tool(MyTool)
     # server.register_resource(MyResource)
+    # server.register_prompt(MyPrompt)
   end
 end

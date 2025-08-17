@@ -16,6 +16,7 @@ module FastMcp
       def create_directories
         empty_directory 'app/tools'
         empty_directory 'app/resources'
+        empty_directory 'app/prompts'
       end
 
       def copy_application_tool
@@ -34,6 +35,14 @@ module FastMcp
         template 'sample_resource.rb', 'app/resources/sample_resource.rb'
       end
 
+      def copy_application_prompt
+        template 'application_prompt.rb', 'app/prompts/application_prompt.rb'
+      end
+
+      def copy_sample_prompt
+        template 'sample_prompt.rb', 'app/prompts/sample_prompt.rb'
+      end
+
       def display_post_install_message
         say "\n========================================================="
         say 'FastMcp was successfully installed! 🎉'
@@ -41,6 +50,7 @@ module FastMcp
         say 'You can now create:'
         say '  • Tools in app/tools/'
         say '  • Resources in app/resources/'
+        say '  • Prompts in app/prompts/'
         say "\n"
         say 'Check config/initializers/fast_mcp.rb to configure the middleware.'
         say "=========================================================\n"
