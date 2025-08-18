@@ -13,9 +13,14 @@ module FastMcp
       @resource_filters << block if block_given?
     end
 
+    # Add filter for prompts
+    def filter_prompts(&block)
+      @prompt_filters << block if block_given?
+    end
+
     # Check if filters are configured
     def contains_filters?
-      @tool_filters.any? || @resource_filters.any?
+      @tool_filters.any? || @resource_filters.any? || @prompt_filters.any?
     end
 
     # Create a filtered copy for a specific request
@@ -33,6 +38,7 @@ module FastMcp
       # Apply filters and register items
       register_filtered_tools(filtered_server, request)
       register_filtered_resources(filtered_server, request)
+      register_filtered_prompts(filtered_server, request)
 
       filtered_server
     end
@@ -59,6 +65,16 @@ module FastMcp
       end
     end
 
+    # Apply prompt filters and register filtered prompts
+    def register_filtered_prompts(filtered_server, request)
+      filtered_prompts = apply_prompt_filters(request)
+
+      # Register filtered prompts
+      filtered_prompts.each do |prompt|
+        filtered_server.register_prompt(prompt)
+      end
+    end
+
     # Apply all tool filters to the tools collection
     def apply_tool_filters(request)
       filtered_tools = @tools.values
@@ -75,6 +91,15 @@ module FastMcp
         filtered_resources = filter.call(request, filtered_resources)
       end
       filtered_resources
+    end
+
+    # Apply all prompt filters to the prompts collection
+    def apply_prompt_filters(request)
+      filtered_prompts = @prompts.values
+      @prompt_filters.each do |filter|
+        filtered_prompts = filter.call(request, filtered_prompts)
+      end
+      filtered_prompts
     end
   end
 end

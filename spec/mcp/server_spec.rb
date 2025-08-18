@@ -33,6 +33,84 @@ RSpec.describe FastMcp::Server do
     end
   end
 
+  describe '#register_prompt' do
+    it 'registers a prompt with the server' do
+      test_prompt_class = Class.new(FastMcp::Prompt) do
+        def self.name
+          'TestPrompt'
+        end
+
+        prompt_name 'test_prompt'
+        description 'A test prompt'
+
+        def call(**_args)
+          messages(user: 'Hello, World!')
+        end
+      end
+
+      server.register_prompt(test_prompt_class)
+
+      expect(server.instance_variable_get(:@prompts)['test_prompt']).to eq(test_prompt_class)
+      expect(test_prompt_class.server).to eq(server)
+    end
+
+    it 'derives prompt name from class name if not explicitly set' do
+      test_prompt_class = Class.new(FastMcp::Prompt) do
+        def self.name
+          'TestAutoPrompt'
+        end
+
+        description 'A test prompt with auto-derived name'
+
+        def call(**_args)
+          messages(user: 'Hello, World!')
+        end
+      end
+
+      server.register_prompt(test_prompt_class)
+
+      expect(server.instance_variable_get(:@prompts)['test_auto']).to eq(test_prompt_class)
+    end
+  end
+
+  describe '#register_prompts' do
+    it 'registers multiple prompts at once' do
+      test_prompt_class1 = Class.new(FastMcp::Prompt) do
+        def self.name
+          'TestPrompt1'
+        end
+
+        prompt_name 'test_prompt_1'
+        description 'First test prompt'
+
+        def call(**_args)
+          messages(user: 'Hello from prompt 1!')
+        end
+      end
+
+      test_prompt_class2 = Class.new(FastMcp::Prompt) do
+        def self.name
+          'TestPrompt2'
+        end
+
+        prompt_name 'test_prompt_2'
+        description 'Second test prompt'
+
+        def call(**_args)
+          messages(user: 'Hello from prompt 2!')
+        end
+      end
+
+      server.register_prompts(test_prompt_class1, test_prompt_class2)
+
+      prompts = server.instance_variable_get(:@prompts)
+      expect(prompts['test_prompt_1']).to eq(test_prompt_class1)
+      expect(prompts['test_prompt_2']).to eq(test_prompt_class2)
+      expect(test_prompt_class1.server).to eq(server)
+      expect(test_prompt_class2.server).to eq(server)
+    end
+  end
+
   describe '#handle_request' do
     let(:test_tool_class) do
       Class.new(FastMcp::Tool) do
@@ -313,6 +391,127 @@ RSpec.describe FastMcp::Server do
         expect(server).to receive(:send_error).with(-32_600, 'Invalid Request', nil)
         server.handle_request(request)
       end
+    end
+  end
+
+  describe '#register_resource' do
+    it 'registers a resource with the server' do
+      test_resource_class = Class.new(FastMcp::Resource) do
+        def self.name
+          'test-resource'
+        end
+
+        def self.description
+          'A test resource'
+        end
+
+        def uri
+          'file://test.txt'
+        end
+
+        def name
+          'test.txt'
+        end
+
+        def mime_type
+          'text/plain'
+        end
+
+        def content
+          'Hello, World!'
+        end
+      end
+
+      server.register_resource(test_resource_class)
+
+      expect(server.instance_variable_get(:@resources)).to include(test_resource_class)
+    end
+  end
+
+  describe '#notify_resource_updated' do
+    let(:test_resource_class) do
+      Class.new(FastMcp::Resource) do
+        def self.name
+          'test-resource'
+        end
+
+        def self.description
+          'A test resource'
+        end
+
+        # Use the class method pattern for URI
+        uri 'file://test.txt'
+        resource_name 'test.txt'
+        mime_type 'text/plain'
+
+        def content
+          'Hello, World!'
+        end
+      end
+    end
+
+    before do
+      server.register_resource(test_resource_class)
+      # Simulate client initialization
+      server.instance_variable_set(:@client_initialized, true)
+    end
+
+    it 'finds resource by URI using array search, not hash lookup' do
+      # Subscribe to the resource
+      server.instance_variable_get(:@resource_subscriptions)['file://test.txt'] = true
+
+      # Mock the transport's send_message method to verify it's called
+      transport = double('transport')
+      server.instance_variable_set(:@transport, transport)
+      
+      expect(transport).to receive(:send_message).with(hash_including(
+        jsonrpc: '2.0',
+        method: 'notifications/resources/updated',
+        params: hash_including(
+          uri: 'file://test.txt',
+          name: 'test-resource',
+          mimeType: 'text/plain'
+        )
+      ))
+
+      # This should successfully find the resource using array.find, not hash lookup
+      server.notify_resource_updated('file://test.txt')
+    end
+
+    it 'does not send notification if no one is subscribed to the resource' do
+      # Don't subscribe to the resource
+      transport = double('transport')
+      server.instance_variable_set(:@transport, transport)
+      
+      expect(transport).not_to receive(:send_message)
+
+      server.notify_resource_updated('file://test.txt')
+    end
+
+    it 'does not send notification if client is not initialized' do
+      # Unset client initialization
+      server.instance_variable_set(:@client_initialized, false)
+      server.instance_variable_get(:@resource_subscriptions)['file://test.txt'] = true
+      
+      transport = double('transport')
+      server.instance_variable_set(:@transport, transport)
+
+      expect(transport).not_to receive(:send_message)
+
+      server.notify_resource_updated('file://test.txt')
+    end
+
+    it 'handles non-existent resource URI gracefully' do
+      # Subscribe to a different resource
+      server.instance_variable_get(:@resource_subscriptions)['file://nonexistent.txt'] = true
+      
+      transport = double('transport')
+      server.instance_variable_set(:@transport, transport)
+
+      # Mock should not be called since resource doesn't exist
+      expect(transport).not_to receive(:send_message)
+
+      server.notify_resource_updated('file://nonexistent.txt')
     end
   end
 end

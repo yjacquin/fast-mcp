@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Tool annotations support for providing hints about tool behavior (readOnlyHint, destructiveHint, etc.)
+- Comprehensive Prompts Feature implementation following MCP specification
+  - Full MCP prompts protocol support
+  - Prompt templates with ERB support
+  - Prompt argument validation using Dry::Schema
+  - Prompt filtering support with ServerFiltering architecture
+  - MessageBuilder for fluent message construction API
+  - Auto-naming from class names (e.g., `CodeReviewPrompt` → `code_review`)
+  - Support for authorization, tags, metadata, and prompt annotations
+  - Base64 validation for image content to ensure MCP compliance
+  - Flexible API for the `messages` method supporting hash, array, and block formats
+  - Rails generator templates for creating prompts
 
 ## [1.5.0] - 2025-06-01
 ### Added

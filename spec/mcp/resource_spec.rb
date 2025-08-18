@@ -184,6 +184,131 @@ RSpec.describe FastMcp::Resource do
     end
   end
 
+  describe 'stateless architecture' do
+    let(:file_resource_class) do
+      Class.new(FastMcp::Resource) do
+        uri 'file://counter.txt'
+        resource_name 'Counter'
+        description 'A file-based counter'
+        mime_type 'text/plain'
+
+        def content
+          File.exist?('counter.txt') ? File.read('counter.txt').strip : '0'
+        end
+      end
+    end
+
+    before do
+      # Clean up any existing file
+      FileUtils.rm_f('counter.txt')
+    end
+
+    after do
+      # Clean up test file
+      FileUtils.rm_f('counter.txt')
+    end
+
+    it 'reads content from external source' do
+      File.write('counter.txt', '42')
+      resource = file_resource_class.new
+      expect(resource.content).to eq('42')
+    end
+
+    it 'handles missing external source' do
+      FileUtils.rm_f('counter.txt')
+      resource = file_resource_class.new
+      expect(resource.content).to eq('0')  # default value
+    end
+
+    it 'does not maintain state between instances' do
+      resource1 = file_resource_class.new
+      resource2 = file_resource_class.new
+      expect(resource1).not_to eq(resource2)
+      expect(resource1.object_id).not_to eq(resource2.object_id)
+    end
+
+    it 'reflects external changes immediately' do
+      # Create initial file
+      File.write('counter.txt', '10')
+      resource = file_resource_class.new
+      expect(resource.content).to eq('10')
+
+      # Update file externally
+      File.write('counter.txt', '20')
+      # Same resource instance should reflect the change
+      expect(resource.content).to eq('20')
+    end
+  end
+
+  describe 'integration with tools and external storage' do
+    let(:storage_resource_class) do
+      Class.new(FastMcp::Resource) do
+        uri 'file://data.txt'
+        resource_name 'Data Storage'
+        description 'External data storage'
+        mime_type 'text/plain'
+
+        def content
+          File.exist?('data.txt') ? File.read('data.txt').strip : 'no data'
+        end
+      end
+    end
+
+    let(:update_tool_class) do
+      Class.new(FastMcp::Tool) do
+        description 'Update data storage'
+        
+        arguments do
+          required(:data).filled(:string).description('Data to store')
+        end
+
+        def call(data:)
+          File.write('data.txt', data)
+          notify_resource_updated('file://data.txt')
+          { success: true, data: data }
+        end
+      end
+    end
+
+    before do
+      FileUtils.rm_f('data.txt')
+      server.register_resource(storage_resource_class)
+      server.register_tool(update_tool_class)
+    end
+
+    after do
+      FileUtils.rm_f('data.txt')
+    end
+
+    it 'integrates tools and stateless resources' do
+      # Setup - verify initial state
+      resource = server.read_resource('file://data.txt')
+      expect(resource.new.content).to eq('no data')
+
+      # Execute tool to update external storage
+      tool = update_tool_class.new
+      result = tool.call(data: 'test content')
+      expect(result[:success]).to be true
+
+      # Verify resource reflects the external change
+      updated_resource = server.read_resource('file://data.txt')
+      expect(updated_resource.new.content).to eq('test content')
+    end
+
+    it 'persists data to external storage' do
+      tool = update_tool_class.new
+      tool.call(data: 'persistent data')
+
+      # Create new resource instance to verify persistence
+      resource = storage_resource_class.new
+      expect(resource.content).to eq('persistent data')
+
+      # Verify file actually exists
+      expect(File.exist?('data.txt')).to be true
+      expect(File.read('data.txt')).to eq('persistent data')
+    end
+  end
+
   describe 'creating resources from files' do
     it 'creates a resource from a file' do
       allow(File).to receive(:exist?).and_return(true)
