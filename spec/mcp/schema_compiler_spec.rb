@@ -186,6 +186,28 @@ RSpec.describe FastMcp::JSONSchemaCompiler do
       end
     end
 
+    context 'with a any array of anyOf' do
+      let(:schema) do
+        Dry::Schema.JSON do
+          required(:attr).array { str? | int? }
+        end
+      end
+
+      it 'generates correct JSON schema' do
+        result = compiler.process(schema)
+
+        expect(result[:properties][:attr]).to eq({
+          type: 'array',
+          items: {
+            anyOf: [
+              { type: 'string' },
+              { type: 'number' }
+            ]
+          }
+        })
+      end
+    end
+
     context 'with a n-ary anyOf' do
       let(:schema) do
         Dry::Schema.JSON do

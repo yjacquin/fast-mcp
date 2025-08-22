@@ -265,7 +265,14 @@ module FastMcp
         c.keys.update(subschema: {})
         c.visit(child, opts.merge(key: :subschema))
 
-        any_of = (keys[opts[:key]][:anyOf] ||= [])
+        item = keys[opts[:key]]
+
+        if item[:type] == 'array'
+          # this is an array of anyOf, we need to merge the subschema into the items
+          item = item[:items]
+        end
+
+        any_of = (item[:anyOf] ||= [])
         any_of << c.keys[:subschema]
       end
     end
@@ -317,6 +324,9 @@ module FastMcp
         if target[:type]&.include?('array')
           target[:items] ||= {}
           merge_opts!(target[:items], type_opts)
+        elsif type_opts[:type]&.include?('array')
+          target[:items] ||= {}
+          merge_opts!(target, type_opts)
         else
           merge_opts!(target, type_opts)
         end
