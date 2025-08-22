@@ -73,7 +73,7 @@ module FastMcp
   # @return [#call] The Rack middleware
   def self.authenticated_rack_middleware(app, options = {})
     options[:transport] ||= FastMcp::Transports::AuthenticatedRackTransport
-    self.rack_middleware(app, options)
+    rack_middleware(app, options)
   end
 
   # Register a tool with the MCP server

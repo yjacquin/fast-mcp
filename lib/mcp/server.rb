@@ -113,7 +113,7 @@ module FastMcp
     # Start the server as a Rack middleware
     def start_rack(app, options = {})
       @transport_klass = options.delete(:transport) || FastMcp::Transports::RackTransport
-      transport_name = @transport_klass.name.split("::").last
+      transport_name = @transport_klass.name.split('::').last
 
       @logger.info("Starting MCP server with #{transport_name}: #{@name} v#{@version}")
       @logger.info("Available tools: #{@tools.keys.join(', ')}")
