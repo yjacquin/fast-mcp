@@ -168,6 +168,36 @@ module FastMcp
       compiler.to_hash.tap do |hash|
         # post-process the schema to remove hidden (top-level only) properties
         hash[:properties].reject! { |_, v| v[:hidden] }
+        # flatten the anyOfs in a single level
+        flatten_any_of(hash)
+      end
+    end
+
+    def self.flatten_any_of(v)
+      return v unless v.is_a?(Hash)
+
+      v.each do |key, value|
+        if key == :anyOf
+          v[key] = find_all_any_of(value)
+        else
+          flatten_any_of(value)
+        end
+      end
+
+      v
+    end
+
+    def self.find_all_any_of(value)
+      if value.is_a?(Array)
+        value.flat_map { |item| find_all_any_of(item) }
+      elsif value.is_a?(Hash)
+        if value[:anyOf]
+          find_all_any_of(value[:anyOf])
+        else
+          value
+        end
+      else
+        []
       end
     end
 

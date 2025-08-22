@@ -168,6 +168,41 @@ RSpec.describe FastMcp::JSONSchemaCompiler do
         expect(result[:properties][:metadata][:properties][:created_at][:format]).to eq('date-time')
       end
     end
+
+    context 'with a binary anyOf' do
+      let(:schema) do
+        Dry::Schema.JSON do
+          required(:attr) { str? | int? }
+        end
+      end
+
+      it 'generates correct JSON schema' do
+        result = compiler.process(schema)
+
+        expect(result[:properties][:attr][:anyOf]).to contain_exactly(
+          { type: 'string' },
+          { type: 'number' }
+        )
+      end
+    end
+
+    context 'with a n-ary anyOf' do
+      let(:schema) do
+        Dry::Schema.JSON do
+          required(:attr) { str? | int? | bool? }
+        end
+      end
+
+      it 'generates correct JSON schema' do
+        result = compiler.process(schema)
+
+        expect(result[:properties][:attr][:anyOf]).to contain_exactly(
+          { type: 'string' },
+          { type: 'number' },
+          { type: 'boolean' }
+        )
+      end
+    end
   end
 
   describe 'compatibility with MCP tool specification' do
