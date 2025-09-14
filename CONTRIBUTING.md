@@ -168,7 +168,7 @@ bundle exec rubocop -a
 
 ## Community
 
-- Join the discussion on [GitHub Discussions](https://github.com/yourusername/fast-mcp/discussions)
+- Join the discussion on [GitHub Discussions](https://github.com/yjacquin/fast-mcp/discussions)
 - Follow the project on social media (if applicable)
 - Participate in community events and meetups
 
