@@ -39,6 +39,7 @@ module FastMcp
   # @option options [String] :messages_route The route for the messages endpoint
   # @option options [String] :sse_route The route for the SSE endpoint
   # @option options [Logger] :logger The logger to use
+  # @option options [Class] :transport The transport class to use
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
@@ -71,17 +72,8 @@ module FastMcp
   # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
   def self.authenticated_rack_middleware(app, options = {})
-    name = options.delete(:name) || 'mcp-server'
-    version = options.delete(:version) || '1.0.0'
-    logger = options.delete(:logger) || Logger.new
-
-    server = FastMcp::Server.new(name: name, version: version, logger: logger)
-    yield server if block_given?
-
-    # Store the server in the FastMcp module
-    self.server = server
-
-    server.start_authenticated_rack(app, options)
+    options[:transport] ||= FastMcp::Transports::AuthenticatedRackTransport
+    rack_middleware(app, options)
   end
 
   # Register a tool with the MCP server
