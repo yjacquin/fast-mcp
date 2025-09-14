@@ -39,7 +39,7 @@ jobs:
         ruby-version: '3.2'
     
     - name: Download artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: gem
     
@@ -65,7 +65,7 @@ jobs:
         fetch-depth: 0
     
     - name: Download artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: gem
     
