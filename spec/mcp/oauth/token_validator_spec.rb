@@ -6,6 +6,7 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
 
   describe '#initialize' do
     it 'initializes with default options' do
+      puts 'heh'
       expect(validator.logger).to eq(logger)
       expect(validator.required_scopes).to eq([])
     end
@@ -50,7 +51,7 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
       end
 
       it 'validates scopes with opaque tokens' do
-        opaque_validator = ->(token) { { valid: true, scopes: ['mcp:read'] } }
+        opaque_validator = ->(_token) { { valid: true, scopes: ['mcp:read'] } }
         validator = described_class.new(opaque_token_validator: opaque_validator)
 
         expect(validator.validate_token('token', required_scopes: ['mcp:read'])).to be(true)
@@ -123,7 +124,8 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
     it 'extracts claims from JWT tokens' do
       # Mock JWT.decode to return the payload when called without verification
       payload_with_string_keys = payload.transform_keys(&:to_s)
-      allow(JWT).to receive(:decode).with(jwt_token, nil, false).and_return([payload_with_string_keys, { 'alg' => 'HS256' }])
+      allow(JWT).to receive(:decode).with(jwt_token, nil,
+                                          false).and_return([payload_with_string_keys, { 'alg' => 'HS256' }])
 
       claims = validator.extract_claims(jwt_token)
       expect(claims).to include('sub' => 'user123', 'scope' => 'mcp:read')
@@ -156,11 +158,11 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
   end
 
   describe 'error handling' do
-    it 'logs validation failures' do
-      # Use a logger with an actual LogDevice so we can capture logs
-      logger_output = StringIO.new
-      validator = described_class.new(logger: Logger.new(logger_output))
+    let(:logger_output) { StringIO.new }
+    let(:logger) { Logger.new(logger_output) }
+    let(:validator) { described_class.new(logger: logger, hmac_secret: 'lol') }
 
+    it 'logs validation failures' do
       # Create a malformed JWT that will trigger an error during validation
       malformed_jwt = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.invalid_payload.signature'
       result = validator.validate_token(malformed_jwt)
@@ -169,6 +171,7 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
       expect(result).to be(false)
       logger_output.rewind
       log_content = logger_output.read
+      puts 'hah'
       expect(log_content).to match(/Token validation failed: HMAC secret not configured/)
     end
 

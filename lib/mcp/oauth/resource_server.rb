@@ -26,7 +26,6 @@ module FastMcp
         @token_validator = TokenValidator.new(options.merge(logger: @logger))
         @scope_definitions = DEFAULT_SCOPES.merge(options[:custom_scopes] || {})
         @require_https = options.fetch(:require_https, true) # HTTPS required by default for OAuth 2.1 compliance
-
         # Resource identifier for audience binding (RFC 8707)
         @resource_identifier = options[:resource_identifier] || options[:audience]
 

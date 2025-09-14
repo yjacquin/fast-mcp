@@ -6,6 +6,7 @@ source 'https://rubygems.org'
 gemspec
 
 group :development, :test do
+  gem 'debug'
   gem 'json', '~> 2.0'
   gem 'mime-types', '~> 3.4'
   gem 'pry'

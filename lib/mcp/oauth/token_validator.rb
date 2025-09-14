@@ -19,12 +19,12 @@ module FastMcp
       # JWT token types
       JWT_TYPES = %w[JWT jwt].freeze
 
-      attr_reader :logger, :issuer, :jwks_uri, :required_scopes
+      attr_reader :logger, :issuer, :audience, :required_scopes
 
       def initialize(options = {})
         @logger = options[:logger] || ::Logger.new($stdout).tap { |l| l.level = ::Logger::FATAL }
         @issuer = options[:issuer]
-        @jwks_uri = options[:jwks_uri]
+        @audience = options[:audience]
         @required_scopes = Array(options[:required_scopes])
         @opaque_token_validator = options[:opaque_token_validator]
         @subjects = normalize_subjects(options[:sub] || options[:subjects])
@@ -111,8 +111,8 @@ module FastMcp
       end
 
       # Validate JWT standard claims
-      def verify_token_claims!(encoded_token, scope: nil)
-        encoded_token.verify_claims!(:exp, :nbf, :jti, :iat, iss: [@issuer])
+      def verify_token_claims!(encoded_token)
+        encoded_token.verify_claims!(:exp, :nbf, :jti, :iat, iss: [@issuer], aud: [@audience])
       end
 
       # Validate token scopes
