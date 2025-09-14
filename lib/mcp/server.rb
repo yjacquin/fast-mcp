@@ -39,6 +39,7 @@ module FastMcp
       @capabilities = DEFAULT_CAPABILITIES.dup
       @tool_filters = []
       @resource_filters = []
+      @on_error_result = nil
 
       # Merge with provided capabilities
       @capabilities.merge!(capabilities) if capabilities.is_a?(Hash)
@@ -78,6 +79,10 @@ module FastMcp
       notify_resource_list_changed if @transport
 
       resource
+    end
+
+    def on_error_result(&block)
+      @on_error_result = block
     end
 
     # Remove a resource from the server
@@ -355,6 +360,8 @@ module FastMcp
 
     # Format and send error result
     def send_error_result(message, id)
+      @on_error_result&.call(message)
+
       # Format error according to the MCP specification
       error_result = {
         content: [{ type: 'text', text: "Error: #{message}" }],
