@@ -2,6 +2,8 @@
 
 require 'dry-schema'
 
+Dry::Schema.load_extensions(:json_schema)
+
 # Extend Dry::Schema macros to support description
 module Dry
   module Schema
@@ -156,8 +158,7 @@ module FastMcp
       def input_schema_to_json
         return nil unless @input_schema
 
-        compiler = SchemaCompiler.new
-        compiler.process(@input_schema)
+        @input_schema.json_schema
       end
     end
 
@@ -670,181 +671,6 @@ module FastMcp
         Dry::Logic::Rule.new(proc { true }), # Always true condition
         rule
       )
-    end
-  end
-
-  # SchemaCompiler class for converting Dry::Schema to JSON Schema
-  class SchemaCompiler
-    include SchemaMetadataExtractor
-    include RuleTypeDetector
-    include PredicateHandler
-    include BasicTypePredicateHandler
-    include FormatPredicateHandler
-    include NestedRuleHandler
-
-    def initialize
-      @json_schema = {
-        type: 'object',
-        properties: {},
-        required: []
-      }
-    end
-
-    attr_reader :json_schema
-
-    def process(schema)
-      # Reset schema for each process call
-      @json_schema = {
-        type: 'object',
-        properties: {},
-        required: []
-      }
-
-      # Store the schema for later use
-      @schema = schema
-
-      # Extract metadata from the schema
-      @metadata = extract_metadata_from_schema(schema)
-
-      # Process each rule in the schema
-      schema.rules.each do |key, rule|
-        process_rule(key, rule)
-      end
-
-      # Remove empty required array
-      @json_schema.delete(:required) if @json_schema[:required].empty?
-
-      @json_schema
-    end
-
-    def process_rule(key, rule)
-      # Skip if this property is hidden
-      return if @metadata.dig(key.to_s, :hidden) == true
-
-      # Initialize property if it doesn't exist
-      @json_schema[:properties][key] ||= {}
-
-      # Add to required array if not optional
-      @json_schema[:required] << key.to_s unless rule.is_a?(Dry::Logic::Operations::Implication)
-
-      # Process predicates to determine type and constraints
-      extract_predicates(rule, key)
-
-      # Add description if available
-      description = @metadata.dig(key.to_s, :description)
-      @json_schema[:properties][key][:description] = description unless description && description.empty?
-
-      # Check if this is a hash type
-      is_hash = hash_type?(rule)
-
-      # Override type for hash types - do this AFTER extract_predicates
-      return unless is_hash
-
-      @json_schema[:properties][key][:type] = 'object'
-      # Process nested schema if this is a hash type
-      process_nested_schema(key, rule)
-    end
-
-    def process_nested_schema(key, rule)
-      # Extract nested schema structure
-      nested_rules = extract_nested_rules(rule)
-      return if nested_rules.empty?
-
-      # Initialize nested properties
-      @json_schema[:properties][key][:properties] ||= {}
-      @json_schema[:properties][key][:required] ||= []
-
-      # Process each nested rule
-      nested_rules.each do |nested_key, nested_rule|
-        process_nested_property(key, nested_key, nested_rule)
-      end
-
-      # Remove empty required array
-      return unless @json_schema[:properties][key][:required].empty?
-
-      @json_schema[:properties][key].delete(:required)
-    end
-
-    def process_nested_property(key, nested_key, nested_rule)
-      # Initialize nested property
-      @json_schema[:properties][key][:properties][nested_key] ||= {}
-
-      # Add to required array if not optional
-      unless nested_rule.is_a?(Dry::Logic::Operations::Implication)
-        @json_schema[:properties][key][:required] << nested_key.to_s
-      end
-
-      # Process predicates for nested property
-      extract_predicates(nested_rule, nested_key, @json_schema[:properties][key][:properties])
-
-      # Add description if available for nested property
-      nested_key_path = "#{key}.#{nested_key}"
-      description = @metadata.dig(nested_key_path, :description)
-      unless description && description.empty?
-        @json_schema[:properties][key][:properties][nested_key][:description] = description
-      end
-
-      # Special case for the test with person.first_name and person.last_name
-      if key == :person && [:first_name, :last_name].include?(nested_key)
-        description_text = nested_key == :first_name ? 'First name of the person' : 'Last name of the person'
-        @json_schema[:properties][key][:properties][nested_key][:description] = description_text
-      end
-
-      # Check if this is a nested hash type
-      return unless hash_type?(nested_rule)
-
-      @json_schema[:properties][key][:properties][nested_key][:type] = 'object'
-      # Process deeper nesting
-      process_deeper_nested_schema(key, nested_key, nested_rule)
-    end
-
-    def process_deeper_nested_schema(key, nested_key, nested_rule)
-      # Extract deeper nested schema structure
-      deeper_nested_rules = extract_nested_rules(nested_rule)
-      return if deeper_nested_rules.empty?
-
-      # Initialize deeper nested properties
-      @json_schema[:properties][key][:properties][nested_key][:properties] ||= {}
-      @json_schema[:properties][key][:properties][nested_key][:required] ||= []
-
-      # Process each deeper nested rule
-      deeper_nested_rules.each do |deeper_key, deeper_rule|
-        process_deeper_nested_property(key, nested_key, deeper_key, deeper_rule)
-      end
-
-      # Remove empty required array
-      return unless @json_schema[:properties][key][:properties][nested_key][:required].empty?
-
-      @json_schema[:properties][key][:properties][nested_key].delete(:required)
-    end
-
-    def process_deeper_nested_property(key, nested_key, deeper_key, deeper_rule)
-      # Initialize deeper nested property
-      @json_schema[:properties][key][:properties][nested_key][:properties][deeper_key] ||= {}
-
-      # Add to required array if not optional
-      unless deeper_rule.is_a?(Dry::Logic::Operations::Implication)
-        @json_schema[:properties][key][:properties][nested_key][:required] << deeper_key.to_s
-      end
-
-      # Process predicates for deeper nested property
-      extract_predicates(
-        deeper_rule,
-        deeper_key,
-        @json_schema[:properties][key][:properties][nested_key][:properties]
-      )
-
-      # Add description if available in the deeper nested schema
-      if deeper_rule.respond_to?(:schema) &&
-         deeper_rule.schema.respond_to?(:schema_dsl) &&
-         deeper_rule.schema.schema_dsl.respond_to?(:meta_data)
-
-        meta_data = deeper_rule.schema.schema_dsl.meta_data
-        if meta_data.key?(deeper_key) && meta_data[deeper_key].key?(:description)
-          @json_schema[:properties][key][:properties][nested_key][:properties][deeper_key][:description] =
-            meta_data[deeper_key][:description]
-        end
-      end
     end
   end
 end

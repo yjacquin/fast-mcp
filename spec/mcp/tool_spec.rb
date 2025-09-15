@@ -73,8 +73,8 @@ RSpec.describe FastMcp::Tool do
 
   describe '.authorize' do
     it 'records authorization blocks' do
-      authorization_block_1 = Proc.new { true }
-      authorization_block_2 = Proc.new { true }
+      authorization_block_1 = proc { true }
+      authorization_block_2 = proc { true }
 
       test_class = Class.new(described_class) do
         authorize(&authorization_block_1)
@@ -93,7 +93,7 @@ RSpec.describe FastMcp::Tool do
       expect(test_class.input_schema_to_json).to be_nil
     end
 
-    it 'converts the schema to JSON format using SchemaCompiler' do
+    it 'converts the schema to JSON format' do
       test_class = Class.new(described_class) do
         arguments do
           required(:name).filled(:string)
@@ -102,9 +102,10 @@ RSpec.describe FastMcp::Tool do
       end
 
       json_schema = test_class.input_schema_to_json
+      puts json_schema
       expect(json_schema[:type]).to eq('object')
       expect(json_schema[:properties][:name][:type]).to eq('string')
-      expect(json_schema[:properties][:age][:type]).to eq('number')
+      expect(json_schema[:properties][:age][:type]).to eq('integer')
       expect(json_schema[:properties][:age][:exclusiveMinimum]).to eq(18)
       expect(json_schema[:required]).to include('name', 'age')
     end
@@ -153,7 +154,7 @@ RSpec.describe FastMcp::Tool do
           end
 
           def call(**args)
-            _meta[:something] = "hey"
+            _meta[:something] = 'hey'
 
             "Hello, #{args[:name]}! You are #{args[:age]} years old."
           end
@@ -240,16 +241,16 @@ RSpec.describe FastMcp::Tool do
 
         it 'returns true when authorized' do
           tool = authorized_tool_class.new(headers: {
-            'AUTHORIZATION' => token
-          })
+                                             'AUTHORIZATION' => token
+                                           })
 
           expect(tool.authorized?).to be true
         end
 
         it 'returns false when not authorized' do
           tool = authorized_tool_class.new(headers: {
-            'AUTHORIZATION' => 'invalid_token'
-          })
+                                             'AUTHORIZATION' => 'invalid_token'
+                                           })
 
           expect(tool.authorized?).to be false
         end
@@ -284,16 +285,16 @@ RSpec.describe FastMcp::Tool do
 
         it 'returns true when authorized' do
           tool = authorized_tool_class.new(headers: {
-            'AUTHORIZATION' => token
-          })
+                                             'AUTHORIZATION' => token
+                                           })
 
           expect(tool.authorized?(name: 'admin')).to be true
         end
 
         it 'returns false when not authorized' do
           tool = authorized_tool_class.new(headers: {
-            'AUTHORIZATION' => token
-          })
+                                             'AUTHORIZATION' => token
+                                           })
 
           expect(tool.authorized?(name: 'user')).to be false
         end
@@ -344,23 +345,23 @@ RSpec.describe FastMcp::Tool do
 
           it 'returns true when fully authorized' do
             tool = child_authorized_tool_class.new(headers: {
-              'AUTHORIZATION' => token,
-              'OTHER_HEADER' => 'other_value'
-            })
+                                                     'AUTHORIZATION' => token,
+                                                     'OTHER_HEADER' => 'other_value'
+                                                   })
             expect(tool.authorized?).to be true
           end
 
           it 'returns false when failing parent authorization' do
             tool = child_authorized_tool_class.new(headers: {
-              'OTHER_HEADER' => 'other_value'
-            })
+                                                     'OTHER_HEADER' => 'other_value'
+                                                   })
             expect(tool.authorized?).to be false
           end
 
           it 'returns false when failing child authorization' do
             tool = child_authorized_tool_class.new(headers: {
-              'AUTHORIZATION' => token
-            })
+                                                     'AUTHORIZATION' => token
+                                                   })
             expect(tool.authorized?).to be false
           end
         end
@@ -384,15 +385,15 @@ RSpec.describe FastMcp::Tool do
 
           it 'returns true when authorized' do
             tool = child_tool_class.new(headers: {
-              'AUTHORIZATION' => token
-            })
+                                          'AUTHORIZATION' => token
+                                        })
             expect(tool.authorized?).to be true
           end
 
           it 'returns false when not authorized' do
             tool = child_tool_class.new(headers: {
-              'AUTHORIZATION' => 'invalid_token'
-            })
+                                          'AUTHORIZATION' => 'invalid_token'
+                                        })
             expect(tool.authorized?).to be false
           end
         end
@@ -403,7 +404,7 @@ RSpec.describe FastMcp::Tool do
           Module.new do
             def self.included(base)
               base.authorize do
-                not current_user.nil?
+                !current_user.nil?
               end
             end
 
@@ -454,132 +455,32 @@ RSpec.describe FastMcp::Tool do
 
         it 'returns true when authorized by both modules' do
           tool = composed_tool_class.new(headers: {
-            'AUTHORIZATION' => 'valid_token',
-            'CURRENT_USER' => 'admin'
-          })
-          expect(tool.authorized?(name: "Bob")).to be true
+                                           'AUTHORIZATION' => 'valid_token',
+                                           'CURRENT_USER' => 'admin'
+                                         })
+          expect(tool.authorized?(name: 'Bob')).to be true
         end
 
         it 'returns false when not authorized by one of the modules' do
           headers = [
             { 'AUTHORIZATION' => 'valid_token', 'CURRENT_USER' => nil },
-            { 'AUTHORIZATION' => 'invalid_token', 'CURRENT_USER' => 'admin' },
+            { 'AUTHORIZATION' => 'invalid_token', 'CURRENT_USER' => 'admin' }
           ]
 
           headers.each do |header|
             tool = composed_tool_class.new(headers: header)
-            expect(tool.authorized?(name: "Bob")).to be false
+            expect(tool.authorized?(name: 'Bob')).to be false
           end
         end
 
         it 'returns false when not authorized by the tool' do
           tool = composed_tool_class.new(headers: {
-            'AUTHORIZATION' => 'valid_token',
-            'CURRENT_USER' => 'admin'
-          })
+                                           'AUTHORIZATION' => 'valid_token',
+                                           'CURRENT_USER' => 'admin'
+                                         })
 
-          expect(tool.authorized?(name: "Alice")).to be false
+          expect(tool.authorized?(name: 'Alice')).to be false
         end
-      end
-    end
-  end
-
-  describe 'SchemaCompiler' do
-    let(:compiler) { FastMcp::SchemaCompiler.new }
-
-    describe '#process' do
-      it 'converts a basic schema to JSON format' do
-        schema = Dry::Schema.JSON do
-          required(:name).filled(:string)
-          required(:age).filled(:integer, gt?: 18)
-        end
-
-        result = compiler.process(schema)
-
-        expect(result[:type]).to eq('object')
-        expect(result[:properties][:name][:type]).to eq('string')
-        expect(result[:properties][:age][:type]).to eq('number')
-        expect(result[:properties][:age][:exclusiveMinimum]).to eq(18)
-        expect(result[:required]).to include('name', 'age')
-      end
-
-      it 'handles optional fields' do
-        schema = Dry::Schema.JSON do
-          required(:name).filled(:string)
-          optional(:email).filled(:string, format?: :email)
-        end
-
-        result = compiler.process(schema)
-
-        expect(result[:required]).to include('name')
-        expect(result[:required]).not_to include('email')
-        expect(result[:properties][:email][:format]).to eq('email')
-      end
-
-      it 'handles nested objects' do
-        schema = Dry::Schema.JSON do
-          required(:person).hash do
-            required(:first_name).filled(:string)
-            required(:last_name).filled(:string)
-          end
-        end
-
-        result = compiler.process(schema)
-
-        expect(result[:properties][:person][:type]).to eq('object')
-        expect(result[:properties][:person][:properties][:first_name][:type]).to eq('string')
-        expect(result[:properties][:person][:properties][:last_name][:type]).to eq('string')
-        expect(result[:properties][:person][:required]).to include('first_name', 'last_name')
-      end
-
-      it 'handles arrays' do
-        schema = Dry::Schema.JSON do
-          required(:tags).array(:string)
-        end
-
-        result = compiler.process(schema)
-
-        expect(result[:properties][:tags][:type]).to eq('array')
-      end
-
-      it 'handles validation constraints' do
-        schema = Dry::Schema.JSON do
-          required(:username).filled(:string, min_size?: 3, max_size?: 20)
-          required(:age).filled(:integer, gt?: 18, lt?: 100)
-        end
-
-        result = compiler.process(schema)
-
-        expect(result[:properties][:username][:minLength]).to eq(3)
-        expect(result[:properties][:username][:maxLength]).to eq(20)
-        expect(result[:properties][:age][:exclusiveMinimum]).to eq(18)
-        expect(result[:properties][:age][:exclusiveMaximum]).to eq(100)
-      end
-
-      it 'includes description field for properties' do
-        schema = Dry::Schema.JSON do
-          required(:name).filled(:string).description('User full name')
-          required(:email).filled(:string, format?: :email).description('User email address')
-        end
-
-        result = compiler.process(schema)
-
-        expect(result[:properties][:name][:description]).to eq('User full name')
-        expect(result[:properties][:email][:description]).to eq('User email address')
-      end
-
-      it 'includes description field for nested properties' do
-        schema = Dry::Schema.JSON do
-          required(:person).hash do
-            required(:first_name).filled(:string).description('First name of the person')
-            required(:last_name).filled(:string).description('Last name of the person')
-          end
-        end
-
-        result = compiler.process(schema)
-
-        expect(result[:properties][:person][:properties][:first_name][:description]).to eq('First name of the person')
-        expect(result[:properties][:person][:properties][:last_name][:description]).to eq('Last name of the person')
       end
     end
   end
@@ -588,58 +489,58 @@ RSpec.describe FastMcp::Tool do
     it 'sets and returns tags' do
       test_class = Class.new(described_class)
       test_class.tags :admin, :dangerous
-      
+
       expect(test_class.tags).to eq([:admin, :dangerous])
     end
-    
+
     it 'accepts array of tags' do
       test_class = Class.new(described_class)
       test_class.tags [:user, :safe]
-      
+
       expect(test_class.tags).to eq([:user, :safe])
     end
-    
+
     it 'returns empty array when no tags are set' do
       test_class = Class.new(described_class)
-      
+
       expect(test_class.tags).to eq([])
     end
-    
+
     it 'converts tags to symbols' do
       test_class = Class.new(described_class)
       test_class.tags 'admin', 'dangerous'
-      
+
       expect(test_class.tags).to eq([:admin, :dangerous])
     end
   end
-  
+
   describe '.metadata' do
     it 'sets and gets individual metadata values' do
       test_class = Class.new(described_class)
       test_class.metadata(:category, 'system')
       test_class.metadata(:risk_level, 'high')
-      
+
       expect(test_class.metadata(:category)).to eq('system')
       expect(test_class.metadata(:risk_level)).to eq('high')
     end
-    
+
     it 'returns all metadata when called without arguments' do
       test_class = Class.new(described_class)
       test_class.metadata(:category, 'system')
       test_class.metadata(:risk_level, 'high')
-      
+
       expect(test_class.metadata).to eq({ category: 'system', risk_level: 'high' })
     end
-    
+
     it 'returns empty hash when no metadata is set' do
       test_class = Class.new(described_class)
-      
+
       expect(test_class.metadata).to eq({})
     end
-    
+
     it 'returns nil for undefined metadata keys' do
       test_class = Class.new(described_class)
-      
+
       expect(test_class.metadata(:undefined_key)).to be_nil
     end
   end
@@ -653,24 +554,24 @@ RSpec.describe FastMcp::Tool do
         open_world_hint: true
       }
       test_class.annotations(annotations)
-      
+
       expect(test_class.annotations).to eq(annotations)
     end
-    
+
     it 'returns empty hash when no annotations are set' do
       test_class = Class.new(described_class)
-      
+
       expect(test_class.annotations).to eq({})
     end
-    
+
     it 'returns the current annotations when called with nil' do
       test_class = Class.new(described_class)
       annotations = { title: 'Test Tool' }
       test_class.annotations(annotations)
-      
+
       expect(test_class.annotations(nil)).to eq(annotations)
     end
-    
+
     it 'supports all MCP annotation fields' do
       test_class = Class.new(described_class)
       annotations = {
@@ -681,7 +582,7 @@ RSpec.describe FastMcp::Tool do
         open_world_hint: false
       }
       test_class.annotations(annotations)
-      
+
       expect(test_class.annotations).to eq(annotations)
     end
   end
