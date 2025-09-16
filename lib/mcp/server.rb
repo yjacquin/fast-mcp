@@ -61,22 +61,30 @@ module FastMcp
       tool.server = self
     end
 
+    # Clear all tools from the server
+    def clear_tools!
+      @tools = {}
+    end
+
     # Register multiple resources at once
     # @param resources [Array<Resource>] Resources to register
-    def register_resources(*resources)
+    # @option options [Boolean] :notify Whether to notify subscribers about the list change
+    def register_resources(*resources, notify: true)
       resources.each do |resource|
-        register_resource(resource)
+        register_resource(resource, notify: notify)
       end
     end
 
     # Register a resource with the server
-    def register_resource(resource)
+    # @param resource [Resource] Resource to register
+    # @option options [Boolean] :notify Whether to notify subscribers about the list change
+    def register_resource(resource, notify: true)
       @resources << resource
 
       @logger.debug("Registered resource: #{resource.resource_name} (#{resource.uri})")
       resource.server = self
       # Notify subscribers about the list change
-      notify_resource_list_changed if @transport
+      notify_resource_list_changed if @transport && notify
 
       resource
     end
@@ -100,6 +108,11 @@ module FastMcp
       else
         false
       end
+    end
+
+    # Clear all resources from the server
+    def clear_resources!
+      @resources = []
     end
 
     # Start the server using stdio transport

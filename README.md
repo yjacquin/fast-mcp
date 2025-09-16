@@ -34,8 +34,8 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 - 🚀 **Real-time Updates** - Subscribe to changes for interactive applications
 - 🎯 **Dynamic Filtering** - Control tool/resource access based on request context (permissions, API versions, etc.)
 
-
 ## 💎 What Makes FastMCP Great
+
 ```ruby
 # Define tools for AI models to use
 server = FastMcp::Server.new(name: 'popular-users', version: '1.0.0')
@@ -109,7 +109,7 @@ Control which tools and resources are available based on request context:
 class AdminTool < FastMcp::Tool
   tags :admin, :dangerous
   description "Perform admin operations"
-  
+
   def call
     # Admin only functionality
   end
@@ -118,7 +118,7 @@ end
 # Filter tools based on user permissions
 server.filter_tools do |request, tools|
   user_role = request.params['role']
-  
+
   case user_role
   when 'admin'
     tools # Admins see all tools
@@ -131,6 +131,7 @@ end
 ```
 
 ### 🚂 Fast Ruby on Rails implementation
+
 ```shell
 bundle add fast-mcp
 bin/rails generate fast_mcp:install
@@ -155,20 +156,13 @@ FastMcp.mount_in_rails(
   # allowed_ips: ['127.0.0.1', '::1']
   # authenticate: true,       # Uncomment to enable authentication
   # auth_token: 'your-token' # Required if authenticate: true
-) do |server|
-  Rails.application.config.after_initialize do
-    # FastMcp will automatically discover and register:
-    # - All classes that inherit from ApplicationTool (which uses ActionTool::Base)
-    # - All classes that inherit from ApplicationResource (which uses ActionResource::Base)
-    server.register_tools(*ApplicationTool.descendants)
-    server.register_resources(*ApplicationResource.descendants)
-    # alternatively, you can register tools and resources manually:
-    # server.register_tool(MyTool)
-    # server.register_resource(MyResource)
-  end
-end
+  # tools_dir: Rails.root.join('app/tools'), # This is the default directory for tools
+  # resources_dir: Rails.root.join('app/resources'), # This is the default directory for resources
+)
 ```
+
 The install script will also:
+
 - add app/resources folder
 - add app/tools folder
 - add app/tools/sample_tool.rb
@@ -187,7 +181,7 @@ These are automatically set up in Rails applications. You can use either naming 
 
 ```ruby
 # Using Rails-style naming:
-class MyTool < ActionTool::Base
+class MyTool < ApplicationTool
   description "My awesome tool"
 
   arguments do
@@ -219,7 +213,10 @@ class ApplicationResource < ActionResource::Base
 end
 ```
 
+Tools and resources are automatically registered in the server when they are inherited from ApplicationTool and ApplicationResource. Inheriting off of ActionTool::Base or FastMcp::Tool will not require you to register them manually.
+
 ### Easy Sinatra setup
+
 I'll let you check out the dedicated [sinatra integration docs](./docs/sinatra_integration.md).
 
 ## 🚀 Quick Start
@@ -282,17 +279,21 @@ Clone this project, then give it a go !
 ```shell
 npx @modelcontextprotocol/inspector examples/server_with_stdio_transport.rb
 ```
+
 Or to test with an SSE transport using a rack middleware:
+
 ```shell
 npx @modelcontextprotocol/inspector examples/rack_middleware.rb
 ```
 
 Or to test over SSE with an authenticated rack middleware:
+
 ```shell
 npx @modelcontextprotocol/inspector examples/authenticated_rack_middleware.rb
 ```
 
 You can test your custom implementation with the official MCP inspector by using:
+
 ```shell
 # Test with a stdio transport:
 npx @modelcontextprotocol/inspector path/to/your_ruby_file.rb
@@ -321,6 +322,7 @@ end
 ### Integrating with Claude Desktop
 
 Add your server to your Claude Desktop configuration at:
+
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
@@ -329,28 +331,27 @@ Add your server to your Claude Desktop configuration at:
   "mcpServers": {
     "my-great-server": {
       "command": "ruby",
-      "args": [
-        "/Users/path/to/your/awesome/fast-mcp/server.rb"
-      ]
+      "args": ["/Users/path/to/your/awesome/fast-mcp/server.rb"]
     }
   }
 }
 ```
 
 ## How to add a MCP server to Claude, Cursor, or other MCP clients?
+
 Please refer to [configuring_mcp_clients](docs/configuring_mcp_clients.md)
 
 ## 📊 Supported Specifications
 
-| Feature | Status |
-|---------|--------|
-| ✅ **JSON-RPC 2.0** | Full implementation for communication |
-| ✅ **Tool Definition & Calling** | Define and call tools with rich argument types |
-| ✅ **Resource & Resource Templates Management** | Create, read, update, and subscribe to resources |
-| ✅ **Transport Options** | STDIO, HTTP, and SSE for flexible integration |
-| ✅ **Framework Integration** | Rails, Sinatra, Hanami, and any Rack-compatible framework |
-| ✅ **Authentication** | Secure your AI endpoints with token authentication |
-| ✅ **Schema Support** | Full JSON Schema for tool arguments with validation |
+| Feature                                         | Status                                                    |
+| ----------------------------------------------- | --------------------------------------------------------- |
+| ✅ **JSON-RPC 2.0**                             | Full implementation for communication                     |
+| ✅ **Tool Definition & Calling**                | Define and call tools with rich argument types            |
+| ✅ **Resource & Resource Templates Management** | Create, read, update, and subscribe to resources          |
+| ✅ **Transport Options**                        | STDIO, HTTP, and SSE for flexible integration             |
+| ✅ **Framework Integration**                    | Rails, Sinatra, Hanami, and any Rack-compatible framework |
+| ✅ **Authentication**                           | Secure your AI endpoints with token authentication        |
+| ✅ **Schema Support**                           | Full JSON Schema for tool arguments with validation       |
 
 ## 🗺️ Use Cases
 
@@ -406,6 +407,7 @@ FastMcp.authenticated_rack_middleware(app,
 Check out the [examples directory](examples) for more detailed examples:
 
 - **🔨 Basic Examples**:
+
   - [Simple Server](examples/server_with_stdio_transport.rb)
   - [Tool Examples](examples/tool_examples.rb)
 
