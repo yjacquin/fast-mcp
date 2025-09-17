@@ -158,7 +158,7 @@ module FastMcp
       def input_schema_to_json
         return nil unless @input_schema
 
-        @input_schema.json_schema
+        @input_schema.json_schema.tap { _1.delete(:$schema) }
       end
     end
 
