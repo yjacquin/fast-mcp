@@ -102,12 +102,143 @@ RSpec.describe FastMcp::Tool do
       end
 
       json_schema = test_class.input_schema_to_json
-      puts json_schema
       expect(json_schema[:type]).to eq('object')
       expect(json_schema[:properties][:name][:type]).to eq('string')
       expect(json_schema[:properties][:age][:type]).to eq('integer')
       expect(json_schema[:properties][:age][:exclusiveMinimum]).to eq(18)
       expect(json_schema[:required]).to include('name', 'age')
+    end
+
+    it 'includes description metadata in JSON schema' do
+      test_class = Class.new(described_class) do
+        arguments do
+          required(:name).filled(:string).description('Full name of the person')
+          required(:age).filled(:integer, gt?: 18).description('Age in years')
+        end
+      end
+
+      json_schema = test_class.input_schema_to_json
+      expect(json_schema[:properties][:name][:description]).to eq('Full name of the person')
+      expect(json_schema[:properties][:age][:description]).to eq('Age in years')
+    end
+
+    it 'filters out hidden properties from JSON schema' do
+      test_class = Class.new(described_class) do
+        arguments do
+          required(:name).filled(:string).description('Full name')
+          required(:secret_key).filled(:string).hidden(true)
+          required(:age).filled(:integer)
+        end
+      end
+
+      json_schema = test_class.input_schema_to_json
+      expect(json_schema[:properties]).to have_key(:name)
+      expect(json_schema[:properties]).to have_key(:age)
+      expect(json_schema[:properties]).not_to have_key(:secret_key)
+      expect(json_schema[:required]).to include('name', 'age')
+      expect(json_schema[:required]).not_to include('secret_key')
+    end
+
+    it 'handles optional properties with descriptions and hidden flags' do
+      test_class = Class.new(described_class) do
+        arguments do
+          required(:name).filled(:string).description('User name')
+          optional(:email).filled(:string).description('Email address')
+          optional(:internal_id).filled(:string).hidden(true)
+        end
+      end
+
+      json_schema = test_class.input_schema_to_json
+      expect(json_schema[:properties][:name][:description]).to eq('User name')
+      expect(json_schema[:properties][:email][:description]).to eq('Email address')
+      expect(json_schema[:properties]).not_to have_key(:internal_id)
+      expect(json_schema[:required]).to include('name')
+      expect(json_schema[:required]).not_to include('email', 'internal_id')
+    end
+
+    it 'handles nested hash properties with descriptions and hidden flags' do
+      test_class = Class.new(described_class) do
+        arguments do
+          required(:user).hash do
+            required(:name).filled(:string).description('Full name')
+            required(:email).filled(:string).description('Email address')
+            required(:password).filled(:string).hidden(true)
+            optional(:age).filled(:integer).description('Age in years')
+            optional(:internal_id).filled(:string).hidden(true)
+          end.description('User information')
+          required(:active).filled(:bool).description('Account status')
+        end
+      end
+
+      json_schema = test_class.input_schema_to_json
+
+      # Top-level properties
+      expect(json_schema[:properties][:user][:description]).to eq('User information')
+      expect(json_schema[:properties][:active][:description]).to eq('Account status')
+      expect(json_schema[:required]).to include('user', 'active')
+
+      # Nested properties
+      user_props = json_schema[:properties][:user][:properties]
+      expect(user_props[:name][:description]).to eq('Full name')
+      expect(user_props[:email][:description]).to eq('Email address')
+      expect(user_props[:age][:description]).to eq('Age in years')
+
+      # Hidden properties should not appear
+      expect(user_props).not_to have_key(:password)
+      expect(user_props).not_to have_key(:internal_id)
+
+      # Required array should be updated correctly
+      user_required = json_schema[:properties][:user][:required]
+      expect(user_required).to include('name', 'email')
+      expect(user_required).not_to include('password', 'internal_id', 'age')
+    end
+
+    it 'handles deeply nested hash structures with metadata' do
+      test_class = Class.new(described_class) do
+        arguments do
+          required(:config).hash do
+            required(:database).hash do
+              required(:host).filled(:string).description('Database host')
+              required(:port).filled(:integer).description('Database port')
+              required(:credentials).hash do
+                required(:username).filled(:string).description('Database username')
+                required(:password).filled(:string).hidden(true)
+                optional(:api_key).filled(:string).hidden(true)
+              end.description('Authentication credentials')
+            end.description('Database configuration')
+            optional(:debug_mode).filled(:bool).description('Enable debug logging')
+            optional(:secret_key).filled(:string).hidden(true)
+          end.description('Application configuration')
+        end
+      end
+
+      json_schema = test_class.input_schema_to_json
+
+      # Top level
+      expect(json_schema[:properties][:config][:description]).to eq('Application configuration')
+
+      # First nesting level
+      config_props = json_schema[:properties][:config][:properties]
+      expect(config_props[:database][:description]).to eq('Database configuration')
+      expect(config_props[:debug_mode][:description]).to eq('Enable debug logging')
+      expect(config_props).not_to have_key(:secret_key) # hidden
+
+      # Second nesting level
+      db_props = config_props[:database][:properties]
+      expect(db_props[:host][:description]).to eq('Database host')
+      expect(db_props[:port][:description]).to eq('Database port')
+      expect(db_props[:credentials][:description]).to eq('Authentication credentials')
+
+      # Third nesting level
+      creds_props = db_props[:credentials][:properties]
+      expect(creds_props[:username][:description]).to eq('Database username')
+      expect(creds_props).not_to have_key(:password) # hidden
+      expect(creds_props).not_to have_key(:api_key) # hidden
+
+      # Required arrays at each level
+      expect(json_schema[:required]).to eq(['config'])
+      expect(config_props[:database][:required]).to eq(['host', 'port', 'credentials'])
+      expect(db_props[:credentials][:required]).to eq(['username'])
     end
   end
 
