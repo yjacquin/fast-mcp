@@ -203,8 +203,81 @@ puts "Tool call result without interests: #{user_profile.call_with_schema_valida
 )}"
 puts
 
-# Example 7: Tools with annotations
-puts 'Example 7: Tools with annotations'
+# Example 7: Tools with descriptions and hidden properties
+puts 'Example 7: Tools with descriptions and hidden properties'
+
+class ApiCallTool < FastMcp::Tool
+  description 'Make an authenticated API call'
+
+  arguments do
+    required(:url).filled(:string).description('API endpoint URL')
+    required(:method).filled(:string, included_in?: %w[GET POST PUT DELETE]).description('HTTP method')
+    optional(:headers).hash.description('HTTP headers to include')
+    optional(:api_key).filled(:string).description('API key for authentication').hidden(true)
+    optional(:secret_token).filled(:string).hidden(true) # Hidden field without description
+  end
+
+  def call(args)
+    headers_info = args[:headers] ? 'with custom headers' : 'with default headers'
+    auth_info = args[:api_key] ? 'authenticated' : 'unauthenticated'
+    "Making #{auth_info} #{args[:method]} request to #{args[:url]} #{headers_info}"
+  end
+end
+
+api_tool = ApiCallTool.new
+puts "Tool: #{api_tool.class.name}"
+puts 'JSON Schema:'
+require 'json'
+puts JSON.pretty_generate(api_tool.class.input_schema_to_json)
+puts "Call result: #{api_tool.call(url: 'https://api.example.com/users', method: 'GET', api_key: 'secret123')}"
+puts
+
+class DatabaseQueryTool < FastMcp::Tool
+  description 'Execute a database query with connection settings'
+
+  arguments do
+    required(:query).filled(:string).description('SQL query to execute')
+    required(:connection).description('Database connection settings').hash do
+      required(:host).filled(:string).description('Database host')
+      required(:port).filled(:integer, gteq?: 1, lteq?: 65_535).description('Database port')
+      required(:database).filled(:string).description('Database name')
+      required(:username).filled(:string).description('Database username')
+      required(:password).filled(:string).hidden(true) # Hidden password
+      optional(:ssl_mode).filled(:string, included_in?: %w[disable require prefer]).description('SSL connection mode')
+      optional(:internal_id).filled(:string).hidden(true) # Hidden internal field
+    end
+    optional(:timeout).filled(:integer, gteq?: 1).description('Query timeout in seconds')
+    optional(:debug_info).filled(:string).hidden(true) # Hidden debug field
+  end
+
+  def call(args)
+    conn = args[:connection]
+    timeout_info = args[:timeout] ? "with #{args[:timeout]}s timeout" : 'with default timeout'
+    ssl_info = conn[:ssl_mode] ? "using #{conn[:ssl_mode]} SSL" : 'without SSL config'
+    "Executing query on #{conn[:database]}@#{conn[:host]}:#{conn[:port]} #{ssl_info} #{timeout_info}"
+  end
+end
+
+db_tool = DatabaseQueryTool.new
+puts "Tool: #{db_tool.class.name}"
+puts 'JSON Schema:'
+puts JSON.pretty_generate(db_tool.class.input_schema_to_json)
+puts "Call result: #{db_tool.call(
+  query: 'SELECT * FROM users',
+  connection: {
+    host: 'localhost',
+    port: 5432,
+    database: 'myapp',
+    username: 'admin',
+    password: 'secret123',
+    ssl_mode: 'require'
+  },
+  timeout: 30
+)}"
+puts
+
+# Example 8: Tools with annotations
+puts 'Example 8: Tools with annotations'
 
 class WebSearchTool < FastMcp::Tool
   description 'Search the web for information'
