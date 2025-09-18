@@ -373,6 +373,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'REQUEST_METHOD' => 'GET',
           'rack.hijack?' => true,
           'rack.hijack' => -> {},
+          'rack.input' => StringIO.new(''), # for rack 2.x
           'REMOTE_ADDR' => '127.0.0.1',
           'QUERY_STRING' => 'foo=example&bar=baz'
         }
