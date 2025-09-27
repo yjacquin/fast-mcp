@@ -232,6 +232,14 @@ class SchemaMetadataProcessor
           process_properties_recursively(property_schema[:properties], metadata, nested_path)
         property_schema[:required] =
           filter_required_properties(property_schema[:required], property_schema[:properties])
+      # Recursively process array items with object properties
+      elsif property_schema[:type] == 'array' && property_schema.dig(:items, :type) == 'object' &&
+            property_schema.dig(:items, :properties)
+        nested_path = path_prefix + [property_name.to_s]
+        property_schema[:items][:properties] =
+          process_properties_recursively(property_schema[:items][:properties], metadata, nested_path)
+        property_schema[:items][:required] =
+          filter_required_properties(property_schema[:items][:required], property_schema[:items][:properties])
       end
 
       filtered_properties[property_name] = property_schema

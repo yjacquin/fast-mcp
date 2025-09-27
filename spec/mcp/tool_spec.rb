@@ -193,6 +193,49 @@ RSpec.describe FastMcp::Tool do
       expect(user_required).not_to include('password', 'internal_id', 'age')
     end
 
+    it 'handles arrays of hashes with metadata' do
+      test_class = Class.new(described_class) do
+        arguments do
+          required(:users).description('A collection of users').array(:hash) do
+            required(:name).filled(:string).description('Full name')
+            required(:email).filled(:string).description('Email address')
+            optional(:age).filled(:integer).description('Age in years')
+            optional(:address).description("The user's shipping address").hash do
+              required(:street).filled(:string).description('Street address')
+              optional(:city).filled(:string).description('City')
+              optional(:tags).array(:string).description('Tags associated with the address')
+            end
+          end
+        end
+      end
+
+      json_schema = test_class.input_schema_to_json
+
+      # Top level
+      expect(json_schema[:properties][:users][:description]).to eq('A collection of users')
+      expect(json_schema[:properties][:users][:type]).to eq('array')
+      expect(json_schema[:properties][:users][:items][:type]).to eq('object')
+
+      # Array item properties
+      user_props = json_schema[:properties][:users][:items][:properties]
+      expect(user_props[:name][:type]).to eq('string')
+      expect(user_props[:name][:description]).to eq('Full name')
+      expect(user_props[:email][:type]).to eq('string')
+      expect(user_props[:email][:description]).to eq('Email address')
+      expect(user_props[:age][:type]).to eq('integer')
+      expect(user_props[:age][:description]).to eq('Age in years')
+
+      # Nested object within array items
+      address_props = user_props[:address][:properties]
+      expect(user_props[:address][:description]).to eq("The user's shipping address")
+      expect(address_props[:street][:type]).to eq('string')
+      expect(address_props[:street][:description]).to eq('Street address')
+      expect(address_props[:city][:type]).to eq('string')
+      expect(address_props[:city][:description]).to eq('City')
+      expect(address_props[:tags][:type]).to eq('array')
+      expect(address_props[:tags][:description]).to eq('Tags associated with the address')
+    end
+
     it 'handles deeply nested hash structures with metadata' do
       test_class = Class.new(described_class) do
         arguments do

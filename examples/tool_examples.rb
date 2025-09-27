@@ -340,6 +340,35 @@ class CreateRecordTool < FastMcp::Tool
   end
 end
 
+# Example 9: With an array of hashes as arguments
+
+class BulkCreateUsersTool < FastMcp::Tool
+  description 'Create multiple user records in the database'
+
+  arguments do
+    required(:users).description('users to create').array(:hash) do
+      required(:username).filled(:string).description('Username')
+      required(:email).filled(:string).description('Email address')
+      optional(:age).filled(:integer, gt?: 0).description('Age in years')
+      optional(:address).hash.description('Address information') do
+        required(:street).filled(:string).description('Street address')
+        optional(:region).maybe(:string).description('Region')
+      end
+    end
+  end
+
+  def call(users:)
+    users.each_with_index.map do |user, index|
+      # Create a user record (simulated here)
+    end
+  end
+end
+
+bulk_create_tool = BulkCreateUsersTool.new
+puts "Tool: #{bulk_create_tool.class.name}"
+puts 'JSON Schema:'
+puts JSON.pretty_generate(bulk_create_tool.class.input_schema_to_json)
+
 # Demonstrate the web search tool
 web_search = WebSearchTool.new
 puts "Tool: #{web_search.class.name}"
