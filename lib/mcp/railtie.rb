@@ -43,7 +43,7 @@ module FastMcp
     end
 
     generators do
-      require "generators/fast_mcp/install/install_generator"
+      require 'generators/fast_mcp/install/install_generator'
     end
   end
 end
