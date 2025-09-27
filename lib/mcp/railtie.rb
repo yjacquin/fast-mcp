@@ -41,5 +41,9 @@ module FastMcp
       path = File.expand_path('../tasks', __dir__)
       Dir.glob("#{path}/**/*.rake").each { |f| load f }
     end
+
+    generators do
+      require "generators/fast_mcp/install/install_generator"
+    end
   end
 end
