@@ -16,9 +16,6 @@ require_relative 'mcp/server'
 require_relative 'mcp/resource'
 require_relative 'mcp/railtie' if defined?(Rails::Railtie)
 
-# Load generators if Rails is available
-require_relative 'generators/fast_mcp/install/install_generator' if defined?(Rails::Generators)
-
 # Require all transport files
 require_relative 'mcp/transports/base_transport'
 Dir[File.join(File.dirname(__FILE__), 'mcp/transports', '*.rb')].each do |file|
