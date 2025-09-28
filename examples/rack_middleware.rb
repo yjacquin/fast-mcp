@@ -64,14 +64,12 @@ class DisplayUserAddressTool < FastMcp::Tool
 
   def call(user:)
     address = user['address']
-    return 'No address provided' unless address.is_a?(Hash)
 
-    street = address['street'] || 'N/A'
+    street = address['street']
     city = address['city'] || 'N/A'
-    state = address['state'] || 'N/A'
-    zip = address['zip'] || 'N/A'
+    state = address['state']
 
-    "Address: #{street}, #{city}, #{state} #{zip}"
+    "Address: #{street}, #{city}, #{state}"
   end
 end
 
