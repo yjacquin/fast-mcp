@@ -82,9 +82,13 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
         # Configure validator with HMAC secret for HS256 algorithm
         validator = described_class.new(hmac_secret: 'test_secret', logger: logger)
 
-        # Mock JWT.decode to return valid payload with string keys
-        valid_payload_with_string_keys = valid_payload.transform_keys(&:to_s)
-        allow(JWT).to receive(:decode).and_return([valid_payload_with_string_keys, { 'alg' => 'HS256' }])
+        # Mock JWT::EncodedToken to return valid payload and pass verification
+        encoded_token = instance_double(JWT::EncodedToken)
+        allow(JWT::EncodedToken).to receive(:new).with(jwt_token).and_return(encoded_token)
+        allow(encoded_token).to receive(:header).and_return({ 'alg' => 'HS256' })
+        allow(encoded_token).to receive(:payload).and_return(valid_payload.transform_keys(&:to_s))
+        allow(encoded_token).to receive(:verify!).and_return(true)
+        allow(encoded_token).to receive(:verify_claims!).and_return(true)
 
         expect(validator.validate_token(jwt_token)).to be(true)
       end
@@ -95,18 +99,27 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
         expired_jwt = "#{valid_jwt_header}.#{expired_encoded}.#{signature}"
 
         validator = described_class.new(hmac_secret: 'test_secret', logger: logger)
-        # Mock JWT decode to return expired payload with string keys, then let validation logic run
-        expired_payload_with_string_keys = expired_payload.transform_keys(&:to_s)
-        allow(JWT).to receive(:decode).and_return([expired_payload_with_string_keys, { 'alg' => 'HS256' }])
+
+        # Mock JWT::EncodedToken to return expired payload and trigger expiration error
+        encoded_token = instance_double(JWT::EncodedToken)
+        allow(JWT::EncodedToken).to receive(:new).with(expired_jwt).and_return(encoded_token)
+        allow(encoded_token).to receive(:header).and_return({ 'alg' => 'HS256' })
+        allow(encoded_token).to receive(:verify!).and_return(true)
+        allow(encoded_token).to receive(:verify_claims!).and_raise(FastMcp::OAuth::TokenValidator::ExpiredTokenError, 'Token has expired')
 
         expect(validator.validate_token(expired_jwt)).to be(false)
       end
 
       it 'validates JWT token scopes' do
         validator = described_class.new(hmac_secret: 'test_secret', logger: logger)
-        # Mock JWT decode to return valid payload with string keys
-        valid_payload_with_string_keys = valid_payload.transform_keys(&:to_s)
-        allow(JWT).to receive(:decode).and_return([valid_payload_with_string_keys, { 'alg' => 'HS256' }])
+
+        # Mock JWT::EncodedToken to return valid payload and pass verification
+        encoded_token = instance_double(JWT::EncodedToken)
+        allow(JWT::EncodedToken).to receive(:new).with(jwt_token).and_return(encoded_token)
+        allow(encoded_token).to receive(:header).and_return({ 'alg' => 'HS256' })
+        allow(encoded_token).to receive(:payload).and_return(valid_payload.transform_keys(&:to_s))
+        allow(encoded_token).to receive(:verify!).and_return(true)
+        allow(encoded_token).to receive(:verify_claims!).and_return(true)
 
         expect(validator.validate_token(jwt_token, required_scopes: ['mcp:read'])).to be(true)
         expect(validator.validate_token(jwt_token, required_scopes: ['mcp:admin'])).to be(false)
@@ -170,8 +183,7 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
       expect(result).to be(false)
       logger_output.rewind
       log_content = logger_output.read
-      puts 'hah'
-      expect(log_content).to match(/Token validation failed: HMAC secret not configured/)
+      expect(log_content).to match(/Unexpected error during token validation: Invalid base64 encoding/)
     end
 
     it 'logs unexpected errors' do

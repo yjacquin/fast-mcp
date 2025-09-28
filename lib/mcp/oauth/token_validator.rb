@@ -72,7 +72,7 @@ module FastMcp
         encoded_token = JWT::EncodedToken.new(token)
 
         !!encoded_token.header
-      rescue JSON::ParserError, JWT::Base64DecodeError
+      rescue JSON::ParserError, JWT::DecodeError
         false
       end
 
@@ -116,7 +116,6 @@ module FastMcp
       end
 
       # Validate token scopes
-      # rubocop:disable Naming/PredicateMethod
       def validate_token_scopes!(token_scopes, required_scopes)
         token_scope_list = extract_scopes(token_scopes)
         required_scope_list = Array(required_scopes)
@@ -125,7 +124,6 @@ module FastMcp
 
         true
       end
-      # rubocop:enable Naming/PredicateMethod
 
       def validate_subject!(token_subject)
         return if @subjects.empty? || @subjects.include?(nil) # Allow any subject if not configured
