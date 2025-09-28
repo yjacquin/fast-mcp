@@ -2,11 +2,11 @@ AllCops:
   NewCops: enable
   TargetRubyVersion: 3.0
   Exclude:
-    - 'vendor/**/*'
-    - 'bin/**/*'
-    - 'tmp/**/*'
-    - 'spec/**/*'  # Temporarily exclude specs to focus on core code
-    - 'examples/rails-demo-app/**/*' # exclude the demo app as it has its own rubocop config
+    - "vendor/**/*"
+    - "bin/**/*"
+    - "tmp/**/*"
+    - "spec/**/*" # Temporarily exclude specs to focus on core code
+    - "examples/rails-demo-app/**/*" # exclude the demo app as it has its own rubocop config
 
   SuggestExtensions: false
 
@@ -39,6 +39,10 @@ Style/StringLiterals:
 Style/SymbolArray:
   EnforcedStyle: brackets
 
+Style/TrailingCommaInArguments:
+  Exclude:
+    - "lib/generators/fast_mcp/install/templates/fast_mcp_initializer.rb"
+
 Style/WordArray:
   Enabled: false
 
@@ -53,7 +57,7 @@ Gemspec/RequireMFA:
 # Lint configuration
 Lint/DuplicateMethods:
   Exclude:
-    - 'lib/mcp/tool.rb'
+    - "lib/mcp/tool.rb"
 
 Lint/AmbiguousOperatorPrecedence:
   Enabled: false
@@ -66,8 +70,8 @@ Style/QuotedSymbols:
 
 Lint/DuplicateBranch:
   Exclude:
-    - 'lib/mcp/tool.rb'
+    - "lib/mcp/tool.rb"
 
 Lint/UselessConstantScoping:
   Exclude:
-    - 'lib/mcp/server.rb'
+    - "lib/mcp/server.rb"
