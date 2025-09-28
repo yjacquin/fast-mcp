@@ -72,7 +72,7 @@ module FastMcp
         encoded_token = JWT::EncodedToken.new(token)
 
         !!encoded_token.header
-      rescue JSON::ParserError
+      rescue JSON::ParserError, JWT::Base64DecodeError
         false
       end
 

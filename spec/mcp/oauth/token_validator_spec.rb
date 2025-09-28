@@ -6,7 +6,6 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
 
   describe '#initialize' do
     it 'initializes with default options' do
-      puts 'heh'
       expect(validator.logger).to eq(logger)
       expect(validator.required_scopes).to eq([])
     end
