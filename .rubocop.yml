@@ -29,6 +29,11 @@ Metrics/CyclomaticComplexity:
 Metrics/PerceivedComplexity:
   Max: 17
 
+Naming/PredicateMethod:
+  AllowedMethods:
+    - "validate_origin"
+    - "remove_resource"
+
 # Style configuration
 Style/Documentation:
   Enabled: false

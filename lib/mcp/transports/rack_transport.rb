@@ -136,7 +136,7 @@ module FastMcp
 
       private
 
-      def validate_client_ip(request)
+      def valid_client_ip?(request)
         client_ip = request.ip
 
         # Check if we're in localhost-only mode
@@ -204,7 +204,7 @@ module FastMcp
       # Handle MCP-specific requests
       def handle_mcp_request(request, env)
         # Validate client IP to ensure it's connecting from allowed sources
-        return forbidden_response('Forbidden: Remote IP not allowed') unless validate_client_ip(request)
+        return forbidden_response('Forbidden: Remote IP not allowed') unless valid_client_ip?(request)
 
         # Validate Origin header to prevent DNS rebinding attacks
         return forbidden_response('Forbidden: Origin validation failed') unless validate_origin(request, env)
