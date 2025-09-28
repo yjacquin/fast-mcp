@@ -25,7 +25,7 @@ FastMcp.mount_in_rails(
   # allowed_origins: ['localhost', '127.0.0.1', '[::1]', 'example.com', /.*\.example\.com/],
   # localhost_only: true, # Set to false to allow connections from other hosts
   # whitelist specific ips to if you want to run on localhost and allow connections from other IPs
-  # allowed_ips: ['127.0.0.1', '::1']
+  # allowed_ips: ['127.0.0.1', '::1'],
   # authenticate: true,       # Uncomment to enable authentication
   # auth_token: 'your-token', # Required if authenticate: true
 ) do |server|
