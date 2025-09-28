@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.6.0] - 2025-09-15
+## [1.6.0] - 2025-09-28
 
 ### Added
 
@@ -20,10 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tool name validation and override for invalid names [#100 @abdelrahmanothman](https://github.com/yjacquin/fast-mcp/pull/100)
 - Typo fixes in sinatra_integration.md [#131 @ilyakamenko](https://github.com/yjacquin/fast-mcp/pull/131) [#102 @anton](https://github.com/yjacquin/fast-mcp/pull/102)
 - Add trailing comma to generated initializer template for better Ruby style [#123 @zachhaitz](https://github.com/yjacquin/fast-mcp/pull/123)
+- Fix missing commas for params hash [#121 @FanaHOVA](https://github.com/yjacquin/fast-mcp/pull/121)
+- RuboCop linting issues resolution [fa6af0b @yjacquin](https://github.com/yjacquin/fast-mcp/commit/fa6af0b)
 
 ### Changed
 
 - Updated GitHub Actions dependencies: checkout v4→v5, download-artifact v4→v5 [#141 #142 @dependabot](https://github.com/yjacquin/fast-mcp/pull/141)
+- Relax Rack version requirements for better compatibility (>= 2.0, < 4.0) [#133 @eproulx](https://github.com/yjacquin/fast-mcp/pull/133)
+- Load generators only when necessary for improved performance [#153 @josevalim](https://github.com/yjacquin/fast-mcp/pull/153)
+- Drop schema compiler to use Dry's built-in functionality [#152 @yjacquin](https://github.com/yjacquin/fast-mcp/pull/152), thanks @redox for the help !
 
 ## [1.5.0] - 2025-06-01
 
