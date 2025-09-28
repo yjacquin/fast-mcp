@@ -62,7 +62,7 @@ module FastMcp
         end
 
         # Basic security validations
-        return forbidden_response('Forbidden: Remote IP not allowed') unless validate_client_ip(request)
+        return forbidden_response('Forbidden: Remote IP not allowed') unless valid_client_ip?(request)
 
         # Construct the resource identifier
         scheme = request.scheme
