@@ -87,7 +87,8 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
           'REMOTE_ADDR' => '127.0.0.1',
           'rack.hijack?' => true,
-          'rack.hijack' => -> {}
+          'rack.hijack' => -> {},
+          'rack.input' => StringIO.new('') # for rack 2.x
         }
 
         # Mock the hijack IO
