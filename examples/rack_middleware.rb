@@ -48,7 +48,7 @@ class CalculateTool < FastMcp::Tool
   end
 end
 
-class DisplayUserAdressTool < FastMcp::Tool
+class DisplayUserAddressTool < FastMcp::Tool
   description 'Display user address'
 
   arguments do
@@ -100,7 +100,7 @@ mcp_app = FastMcp.rack_middleware(
   logger: Logger.new($stdout)
 ) do |server|
   # Register tool classes
-  server.register_tools(GreetTool, CalculateTool, DisplayUserAdressTool)
+  server.register_tools(GreetTool, CalculateTool, DisplayUserAddressTool)
 
   # Register a sample resource
   server.register_resource(HelloWorldResource)
