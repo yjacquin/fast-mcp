@@ -28,8 +28,8 @@ class CalculateTool < FastMcp::Tool
   arguments do
     required(:operation).filled(:string).value(included_in?: %w[add subtract multiply
                                                                 divide]).description('The operation to perform')
-    required(:x).filled(:float).description('The first number')
-    required(:y).filled(:float).description('The second number')
+    required(:x).filled(:integer).description('The first number')
+    required(:y).filled(:integer).description('The second number')
   end
 
   def call(operation:, x:, y:) # rubocop:disable Naming/MethodParameterName
@@ -48,6 +48,32 @@ class CalculateTool < FastMcp::Tool
   end
 end
 
+class DisplayUserAddressTool < FastMcp::Tool
+  description 'Display user address'
+
+  arguments do
+    required(:user).description('The user').hash do
+      required(:name).filled(:string).description('The name of the user')
+      required(:address).description('The address of the user').hash do
+        required(:street).filled(:string).description('The street address')
+        optional(:city).maybe(:string).description('The city')
+        required(:state).filled(:string).description('The state')
+      end
+    end
+  end
+
+  def call(user:)
+    address = user['address']
+
+    street = address['street']
+    city = address['city'] || 'N/A'
+    state = address['state']
+
+    "Address: #{street}, #{city}, #{state}"
+  end
+end
+
+# Define a sample resource
 class HelloWorldResource < FastMcp::Resource
   uri 'file://hello_world'
   resource_name 'Hello World'
@@ -72,7 +98,7 @@ mcp_app = FastMcp.rack_middleware(
   logger: Logger.new($stdout)
 ) do |server|
   # Register tool classes
-  server.register_tools(GreetTool, CalculateTool)
+  server.register_tools(GreetTool, CalculateTool, DisplayUserAddressTool)
 
   # Register a sample resource
   server.register_resource(HelloWorldResource)

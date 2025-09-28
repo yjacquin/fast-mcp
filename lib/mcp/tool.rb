@@ -2,6 +2,8 @@
 
 require 'dry-schema'
 
+Dry::Schema.load_extensions(:json_schema)
+
 # Extend Dry::Schema macros to support description
 module Dry
   module Schema
@@ -62,10 +64,83 @@ module Dry
         def description(text)
           key_name = name.to_sym
           schema_dsl.meta(key_name, :description, text)
+
+          # Mark this hash as having metadata so we know to track nested context
+          @has_metadata = true
           self
+        end
+
+        def hidden(hidden = true) # rubocop:disable Style/OptionalBooleanParameter
+          key_name = name.to_sym
+          schema_dsl.meta(key_name, :hidden, hidden)
+
+          # Mark this hash as having metadata so we know to track nested context
+          @has_metadata = true
+          self
+        end
+
+        # Override call method to manage nested context
+        alias original_call call
+
+        def call(&block)
+          if block
+            # Use current context to track nested context if available
+            context = MetadataContext.current
+            if context
+              context.with_nested(name) do
+                original_call(&block)
+              end
+            else
+              original_call(&block)
+            end
+          else
+            original_call(&block)
+          end
         end
       end
     end
+  end
+end
+
+# Context object for managing nested metadata collection
+class MetadataContext
+  def initialize
+    @metadata = {}
+    @nesting_stack = []
+  end
+
+  attr_reader :metadata
+
+  def store(property_name, meta_key, value)
+    path = current_path + [property_name.to_s]
+    full_path = path.join('.')
+
+    @metadata[full_path] ||= {}
+    @metadata[full_path][meta_key] = value
+  end
+
+  def with_nested(parent_property)
+    @nesting_stack.push(parent_property.to_s)
+    yield
+  ensure
+    @nesting_stack.pop
+  end
+
+  def current_path
+    @nesting_stack.dup
+  end
+
+  # Class method to set/get current context for thread-safe access
+  def self.current
+    Thread.current[:metadata_context]
+  end
+
+  def self.with_context(context)
+    old_context = Thread.current[:metadata_context]
+    Thread.current[:metadata_context] = context
+    yield
+  ensure
+    Thread.current[:metadata_context] = old_context
   end
 end
 
@@ -77,11 +152,107 @@ module Dry
         @meta ||= {}
         @meta[key_name] ||= {}
         @meta[key_name][meta_key] = value
+
+        # Store in current context if available
+        context = MetadataContext.current
+        return unless context
+
+        context.store(key_name, meta_key, value)
       end
 
       def meta_data
         @meta || {}
       end
+    end
+  end
+end
+
+# Schema metadata processor for handling custom predicates in JSON schema output
+class SchemaMetadataProcessor
+  def self.process(schema, collected_metadata = {})
+    return nil unless schema
+
+    base_schema = schema.json_schema.tap { _1.delete(:$schema) }
+    metadata = extract_metadata(schema)
+
+    # Merge traditional metadata with collected nested metadata
+    all_metadata = merge_metadata(metadata, collected_metadata)
+
+    apply_metadata_to_schema(base_schema, all_metadata)
+  end
+
+  private_class_method def self.extract_metadata(schema)
+    schema_dsl = schema.instance_variable_get(:@schema_dsl)
+    schema_dsl&.meta_data || {}
+  end
+
+  private_class_method def self.merge_metadata(traditional, collected)
+    # Remove internal keys from collected metadata
+    filtered_collected = collected.reject { |key, _| key.to_s.start_with?('_') }
+
+    # Start with traditional metadata
+    merged = traditional.dup
+
+    # Add collected metadata with full paths
+    filtered_collected.each do |path, metadata|
+      merged[path] = metadata
+    end
+
+    merged
+  end
+
+  private_class_method def self.apply_metadata_to_schema(base_schema, metadata)
+    return base_schema if !base_schema[:properties] || metadata.empty?
+
+    base_schema[:properties] = process_properties_recursively(base_schema[:properties], metadata, [])
+    base_schema[:required] = filter_required_properties(base_schema[:required], base_schema[:properties])
+    base_schema
+  end
+
+  private_class_method def self.process_properties_recursively(properties, metadata, path_prefix = [])
+    filtered_properties = {}
+
+    properties.each do |property_name, property_schema|
+      current_path = (path_prefix + [property_name.to_s]).join('.')
+
+      # Look for metadata using both simple key and full path
+      property_key = property_name.to_sym
+      property_metadata = metadata[property_key] || metadata[current_path]
+
+      # Skip hidden properties entirely
+      next if property_metadata&.dig(:hidden)
+
+      # Add description if present
+      property_schema[:description] = property_metadata[:description] if property_metadata&.dig(:description)
+
+      # Recursively process nested object properties
+      if property_schema[:type] == 'object' && property_schema[:properties]
+        nested_path = path_prefix + [property_name.to_s]
+        property_schema[:properties] =
+          process_properties_recursively(property_schema[:properties], metadata, nested_path)
+        property_schema[:required] =
+          filter_required_properties(property_schema[:required], property_schema[:properties])
+      # Recursively process array items with object properties
+      elsif property_schema[:type] == 'array' && property_schema.dig(:items, :type) == 'object' &&
+            property_schema.dig(:items, :properties)
+        nested_path = path_prefix + [property_name.to_s]
+        property_schema[:items][:properties] =
+          process_properties_recursively(property_schema[:items][:properties], metadata, nested_path)
+        property_schema[:items][:required] =
+          filter_required_properties(property_schema[:items][:required], property_schema[:items][:properties])
+      end
+
+      filtered_properties[property_name] = property_schema
+    end
+
+    filtered_properties
+  end
+
+  private_class_method def self.filter_required_properties(required_array, properties)
+    return [] unless required_array
+
+    required_array.select do |required_prop|
+      properties.key?(required_prop.to_sym) || properties.key?(required_prop.to_s)
     end
   end
 end
@@ -116,7 +287,13 @@ module FastMcp
       end
 
       def arguments(&block)
-        @input_schema = Dry::Schema.JSON(&block)
+        @metadata_context = MetadataContext.new
+
+        @input_schema = MetadataContext.with_context(@metadata_context) do
+          Dry::Schema.JSON(&block)
+        end
+
+        @collected_metadata = @metadata_context.metadata
       end
 
       def input_schema
@@ -154,10 +331,7 @@ module FastMcp
       end
 
       def input_schema_to_json
-        return nil unless @input_schema
-
-        compiler = SchemaCompiler.new
-        compiler.process(@input_schema)
+        SchemaMetadataProcessor.process(@input_schema, @collected_metadata || {})
       end
     end
 
@@ -200,651 +374,6 @@ module FastMcp
       # When calling the tool, its metadata can be altered to be returned in response.
       # We return the altered metadata with the tool's result
       [call(**args), _meta]
-    end
-  end
-
-  # Module for handling schema metadata
-  module SchemaMetadataExtractor
-    # Extract metadata from a schema
-    def extract_metadata_from_schema(schema)
-      # a deeply-assignable hash, the default value of a key is {}
-      metadata = Hash.new { |h, k| h[k] = Hash.new(&h.default_proc) }
-
-      # Extract descriptions from the top-level schema
-      if schema.respond_to?(:schema_dsl) && schema.schema_dsl.respond_to?(:meta_data)
-        schema.schema_dsl.meta_data.each do |key, meta|
-          metadata[key.to_s][:description] = meta[:description] if meta[:description]
-          metadata[key.to_s][:hidden] = meta[:hidden]
-        end
-      end
-
-      # Extract metadata from nested schemas using AST
-      schema.rules.each_value do |rule|
-        next unless rule.respond_to?(:ast)
-
-        extract_metadata_from_ast(rule.ast, metadata)
-      end
-
-      metadata
-    end
-
-    # Extract metadata from AST
-    def extract_metadata_from_ast(ast, metadata, parent_key = nil)
-      return unless ast.is_a?(Array)
-
-      process_key_node(ast, metadata, parent_key) if ast[0] == :key
-      process_set_node(ast, metadata, parent_key) if ast[0] == :set
-      process_and_node(ast, metadata, parent_key) if ast[0] == :and
-    end
-
-    # Process a key node in the AST
-    def process_key_node(ast, metadata, parent_key)
-      return unless ast[1].is_a?(Array) && ast[1].size >= 2
-
-      key = ast[1][0]
-      full_key = parent_key ? "#{parent_key}.#{key}" : key.to_s
-
-      # Process nested AST
-      extract_metadata_from_ast(ast[1][1], metadata, full_key) if ast[1][1].is_a?(Array)
-    end
-
-    # Process a set node in the AST
-    def process_set_node(ast, metadata, parent_key)
-      return unless ast[1].is_a?(Array)
-
-      ast[1].each do |set_node|
-        extract_metadata_from_ast(set_node, metadata, parent_key)
-      end
-    end
-
-    # Process an and node in the AST
-    def process_and_node(ast, metadata, parent_key)
-      return unless ast[1].is_a?(Array)
-
-      # Process each child node
-      ast[1].each do |and_node|
-        extract_metadata_from_ast(and_node, metadata, parent_key)
-      end
-
-      # Process nested properties
-      process_nested_properties(ast, metadata, parent_key)
-    end
-
-    # Process nested properties in an and node
-    def process_nested_properties(ast, metadata, parent_key)
-      ast[1].each do |node|
-        next unless node[0] == :key && node[1].is_a?(Array) && node[1][1].is_a?(Array) && node[1][1][0] == :and
-
-        key_name = node[1][0]
-        nested_key = parent_key ? "#{parent_key}.#{key_name}" : key_name.to_s
-
-        process_nested_schema_ast(node[1][1], metadata, nested_key)
-      end
-    end
-
-    # Process a nested schema
-    def process_nested_schema_ast(ast, metadata, nested_key)
-      return unless ast[1].is_a?(Array)
-
-      ast[1].each do |subnode|
-        next unless subnode[0] == :set && subnode[1].is_a?(Array)
-
-        subnode[1].each do |set_node|
-          next unless set_node[0] == :and && set_node[1].is_a?(Array)
-
-          process_nested_keys(set_node, metadata, nested_key)
-        end
-      end
-    end
-
-    # Process nested keys in a schema
-    def process_nested_keys(set_node, metadata, nested_key)
-      set_node[1].each do |and_node|
-        next unless and_node[0] == :key && and_node[1].is_a?(Array) && and_node[1].size >= 2
-
-        nested_field = and_node[1][0]
-        nested_path = "#{nested_key}.#{nested_field}"
-
-        extract_metadata(and_node, metadata, nested_path)
-      end
-    end
-
-    # Extract metadata from a node
-    def extract_metadata(and_node, metadata, nested_path)
-      return unless and_node[1][1].is_a?(Array) && and_node[1][1][1].is_a?(Array)
-
-      and_node[1][1][1].each do |meta_node|
-        next unless meta_node[0] == :meta && meta_node[1].is_a?(Hash) && meta_node[1][:description]
-
-        metadata[nested_path] = meta_node[1][:description]
-      end
-    end
-  end
-
-  # Module for handling rule type detection
-  module RuleTypeDetector
-    # Check if a rule is for a hash type
-    def hash_type?(rule)
-      return true if direct_hash_predicate?(rule) || nested_hash_predicate?(rule)
-
-      false
-    end
-
-    # Check for direct hash predicate
-    def direct_hash_predicate?(rule)
-      return false unless rule.is_a?(Dry::Logic::Operations::And)
-
-      rule.rules.any? { |r| r.respond_to?(:name) && r.name == :hash? }
-    end
-
-    # Check for nested hash predicate
-    def nested_hash_predicate?(rule)
-      if rule.is_a?(Dry::Logic::Operations::Key) && rule.rule.is_a?(Dry::Logic::Operations::And)
-        return rule.rule.rules.any? { |r| r.respond_to?(:name) && r.name == :hash? }
-      end
-
-      if rule.respond_to?(:right) && rule.right.is_a?(Dry::Logic::Operations::Key) &&
-         rule.right.rule.is_a?(Dry::Logic::Operations::And)
-        return rule.right.rule.rules.any? { |r| r.respond_to?(:name) && r.name == :hash? }
-      end
-
-      false
-    end
-
-    # Check if a rule is for an array type
-    def array_type?(rule)
-      rule.is_a?(Dry::Logic::Operations::And) &&
-        rule.rules.any? { |r| r.respond_to?(:name) && r.name == :array? }
-    end
-  end
-
-  # Module for handling predicates
-  module PredicateHandler
-    # Extract predicates from a rule
-    def extract_predicates(rule, key, properties = nil)
-      properties ||= @json_schema[:properties]
-
-      case rule
-      when Dry::Logic::Operations::And
-        rule.rules.each { |r| extract_predicates(r, key, properties) }
-      when Dry::Logic::Operations::Implication
-        extract_predicates(rule.right, key, properties)
-      when Dry::Logic::Operations::Key
-        extract_predicates(rule.rule, key, properties)
-      when Dry::Logic::Operations::Set
-        rule.rules.each { |r| extract_predicates(r, key, properties) }
-      else
-        process_predicate(rule, key, properties) if rule.respond_to?(:name)
-      end
-    end
-
-    # Process a predicate
-    def process_predicate(rule, key, properties)
-      predicate_name = rule.name
-      args = extract_predicate_args(rule)
-      add_predicate_description(predicate_name, args, key, properties)
-    end
-
-    # Extract arguments from a predicate
-    def extract_predicate_args(rule)
-      if rule.respond_to?(:args) && !rule.args.nil?
-        rule.args
-      elsif rule.respond_to?(:predicate) && rule.predicate.respond_to?(:arguments)
-        rule.predicate.arguments
-      else
-        []
-      end
-    end
-
-    # Add predicate description to schema
-    def add_predicate_description(predicate_name, args, key_name, properties)
-      property = properties[key_name]
-
-      case predicate_name
-      when :array?, :bool?, :decimal?, :float?, :hash?, :int?, :nil?, :str?
-        add_basic_type(predicate_name, property)
-      when :date?, :date_time?, :time?
-        add_date_time_format(predicate_name, property)
-      when :min_size?, :max_size?, :included_in?
-        add_string_constraint(predicate_name, args, property)
-      when :filled?
-        # Already handled by the required array
-      when :uri?
-        property[:format] = 'uri'
-      when :uuid_v1?, :uuid_v2?, :uuid_v3?, :uuid_v4?, :uuid_v5?
-        add_uuid_pattern(predicate_name, property)
-      when :gt?, :gteq?, :lt?, :lteq?
-        add_numeric_constraint(predicate_name, args, property)
-      when :odd?, :even?
-        add_number_constraint(predicate_name, property)
-      when :format?
-        add_format_constraint(args, property)
-      when :key?
-        nil
-      end
-    end
-  end
-
-  # Module for handling basic type predicates
-  module BasicTypePredicateHandler
-    # Add basic type to schema
-    def add_basic_type(predicate_name, property)
-      case predicate_name
-      when :array?
-        property[:type] = 'array'
-        property[:items] = {}
-      when :bool?
-        property[:type] = 'boolean'
-      when :int?, :decimal?, :float?
-        property[:type] = 'number'
-      when :hash?
-        property[:type] = 'object'
-      when :nil?
-        property[:type] = 'null'
-      when :str?
-        property[:type] = 'string'
-      end
-    end
-
-    # Add string constraint to schema
-    def add_string_constraint(predicate_name, args, property)
-      case predicate_name
-      when :min_size?
-        property[:minLength] = args[0].to_i
-      when :max_size?
-        property[:maxLength] = args[0].to_i
-      when :included_in?
-        property[:enum] = args[0].to_a
-      end
-    end
-
-    # Add numeric constraint to schema
-    def add_numeric_constraint(predicate_name, args, property)
-      case predicate_name
-      when :gt?
-        property[:exclusiveMinimum] = args[0]
-      when :gteq?
-        property[:minimum] = args[0]
-      when :lt?
-        property[:exclusiveMaximum] = args[0]
-      when :lteq?
-        property[:maximum] = args[0]
-      end
-    end
-  end
-
-  # Module for handling format predicates
-  module FormatPredicateHandler
-    # Add date/time format to schema
-    def add_date_time_format(predicate_name, property)
-      property[:type] = 'string'
-      case predicate_name
-      when :date?
-        property[:format] = 'date'
-      when :date_time?
-        property[:format] = 'date-time'
-      when :time?
-        property[:format] = 'time'
-      end
-    end
-
-    # Add UUID pattern to schema
-    def add_uuid_pattern(predicate_name, property)
-      version = predicate_name.to_s.split('_').last[1].to_i
-      property[:pattern] = if version == 4
-                             '^[a-f0-9]{8}-?[a-f0-9]{4}-?4[a-f0-9]{3}-?[89ab][a-f0-9]{3}-?[a-f0-9]{12}$'
-                           else
-                             "^[0-9A-F]{8}-[0-9A-F]{4}-#{version}[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$"
-                           end
-    end
-
-    # Add number constraint to schema
-    def add_number_constraint(predicate_name, property)
-      property[:type] = 'integer'
-      case predicate_name
-      when :odd?
-        property[:not] = { multipleOf: 2 }
-      when :even?
-        property[:multipleOf] = 2
-      end
-    end
-
-    # Add format constraint to schema
-    def add_format_constraint(args, property)
-      return unless args[0].is_a?(Symbol)
-
-      case args[0]
-      when :date_time
-        property[:format] = 'date-time'
-      when :date
-        property[:format] = 'date'
-      when :time
-        property[:format] = 'time'
-      when :email
-        property[:format] = 'email'
-      when :uri
-        property[:format] = 'uri'
-      end
-    end
-  end
-
-  # Module for handling nested rules
-  module NestedRuleHandler
-    # Extract nested rules from a rule
-    def extract_nested_rules(rule)
-      nested_rules = {}
-
-      case rule
-      when Dry::Logic::Operations::And
-        extract_nested_rules_from_and(rule, nested_rules)
-      when Dry::Logic::Operations::Implication
-        extract_nested_rules_from_implication(rule, nested_rules)
-      when Dry::Logic::Operations::Key
-        extract_nested_rules_from_and(rule.rule, nested_rules) if rule.rule.is_a?(Dry::Logic::Operations::And)
-      end
-
-      nested_rules
-    end
-
-    # Extract nested rules from an And operation
-    def extract_nested_rules_from_and(rule, nested_rules)
-      # Look for Set operations directly in the rule
-      set_op = rule.rules.find { |r| r.is_a?(Dry::Logic::Operations::Set) }
-
-      if set_op
-        process_set_operation(set_op, nested_rules)
-        return
-      end
-
-      # If no direct Set operation, look for Key operations in the rule structure
-      key_ops = rule.rules.select { |r| r.is_a?(Dry::Logic::Operations::Key) }
-
-      key_ops.each do |key_op|
-        next unless key_op.rule.is_a?(Dry::Logic::Operations::And)
-
-        # Look for Set operations in the Key operation's rule
-        set_op = key_op.rule.rules.find { |r| r.is_a?(Dry::Logic::Operations::Set) }
-        process_set_operation(set_op, nested_rules) if set_op
-
-        # Also look for direct predicates
-        key_op.rule.rules.each do |r|
-          if r.respond_to?(:name) && r.name != :hash?
-            nested_key = key_op.path
-            nested_rules[nested_key] = key_op.rule
-          end
-        end
-      end
-    end
-
-    # Extract nested rules from an Implication operation
-    def extract_nested_rules_from_implication(rule, nested_rules)
-      # For optional fields (Implication), we need to check the right side
-      if rule.right.is_a?(Dry::Logic::Operations::Key)
-        extract_from_implication_key(rule.right, nested_rules)
-      elsif rule.right.is_a?(Dry::Logic::Operations::And)
-        extract_from_implication_and(rule.right, nested_rules)
-      end
-    end
-
-    # Extract from implication key
-    def extract_from_implication_key(key_rule, nested_rules)
-      return unless key_rule.rule.is_a?(Dry::Logic::Operations::And)
-
-      # Look for Set operations directly in the rule
-      set_op = key_rule.rule.rules.find { |r| r.is_a?(Dry::Logic::Operations::Set) }
-      process_set_operation(set_op, nested_rules) if set_op
-    end
-
-    # Extract from implication and
-    def extract_from_implication_and(and_rule, nested_rules)
-      # Look for Set operations directly in the right side
-      set_op = and_rule.rules.find { |r| r.is_a?(Dry::Logic::Operations::Set) }
-
-      if set_op
-        process_set_operation(set_op, nested_rules)
-        return
-      end
-
-      # If no direct Set operation, look for Key operations in the rule structure
-      key_op = and_rule.rules.find { |r| r.is_a?(Dry::Logic::Operations::Key) }
-      return unless key_op && key_op.rule.is_a?(Dry::Logic::Operations::And)
-
-      # Look for Set operations in the Key operation's rule
-      set_op = key_op.rule.rules.find { |r| r.is_a?(Dry::Logic::Operations::Set) }
-      process_set_operation(set_op, nested_rules) if set_op
-    end
-
-    # Process a set operation
-    def process_set_operation(set_op, nested_rules)
-      # Process each rule in the Set operation
-      set_op.rules.each do |set_rule|
-        next unless set_rule.is_a?(Dry::Logic::Operations::And) ||
-                    set_rule.is_a?(Dry::Logic::Operations::Implication)
-
-        # For Implication (optional fields), we need to check the right side
-        if set_rule.is_a?(Dry::Logic::Operations::Implication)
-          process_nested_rule(set_rule.right, nested_rules, true)
-        else
-          process_nested_rule(set_rule, nested_rules, false)
-        end
-      end
-    end
-
-    # Process a nested rule
-    def process_nested_rule(rule, nested_rules, is_optional)
-      # Find the key operation which contains the nested key name
-      nested_key_op = find_nested_key_op(rule)
-      return unless nested_key_op
-
-      # Get the nested key name
-      nested_key = nested_key_op.respond_to?(:path) ? nested_key_op.path : nil
-      return unless nested_key
-
-      # Add to nested rules
-      add_to_nested_rules(nested_key, nested_key_op, nested_rules, is_optional)
-    end
-
-    # Find nested key operation
-    def find_nested_key_op(rule)
-      if rule.is_a?(Dry::Logic::Operations::And)
-        rule.rules.find { |r| r.is_a?(Dry::Logic::Operations::Key) }
-      elsif rule.is_a?(Dry::Logic::Operations::Key)
-        rule
-      end
-    end
-
-    # Add to nested rules
-    def add_to_nested_rules(nested_key, nested_key_op, nested_rules, is_optional)
-      nested_rules[nested_key] = if is_optional
-                                   # For optional fields, create an Implication wrapper
-                                   create_implication(nested_key_op.rule)
-                                 else
-                                   nested_key_op.rule
-                                 end
-    end
-
-    # Create implication
-    def create_implication(rule)
-      # We don't need to create a new Key operation, just use the existing rule
-      Dry::Logic::Operations::Implication.new(
-        Dry::Logic::Rule.new(proc { true }), # Always true condition
-        rule
-      )
-    end
-  end
-
-  # SchemaCompiler class for converting Dry::Schema to JSON Schema
-  class SchemaCompiler
-    include SchemaMetadataExtractor
-    include RuleTypeDetector
-    include PredicateHandler
-    include BasicTypePredicateHandler
-    include FormatPredicateHandler
-    include NestedRuleHandler
-
-    def initialize
-      @json_schema = {
-        type: 'object',
-        properties: {},
-        required: []
-      }
-    end
-
-    attr_reader :json_schema
-
-    def process(schema)
-      # Reset schema for each process call
-      @json_schema = {
-        type: 'object',
-        properties: {},
-        required: []
-      }
-
-      # Store the schema for later use
-      @schema = schema
-
-      # Extract metadata from the schema
-      @metadata = extract_metadata_from_schema(schema)
-
-      # Process each rule in the schema
-      schema.rules.each do |key, rule|
-        process_rule(key, rule)
-      end
-
-      # Remove empty required array
-      @json_schema.delete(:required) if @json_schema[:required].empty?
-
-      @json_schema
-    end
-
-    def process_rule(key, rule)
-      # Skip if this property is hidden
-      return if @metadata.dig(key.to_s, :hidden) == true
-
-      # Initialize property if it doesn't exist
-      @json_schema[:properties][key] ||= {}
-
-      # Add to required array if not optional
-      @json_schema[:required] << key.to_s unless rule.is_a?(Dry::Logic::Operations::Implication)
-
-      # Process predicates to determine type and constraints
-      extract_predicates(rule, key)
-
-      # Add description if available
-      description = @metadata.dig(key.to_s, :description)
-      @json_schema[:properties][key][:description] = description unless description && description.empty?
-
-      # Check if this is a hash type
-      is_hash = hash_type?(rule)
-
-      # Override type for hash types - do this AFTER extract_predicates
-      return unless is_hash
-
-      @json_schema[:properties][key][:type] = 'object'
-      # Process nested schema if this is a hash type
-      process_nested_schema(key, rule)
-    end
-
-    def process_nested_schema(key, rule)
-      # Extract nested schema structure
-      nested_rules = extract_nested_rules(rule)
-      return if nested_rules.empty?
-
-      # Initialize nested properties
-      @json_schema[:properties][key][:properties] ||= {}
-      @json_schema[:properties][key][:required] ||= []
-
-      # Process each nested rule
-      nested_rules.each do |nested_key, nested_rule|
-        process_nested_property(key, nested_key, nested_rule)
-      end
-
-      # Remove empty required array
-      return unless @json_schema[:properties][key][:required].empty?
-
-      @json_schema[:properties][key].delete(:required)
-    end
-
-    def process_nested_property(key, nested_key, nested_rule)
-      # Initialize nested property
-      @json_schema[:properties][key][:properties][nested_key] ||= {}
-
-      # Add to required array if not optional
-      unless nested_rule.is_a?(Dry::Logic::Operations::Implication)
-        @json_schema[:properties][key][:required] << nested_key.to_s
-      end
-
-      # Process predicates for nested property
-      extract_predicates(nested_rule, nested_key, @json_schema[:properties][key][:properties])
-
-      # Add description if available for nested property
-      nested_key_path = "#{key}.#{nested_key}"
-      description = @metadata.dig(nested_key_path, :description)
-      unless description && description.empty?
-        @json_schema[:properties][key][:properties][nested_key][:description] = description
-      end
-
-      # Special case for the test with person.first_name and person.last_name
-      if key == :person && [:first_name, :last_name].include?(nested_key)
-        description_text = nested_key == :first_name ? 'First name of the person' : 'Last name of the person'
-        @json_schema[:properties][key][:properties][nested_key][:description] = description_text
-      end
-
-      # Check if this is a nested hash type
-      return unless hash_type?(nested_rule)
-
-      @json_schema[:properties][key][:properties][nested_key][:type] = 'object'
-      # Process deeper nesting
-      process_deeper_nested_schema(key, nested_key, nested_rule)
-    end
-
-    def process_deeper_nested_schema(key, nested_key, nested_rule)
-      # Extract deeper nested schema structure
-      deeper_nested_rules = extract_nested_rules(nested_rule)
-      return if deeper_nested_rules.empty?
-
-      # Initialize deeper nested properties
-      @json_schema[:properties][key][:properties][nested_key][:properties] ||= {}
-      @json_schema[:properties][key][:properties][nested_key][:required] ||= []
-
-      # Process each deeper nested rule
-      deeper_nested_rules.each do |deeper_key, deeper_rule|
-        process_deeper_nested_property(key, nested_key, deeper_key, deeper_rule)
-      end
-
-      # Remove empty required array
-      return unless @json_schema[:properties][key][:properties][nested_key][:required].empty?
-
-      @json_schema[:properties][key][:properties][nested_key].delete(:required)
-    end
-
-    def process_deeper_nested_property(key, nested_key, deeper_key, deeper_rule)
-      # Initialize deeper nested property
-      @json_schema[:properties][key][:properties][nested_key][:properties][deeper_key] ||= {}
-
-      # Add to required array if not optional
-      unless deeper_rule.is_a?(Dry::Logic::Operations::Implication)
-        @json_schema[:properties][key][:properties][nested_key][:required] << deeper_key.to_s
-      end
-
-      # Process predicates for deeper nested property
-      extract_predicates(
-        deeper_rule,
-        deeper_key,
-        @json_schema[:properties][key][:properties][nested_key][:properties]
-      )
-
-      # Add description if available in the deeper nested schema
-      if deeper_rule.respond_to?(:schema) &&
-         deeper_rule.schema.respond_to?(:schema_dsl) &&
-         deeper_rule.schema.schema_dsl.respond_to?(:meta_data)
-
-        meta_data = deeper_rule.schema.schema_dsl.meta_data
-        if meta_data.key?(deeper_key) && meta_data[deeper_key].key?(:description)
-          @json_schema[:properties][key][:properties][nested_key][:properties][deeper_key][:description] =
-            meta_data[deeper_key][:description]
-        end
-      end
     end
   end
 end
