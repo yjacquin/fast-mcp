@@ -121,8 +121,6 @@ module FastMcp
         required_scope_list = Array(required_scopes)
         missing_scopes = required_scope_list - token_scope_list
         raise InvalidScopeError, "Missing required scopes: #{missing_scopes.join(', ')}" unless missing_scopes.empty?
-
-        true
       end
 
       def validate_subject!(token_subject)

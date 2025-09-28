@@ -153,7 +153,7 @@ module FastMcp
       end
 
       # Validate the Origin header to prevent DNS rebinding attacks
-      def validate_origin(request, env)
+      def valid_origin?(request, env)
         origin = env['HTTP_ORIGIN']
 
         # If no origin header is present, check the referer or host
@@ -211,7 +211,7 @@ module FastMcp
         return forbidden_response('Forbidden: Remote IP not allowed') unless valid_client_ip?(request)
 
         # Validate Origin header to prevent DNS rebinding attacks
-        return forbidden_response('Forbidden: Origin validation failed') unless validate_origin(request, env)
+        return forbidden_response('Forbidden: Origin validation failed') unless valid_origin?(request, env)
 
         # Get the appropriate server for this request
         request_server = get_server_for_request(request, env)
