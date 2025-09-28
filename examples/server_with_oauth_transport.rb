@@ -233,7 +233,10 @@ if __FILE__ == $PROGRAM_NAME
   puts '        -H "Accept: application/json" \\'
   puts '        -H "MCP-Protocol-Version: 2025-06-18" \\'
   puts '        -X POST http://localhost:3001/mcp \\'
-  puts '        -d \'{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}\''
+  puts '        -d \'{\' \\
+        \'"jsonrpc":"2.0","method":"initialize",\'\\
+        \'"params":{"capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},\'\\
+        \'"id":1}\''
   puts ''
   puts '   # List available tools (requires tools scope)'
   puts "   curl -H \"Authorization: Bearer #{ADMIN_TOKEN}\" \\"
@@ -257,7 +260,10 @@ if __FILE__ == $PROGRAM_NAME
   puts '        -H "Accept: application/json" \\'
   puts '        -H "MCP-Protocol-Version: 2025-06-18" \\'
   puts '        -X POST http://localhost:3001/mcp \\'
-  puts '        -d \'{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_files","arguments":{"directory":"."}},"id":1}\''
+  puts '        -d \'{\' \\
+        \'"jsonrpc":"2.0","method":"tools/call",\'\\
+        \'"params":{"name":"list_files","arguments":{"directory":"."}},\'\\
+        \'"id":1}\''
   puts ''
   puts '4. Error Testing (demonstrating OAuth 2.1 error responses):'
   puts ''

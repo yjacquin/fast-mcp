@@ -549,7 +549,7 @@ module FastMcp
                          .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
 
         # Validate protocol version
-        unless validate_protocol_version(headers)
+        unless valid_protocol_version?(headers)
           version = headers['mcp-protocol-version']
           error_response = protocol_version_error_response(version)
           return [400, { 'Content-Type' => 'application/json' }, [JSON.generate(error_response)]]

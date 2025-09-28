@@ -7,23 +7,27 @@ Fast MCP provides comprehensive security features for protecting your MCP server
 ## Security Layers
 
 ### 1. Network Security
+
 - IP address restrictions
 - Origin header validation
 - DNS rebinding protection
 - HTTPS enforcement
 
 ### 2. Authentication
+
 - Token-based authentication
 - OAuth 2.1 integration
 - JWT validation
 - Opaque token support
 
 ### 3. Authorization
+
 - Scope-based access control
 - Method-level permissions
 - Resource-level filtering
 
 ### 4. Protocol Security
+
 - Version enforcement
 - Secure session management
 - Request validation
@@ -316,7 +320,7 @@ transport = FastMcp::Transports::StreamableHttpTransport.new(
 class VersionEnforcedTransport < FastMcp::Transports::StreamableHttpTransport
   private
 
-  def validate_protocol_version(headers)
+  def valid_protocol_version?(headers)
     version = headers['mcp-protocol-version']
 
     # Allow missing version for backward compatibility
@@ -405,6 +409,7 @@ transport = FastMcp::Transports::StreamableHttpTransport.new(
 ## Production Security Checklist
 
 ### Infrastructure
+
 - [ ] HTTPS enforced for all connections
 - [ ] TLS 1.2+ required
 - [ ] Valid SSL certificates installed
@@ -412,6 +417,7 @@ transport = FastMcp::Transports::StreamableHttpTransport.new(
 - [ ] Load balancer security configured
 
 ### Authentication & Authorization
+
 - [ ] Strong authentication tokens (256+ bits entropy)
 - [ ] OAuth 2.1 properly configured
 - [ ] JWT validation working
@@ -419,18 +425,21 @@ transport = FastMcp::Transports::StreamableHttpTransport.new(
 - [ ] Token expiration configured
 
 ### Network Security
+
 - [ ] Origin header validation enabled
 - [ ] DNS rebinding protection active
 - [ ] Firewall rules configured
 - [ ] VPN/private network access only (if required)
 
 ### Monitoring & Logging
+
 - [ ] Security events logged
 - [ ] Failed authentication attempts monitored
 - [ ] Rate limiting implemented
 - [ ] Intrusion detection configured
 
 ### Application Security
+
 - [ ] Protocol version enforcement active
 - [ ] Security headers added
 - [ ] Input validation implemented
@@ -571,17 +580,20 @@ groups:
 ### Security Incident Playbook
 
 1. **Detection**
+
    - Monitor logs for unusual patterns
    - Set up alerts for security events
    - Regular security scans
 
 2. **Response**
+
    - Isolate affected systems
    - Revoke compromised tokens
    - Update authentication credentials
    - Notify stakeholders
 
 3. **Recovery**
+
    - Apply security patches
    - Update configurations
    - Restore services

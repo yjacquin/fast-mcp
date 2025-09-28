@@ -232,7 +232,8 @@ module FastMcp
         return unless token_audiences.include?(@resource_identifier)
 
         @logger.warn(
-          "Audience binding validation failed: token audience #{token_audiences} does not include resource #{@resource_identifier}"
+          "Audience binding validation failed: token audience #{token_audiences} " \
+          "does not include resource #{@resource_identifier}"
         )
         raise UnauthorizedError, 'Token not intended for this resource server'
       end

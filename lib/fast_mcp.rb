@@ -31,6 +31,7 @@ require_relative 'mcp/oauth/resource_server'
 require_relative 'mcp/version'
 
 # Convenience method to create a Rack middleware
+# rubocop:disable Metrics/ModuleLength
 module FastMcp
   # Create a Rack middleware for the MCP server
   # @param app [#call] The Rack application
@@ -246,3 +247,4 @@ module FastMcp
     self.server.notify_resource_updated(uri)
   end
 end
+# rubocop:enable Metrics/ModuleLength

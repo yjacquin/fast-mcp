@@ -41,9 +41,9 @@ module FastMcp
 
         # Determine token type and validate accordingly
         if jwt_token?(token)
-          validate_jwt_token(token, required_scopes: required_scopes)
+          valid_jwt_token?(token, required_scopes: required_scopes)
         else
-          validate_opaque_token(token, required_scopes: required_scopes)
+          valid_opaque_token?(token, required_scopes: required_scopes)
         end
       rescue InvalidTokenError, ExpiredTokenError, InvalidScopeError => e
         @logger.warn("Token validation failed: #{e.message}")
@@ -77,7 +77,7 @@ module FastMcp
       end
 
       # Validate JWT token
-      def validate_jwt_token(token, required_scopes: nil)
+      def valid_jwt_token?(token, required_scopes: nil)
         encoded_token = JWT::EncodedToken.new(token)
         verify_token_signature!(encoded_token)
         verify_token_claims!(encoded_token)
@@ -90,7 +90,7 @@ module FastMcp
       end
 
       # Validate opaque token using external validator
-      def validate_opaque_token(token, required_scopes: nil)
+      def valid_opaque_token?(token, required_scopes: nil)
         return false unless @opaque_token_validator
 
         result = @opaque_token_validator.call(token)
@@ -116,6 +116,7 @@ module FastMcp
       end
 
       # Validate token scopes
+      # rubocop:disable Naming/PredicateMethod
       def validate_token_scopes!(token_scopes, required_scopes)
         token_scope_list = extract_scopes(token_scopes)
         required_scope_list = Array(required_scopes)
@@ -124,6 +125,7 @@ module FastMcp
 
         true
       end
+      # rubocop:enable Naming/PredicateMethod
 
       def validate_subject!(token_subject)
         return if @subjects.empty? || @subjects.include?(nil) # Allow any subject if not configured

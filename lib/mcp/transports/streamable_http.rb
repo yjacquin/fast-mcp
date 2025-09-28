@@ -249,11 +249,11 @@ module FastMcp
       # Handle MCP requests at the unified endpoint
       def handle_mcp_request(request, env)
         # Security validations
-        return forbidden_response('Forbidden: Remote IP not allowed') unless validate_client_ip(request)
-        return forbidden_response('Forbidden: Origin validation failed') unless validate_origin(request, env)
+        return forbidden_response('Forbidden: Remote IP not allowed') unless valid_client_ip?(request)
+        return forbidden_response('Forbidden: Origin validation failed') unless valid_origin?(request, env)
 
         # Validate protocol version (required in MCP 2025-06-18)
-        return protocol_version_error unless validate_protocol_version_header(request)
+        return protocol_version_error unless valid_protocol_version_header?(request)
 
         # Get appropriate server for this request
         request_server = get_server_for_request(request, env)
@@ -579,7 +579,7 @@ module FastMcp
       end
 
       # Validate client IP
-      def validate_client_ip(request)
+      def valid_client_ip?(request)
         client_ip = request.ip
 
         if @localhost_only && !@allowed_ips.include?(client_ip)
@@ -591,7 +591,7 @@ module FastMcp
       end
 
       # Validate Origin header (DNS rebinding protection)
-      def validate_origin(request, env)
+      def valid_origin?(request, env)
         origin = env['HTTP_ORIGIN']
         origin = env['HTTP_REFERER'] || request.host if origin.nil? || origin.empty?
 
@@ -634,7 +634,7 @@ module FastMcp
       end
 
       # Validate MCP protocol version header (required in 2025-06-18)
-      def validate_protocol_version_header(request)
+      def valid_protocol_version_header?(request)
         version = request.get_header('HTTP_MCP_PROTOCOL_VERSION')
         return true if version.nil? || version.empty?
 

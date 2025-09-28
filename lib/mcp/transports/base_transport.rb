@@ -43,7 +43,7 @@ module FastMcp
       protected
 
       # Validate the MCP protocol version from headers
-      def validate_protocol_version(headers)
+      def valid_protocol_version?(headers)
         version = headers['mcp-protocol-version']
         return true if version.nil? || version.empty?
 
