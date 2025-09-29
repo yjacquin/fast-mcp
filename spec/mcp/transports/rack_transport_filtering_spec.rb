@@ -5,8 +5,18 @@ require 'rack'
 
 RSpec.describe 'FastMcp::Transports::RackTransport with filtering' do
   let(:server) { FastMcp::Server.new(name: 'test-server', version: '1.0.0', logger: Logger.new(nil)) }
-  let(:app) { ->(_env) { [200, { 'Content-Type' => 'text/plain' }, ['OK']] } }
+  let(:app) { 
+    Rack::Builder.app do
+      run ->(_env) { [200, FastMcp::Transports::RackTransport::Header.new.merge({ 'Content-Type' => 'text/plain' }), ['OK']] }
+    end
+  }
   let(:transport) { FastMcp::Transports::RackTransport.new(app, server) }
+  let(:transport_app) do
+    app = Rack::Builder.new
+    app.use Rack::Lint
+    app.run transport
+    app.to_app
+  end
   
   # Define test tools
   let(:admin_tool) do
@@ -48,18 +58,17 @@ RSpec.describe 'FastMcp::Transports::RackTransport with filtering' do
       end
       
       it 'creates a filtered server for requests' do
-        env = {
-          'PATH_INFO' => '/mcp/messages',
-          'REQUEST_METHOD' => 'POST',
-          'QUERY_STRING' => 'role=user',
-          'REMOTE_ADDR' => '127.0.0.1',
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
-        }
+        request_body = JSON.generate({ jsonrpc: '2.0', method: 'ping', id: 1 })
+        env = Rack::MockRequest.env_for(
+          'http://localhost/mcp/messages?role=user',
+          method: 'POST',
+          input: request_body,
+          'REMOTE_ADDR' => '127.0.0.1'
+        )
         
         # The transport should create a filtered server
         expect(server).to receive(:create_filtered_copy).and_call_original
-        
-        transport.call(env)
+        transport_app.call(env)
       end
     end
     
@@ -71,18 +80,19 @@ RSpec.describe 'FastMcp::Transports::RackTransport with filtering' do
       end
       
       it 'uses server from env when provided' do
-        env = {
-          'PATH_INFO' => '/mcp/messages',
-          'REQUEST_METHOD' => 'POST',
-          'REMOTE_ADDR' => '127.0.0.1',
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
-          FastMcp::Transports::RackTransport::SERVER_ENV_KEY => custom_server
-        }
+        request_body = JSON.generate({ jsonrpc: '2.0', method: 'ping', id: 1 })
+        env = Rack::MockRequest.env_for(
+          'http://localhost/mcp/messages',
+          method: 'POST',
+          input: request_body,
+          'REMOTE_ADDR' => '127.0.0.1'
+        )
+        env[FastMcp::Transports::RackTransport::SERVER_ENV_KEY] = custom_server
         
         # Should use the custom server, not create a filtered copy
         expect(server).not_to receive(:create_filtered_copy)
         
-        transport.call(env)
+        transport_app.call(env)
       end
     end
   end
@@ -112,15 +122,15 @@ RSpec.describe 'FastMcp::Transports::RackTransport with filtering' do
       expect(cache).to be_empty
       
       # After a request, it should have cached a server
-      env = {
-        'PATH_INFO' => '/mcp/messages',
-        'REQUEST_METHOD' => 'POST',
-        'QUERY_STRING' => 'role=user',
-        'REMOTE_ADDR' => '127.0.0.1',
-        'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
-      }
+      request_body = JSON.generate({ jsonrpc: '2.0', method: 'ping', id: 1 })
+      env = Rack::MockRequest.env_for(
+        'http://localhost/mcp/messages?role=user',
+        method: 'POST',
+        input: request_body,
+        'REMOTE_ADDR' => '127.0.0.1'
+      )
       
-      transport.call(env)
+      transport_app.call(env)
       
       # Cache should have one entry
       expect(cache.size).to eq(1)

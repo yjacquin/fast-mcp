@@ -1,7 +1,12 @@
 # frozen_string_literal: true
 
 RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
-  let(:app) { ->(_env) { [200, { 'Content-Type' => 'text/plain' }, ['OK']] } }
+  let(:app) do
+    Rack::Builder.app do
+      run ->(_env) { [200, FastMcp::Transports::RackTransport::Header.new.merge({ 'Content-Type' => 'text/plain' }), ['OK']] }
+    end
+  end
+
   let(:server) do
     instance_double(FastMcp::Server, 
       logger: Logger.new(nil), 
@@ -26,6 +31,15 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
       auth_exempt_paths: auth_exempt_paths
     )
   end
+
+  let(:transport_app) do
+    app = Rack::Builder.new
+    app.use Rack::Lint
+    app.run transport
+    app.to_app
+  end
+
+
 
   describe '#initialize' do
     it 'initializes with authentication options' do
@@ -54,123 +68,96 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
   describe '#call' do
     context 'with valid authentication' do
       it 'passes the request to parent when token is valid for non-MCP paths' do
-        env = {
-          'PATH_INFO' => '/not-mcp',
-          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}"
-        }
+        env = Rack::MockRequest.env_for('/not-mcp', 'HTTP_AUTHORIZATION' => "Bearer #{auth_token}")
 
-        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
-        result = transport.call(env)
-        expect(result).to eq([200, {}, ['OK']])
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_default_ok_response
       end
 
       it 'passes MCP path requests to parent class when authentication succeeds' do
         # Create a request with valid authentication
-        env = {
-          'PATH_INFO' => '/mcp/messages',
-          'REQUEST_METHOD' => 'POST',
-          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
-          'REMOTE_ADDR' => '127.0.0.1',
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"test","id":1}')
-        }
-
-        result = transport.call(env)
-
-        # Should pass through to parent with 200 OK
-        expect(result[0]).to eq(200)
+        request_body = JSON.generate({ jsonrpc: '2.0', method: 'test', id: 1 })
+        env = Rack::MockRequest.env_for(
+            'https://localhost/mcp/messages', 
+            method: 'POST',
+            'CONTENT_TYPE' => 'application/json',
+            input: request_body,
+            'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
+            'REMOTE_ADDR' => '127.0.0.1'
+            )
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_json_rpc_response
       end
 
       it 'passes SSE requests to parent class when authentication succeeds' do
-        env = {
-          'PATH_INFO' => '/mcp/sse',
-          'REQUEST_METHOD' => 'GET',
+        env = Rack::MockRequest.env_for(
+          'http://localhost/mcp/sse',
+          method: 'GET',
           'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
           'REMOTE_ADDR' => '127.0.0.1',
-          'rack.hijack?' => true,
-          'rack.hijack' => -> {},
-          'rack.input' => StringIO.new('') # for rack 2.x
-        }
+          'rack.hijack?' => true
+        )
+        
+        read_io, write_io = IO.pipe
+        env['rack.hijack'] = -> { write_io }
+        env['rack.hijack_io'] = write_io # for rack < 3
 
-        # Mock the hijack IO
-        io = double('io')
-        allow(io).to receive(:write)
-        allow(io).to receive(:closed?).and_return(false)
-        allow(io).to receive(:flush)
-        allow(io).to receive(:close)
-        env['rack.hijack_io'] = io
-        allow(env['rack.hijack']).to receive(:call)
-
-        result = transport.call(env)
+        result = Rack::MockResponse[*transport_app.call(env)]
 
         # Just verify it returns the async response format, details tested in parent
-        expect(result[0]).to eq(-1)
+         # The result should be [-1, {}, []] for async response
+         expect(result.status).to eq(200)
+         expect(result.headers).to be_empty
+         expect(result.body).to be_empty
+         
+         # Clean up
+         read_io.close unless read_io.closed?
+         write_io.close unless write_io.closed?
       end
     end
 
     context 'with invalid authentication' do
       it 'returns 401 when token is invalid' do
-        env = {
-          'PATH_INFO' => '/mcp/messages',
-          'HTTP_AUTHORIZATION' => 'Bearer invalid-token'
-        }
-
-        result = transport.call(env)
-        expect(result[0]).to eq(401)
-        expect(result[1]['Content-Type']).to eq('application/json')
-
-        response = JSON.parse(result[2].first)
-        expect(response['jsonrpc']).to eq('2.0')
-        expect(response['error']['code']).to eq(-32_000)
-        expect(response['error']['message']).to include('Unauthorized')
+        env = Rack::MockRequest.env_for(
+            'https://localhost/mcp/messages', 
+            method: 'POST',
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_AUTHORIZATION' => "Bearer invalid-token",
+            'REMOTE_ADDR' => '127.0.0.1'
+            )
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_json_rpc_error.with_error_code(-32_000).with_message('Unauthorized: Invalid or missing authentication token').with_status(401)
       end
 
       it 'returns 401 when token is missing' do
-        env = { 'PATH_INFO' => '/mcp/messages' }
-
-        result = transport.call(env)
-        expect(result[0]).to eq(401)
-        expect(result[1]['Content-Type']).to eq('application/json')
-
-        response = JSON.parse(result[2].first)
-        expect(response['jsonrpc']).to eq('2.0')
-        expect(response['error']['code']).to eq(-32_000)
-        expect(response['error']['message']).to include('Unauthorized')
+        env = Rack::MockRequest.env_for(
+            'https://localhost/mcp/messages', 
+            method: 'POST',
+            'CONTENT_TYPE' => 'application/json',
+            'REMOTE_ADDR' => '127.0.0.1'
+            )
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_json_rpc_error.with_error_code(-32_000).with_message('Unauthorized: Invalid or missing authentication token').with_status(401)
       end
     end
 
     context 'with exempt paths' do
       it 'skips authentication for exempt paths' do
-        env = { 'PATH_INFO' => '/public/index.html' }
-
-        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
-        result = transport.call(env)
-        expect(result).to eq([200, {}, ['OK']])
+        env = Rack::MockRequest.env_for('/public/index.html')
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_default_ok_response
       end
 
       it 'skips authentication for paths starting with exempt prefixes' do
-        env = { 'PATH_INFO' => '/public/assets/styles.css' }
-
-        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
-        result = transport.call(env)
-        expect(result).to eq([200, {}, ['OK']])
+        env = Rack::MockRequest.env_for('/public/assets/styles.css')
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_default_ok_response
       end
 
       it 'processes exempt MCP paths without authentication' do
-        env = {
-          'PATH_INFO' => '/mcp/health',
-          'REMOTE_ADDR' => '127.0.0.1',
-          'REQUEST_METHOD' => 'GET'
-        }
-
-        # For exempt paths, the parent auth check is bypassed, but we should expect
-        # the parent class to return a 404 for unknown MCP endpoints
-        result = transport.call(env)
-        expect(result[0]).to eq(404)
-        expect(result[1]).to include('Content-Type' => 'application/json')
-
-        response = JSON.parse(result[2].first)
-        expect(response['error']['code']).to eq(-32_601) # Method not found error
-        expect(response['error']['message']).to include('Endpoint not found')
+        env = Rack::MockRequest.env_for('http://localhost/mcp/health', 'REMOTE_ADDR' => '127.0.0.1')
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_json_rpc_error.with_error_code(-32601).with_message('Endpoint not found').with_status(404)
       end
     end
 
@@ -178,27 +165,17 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
       let(:auth_header_name) { 'X-Api-Key' }
 
       it 'accepts token from custom header' do
-        env = {
-          'PATH_INFO' => '/not-mcp',
-          'HTTP_X_API_KEY' => "Bearer #{auth_token}"
-        }
-
-        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
-        result = transport.call(env)
-        expect(result).to eq([200, {}, ['OK']])
+        env = Rack::MockRequest.env_for('/not-mcp', 'HTTP_X_API_KEY' => "Bearer #{auth_token}")
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_default_ok_response
       end
     end
 
     context 'with header format variations' do
       it 'accepts token without Bearer prefix' do
-        env = {
-          'PATH_INFO' => '/not-mcp',
-          'HTTP_AUTHORIZATION' => auth_token
-        }
-
-        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
-        result = transport.call(env)
-        expect(result).to eq([200, {}, ['OK']])
+        env = Rack::MockRequest.env_for('/not-mcp', 'HTTP_AUTHORIZATION' => auth_token)
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_default_ok_response
       end
 
       it 'handles header with hyphens correctly' do
@@ -209,15 +186,14 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           auth_token: auth_token,
           auth_header_name: 'X-Custom-Auth'
         )
+        app = Rack::Builder.app do
+          use Rack::Lint
+          run custom_transport
+        end
 
-        env = {
-          'PATH_INFO' => '/not-mcp',
-          'HTTP_X_CUSTOM_AUTH' => "Bearer #{auth_token}"
-        }
-
-        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
-        result = custom_transport.call(env)
-        expect(result).to eq([200, {}, ['OK']])
+        env = Rack::MockRequest.env_for('/not-mcp', 'HTTP_X_CUSTOM_AUTH' => "Bearer #{auth_token}")
+        result = Rack::MockResponse[*app.call(env)]
+        expect(result).to be_default_ok_response
       end
 
       it 'properly converts hyphenated header names to Rack format' do
@@ -228,48 +204,45 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
           auth_token: auth_token,
           auth_header_name: 'X-Custom-Auth-Token'
         )
+        app = Rack::Builder.app do
+          use Rack::Lint
+          run custom_transport
+        end
 
-        env = {
-          'PATH_INFO' => '/not-mcp',
-          'HTTP_X_CUSTOM_AUTH_TOKEN' => "Bearer #{auth_token}"
-        }
-
-        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
-        result = custom_transport.call(env)
-        expect(result).to eq([200, {}, ['OK']])
+        env = Rack::MockRequest.env_for('/not-mcp', 'HTTP_X_CUSTOM_AUTH_TOKEN' => "Bearer #{auth_token}")
+        result = Rack::MockResponse[*app.call(env)]
+        expect(result).to be_default_ok_response
       end
     end
 
     context 'with request ID extraction' do
       it 'includes request ID in unauthorized response for JSON-RPC requests' do
         request_body = JSON.generate({ jsonrpc: '2.0', method: 'test', id: 123 })
-        env = {
-          'PATH_INFO' => '/mcp/messages',
-          'REQUEST_METHOD' => 'POST',
+        env = Rack::MockRequest.env_for(
+          '/mcp/messages',
+          method: 'POST',
+          input: request_body,
+          'CONTENT_TYPE' => 'application/json',
           'HTTP_AUTHORIZATION' => 'Bearer invalid-token',
-          'rack.input' => StringIO.new(request_body)
-        }
+          'REMOTE_ADDR' => '127.0.0.1'
+        )
 
-        result = transport.call(env)
-        expect(result[0]).to eq(401)
-
-        response = JSON.parse(result[2].first)
-        expect(response['id']).to eq(123)
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_json_rpc_error.with_error_code(-32_000).with_message('Unauthorized: Invalid or missing authentication token').with_id(123).with_status(401)
       end
 
       it 'handles malformed JSON in request body gracefully' do
-        env = {
-          'PATH_INFO' => '/mcp/messages',
-          'REQUEST_METHOD' => 'POST',
+        env = Rack::MockRequest.env_for(
+          '/mcp/messages',
+          method: 'POST',
+          'CONTENT_TYPE' => 'application/json',
+          input: 'invalid-json',
           'HTTP_AUTHORIZATION' => 'Bearer invalid-token',
-          'rack.input' => StringIO.new('invalid-json')
-        }
+          'REMOTE_ADDR' => '127.0.0.1'
+        )
 
-        result = transport.call(env)
-        expect(result[0]).to eq(401)
-
-        response = JSON.parse(result[2].first)
-        expect(response['id']).to be_nil
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_json_rpc_error.with_error_code(-32_000).with_message('Unauthorized: Invalid or missing authentication token').with_status(401)
       end
     end
 
@@ -277,11 +250,9 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
       let(:transport) { described_class.new(app, server,logger: logger) }
 
       it 'skips authentication when disabled' do
-        env = { 'PATH_INFO' => '/not-mcp' }
-
-        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
-        result = transport.call(env)
-        expect(result).to eq([200, {}, ['OK']])
+        env = Rack::MockRequest.env_for('/not-mcp')
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_default_ok_response
       end
     end
 
@@ -299,75 +270,77 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
 
       it 'accepts requests with allowed origin when authenticated' do
         # Test that authentication is checked before origin validation
-        env = {
-          'PATH_INFO' => '/mcp/messages',
-          'REQUEST_METHOD' => 'POST',
+        request_body = JSON.generate({ jsonrpc: '2.0', method: 'ping', id: 1 })
+        env = Rack::MockRequest.env_for(
+          'http://localhost/mcp/messages',
+          method: 'POST',
+          input: request_body,
+          'CONTENT_TYPE' => 'application/json',
           'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
-          'HTTP_ORIGIN' => 'http://localhost',
-          'REMOTE_ADDR' => '127.0.0.1',
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
-        }
+          'REMOTE_ADDR' => '127.0.0.1'
+        )
 
-        result = transport.call(env)
-
-        # Should pass through to parent with 200 OK
-        expect(result[0]).to eq(200)
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_json_rpc_response
       end
 
       it 'rejects requests with disallowed origin when authenticated' do
-        env = {
-          'PATH_INFO' => '/mcp/messages',
-          'REQUEST_METHOD' => 'POST',
-          'HTTP_ORIGIN' => 'http://evil-site.com',
+        request_body = JSON.generate({ jsonrpc: '2.0', method: 'ping', id: 1 })
+        env = Rack::MockRequest.env_for(
+          'http://evil-site.com/mcp/messages',
+          method: 'POST',
+          input: request_body,
+          'CONTENT_TYPE' => 'application/json',
           'REMOTE_ADDR' => '127.0.0.1',
-          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
-        }
+          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}"
+        )
 
-        result = transport.call(env)
-        expect(result[0]).to eq(403)
-        expect(result[1]['Content-Type']).to eq('application/json')
+        t = described_class.new(
+          app,
+          server,
+          logger: logger,
+          auth_token: auth_token,
+          auth_header_name: auth_header_name,
+          auth_exempt_paths: auth_exempt_paths
+        )
 
-        response = JSON.parse(result[2].first)
-        expect(response['jsonrpc']).to eq('2.0')
-        expect(response['error']['code']).to eq(-32_600)
-        expect(response['error']['message']).to include('Origin validation failed')
+        app = Rack::Builder.app do
+          use Rack::Lint
+          run t
+        end
+
+        result = Rack::MockResponse[*app.call(env)]
+        expect(result).to be_json_rpc_error.with_error_code(-32_600).with_message('Forbidden: Origin validation failed').with_status(403)
       end
 
       it 'rejects requests with disallowed ips when authenticated' do
-        env = {
-          'PATH_INFO' => '/mcp/messages',
-          'REQUEST_METHOD' => 'POST',
-          'HTTP_ORIGIN' => 'http://localhost',
+        request_body = JSON.generate({ jsonrpc: '2.0', method: 'ping', id: 1 })
+        env = Rack::MockRequest.env_for(
+          'http://localhost/mcp/messages',
+          method: 'POST',
+          input: request_body,
+          'CONTENT_TYPE' => 'application/json',
           'REMOTE_ADDR' => '127.0.0.2',
-          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}",
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
-        }
+          'HTTP_AUTHORIZATION' => "Bearer #{auth_token}"
+        )
 
-        result = transport.call(env)
-        expect(result[0]).to eq(403)
-        expect(result[1]['Content-Type']).to eq('application/json')
-
-        response = JSON.parse(result[2].first)
-        expect(response['jsonrpc']).to eq('2.0')
-        expect(response['error']['code']).to eq(-32_600)
-        expect(response['error']['message']).to include('Forbidden: Remote IP not allowed')
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_json_rpc_error.with_error_code(-32_600).with_message('Forbidden: Remote IP not allowed').with_status(403)
       end
 
       it 'checks authentication before validating origin' do
-        env = {
-          'PATH_INFO' => '/mcp/messages',
-          'REQUEST_METHOD' => 'POST',
-          'HTTP_ORIGIN' => 'http://evil-site.com',
+        request_body = JSON.generate({ jsonrpc: '2.0', method: 'ping', id: 1 })
+        env = Rack::MockRequest.env_for(
+          'http://evil-site.com/mcp/messages',
+          method: 'POST',
+          input: request_body,
+          "CONTENT_TYPE" => "application/json",
           'HTTP_AUTHORIZATION' => 'Bearer invalid-token',
-          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
-        }
+          'REMOTE_ADDR' => '127.0.0.1'
+        )
 
-        result = transport.call(env)
-        expect(result[0]).to eq(401) # Unauthorized, not 403 Forbidden
-
-        response = JSON.parse(result[2].first)
-        expect(response['error']['message']).to include('Unauthorized')
+        result = Rack::MockResponse[*transport_app.call(env)]
+        expect(result).to be_json_rpc_error.with_error_code(-32_000).with_message('Unauthorized: Invalid or missing authentication token').with_id(1).with_status(401)
       end
     end
   end

@@ -52,7 +52,7 @@ module FastMcp
           }
         )
 
-        [401, { 'Content-Type' => 'application/json' }, [body]]
+        [401, CONTENT_TYPE_JSON_HEADERS.dup, [body]]
       end
 
       def extract_request_id(request)
@@ -60,7 +60,7 @@ module FastMcp
 
         begin
           body = request.body.read
-          request.body.rewind
+          request.body.rewind if request.body.respond_to?(:rewind)
           JSON.parse(body)['id']
         rescue StandardError
           nil
