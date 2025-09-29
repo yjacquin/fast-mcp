@@ -15,19 +15,45 @@ module FastMcp
       DEFAULT_ALLOWED_IPS = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].freeze
       SERVER_ENV_KEY = 'fast_mcp.server'
 
-      SSE_HEADERS = {
-        'Content-Type' => 'text/event-stream',
-        'Cache-Control' => 'no-cache, no-store, must-revalidate',
-        'Connection' => 'keep-alive',
-        'X-Accel-Buffering' => 'no', # For Nginx
-        'Access-Control-Allow-Origin' => '*', # Allow CORS
-        'Access-Control-Allow-Methods' => 'GET, OPTIONS',
-        'Access-Control-Allow-Headers' => 'Content-Type',
-        'Access-Control-Max-Age' => '86400', # 24 hours
-        'Keep-Alive' => 'timeout=600', # 10 minutes timeout
-        'Pragma' => 'no-cache',
-        'Expires' => '0'
-      }.freeze
+      # Define the Header class based on the Rack version
+      if Gem::Version.new(Rack.release) >= Gem::Version.new('3')
+        require 'rack/headers'
+        Header = Rack::Headers
+      else
+        require 'rack/utils'
+        Header = Rack::Utils::HeaderHash
+      end
+
+      SSE_HEADERS = Header.new.merge(
+        {
+          'Content-Type' => 'text/event-stream',
+          'Cache-Control' => 'no-cache, no-store, must-revalidate',
+          'Connection' => 'keep-alive',
+          'X-Accel-Buffering' => 'no', # For Nginx
+          'Access-Control-Allow-Origin' => '*', # Allow CORS
+          'Access-Control-Allow-Methods' => 'GET, OPTIONS',
+          'Access-Control-Allow-Headers' => 'Content-Type',
+          'Access-Control-Max-Age' => '86400', # 24 hours
+          'Keep-Alive' => 'timeout=600', # 10 minutes timeout
+          'Pragma' => 'no-cache',
+          'Expires' => '0'
+        }
+      ).freeze
+
+      CONTENT_TYPE_JSON_HEADERS = Header.new.merge(
+        {
+          'Content-Type' => 'application/json'
+        }
+      ).freeze
+
+      CORS_HEADERS = Header.new.merge(
+        {
+          'Access-Control-Allow-Origin' => '*',
+          'Access-Control-Allow-Methods' => 'GET, OPTIONS',
+          'Access-Control-Allow-Headers' => 'Content-Type',
+          'Access-Control-Max-Age' => '86400' # 24 hours
+        }
+      ).freeze
 
       attr_reader :app, :path_prefix, :sse_clients, :messages_route, :sse_route, :allowed_origins, :localhost_only,
                   :allowed_ips
@@ -239,7 +265,7 @@ module FastMcp
       end
 
       def forbidden_response(message)
-        [403, { 'Content-Type' => 'application/json' },
+        [403, CONTENT_TYPE_JSON_HEADERS.dup,
          [JSON.generate(
            {
              jsonrpc: '2.0',
@@ -254,7 +280,7 @@ module FastMcp
 
       # Return a 404 endpoint not found response
       def endpoint_not_found_response
-        [404, { 'Content-Type' => 'application/json' },
+        [404, CONTENT_TYPE_JSON_HEADERS.dup,
          [JSON.generate(
            {
              jsonrpc: '2.0',
@@ -270,7 +296,7 @@ module FastMcp
       # Handle SSE connection request
       def handle_sse_request(request, env)
         # Handle OPTIONS preflight request
-        return [200, setup_cors_headers, []] if request.options?
+        return [200, CORS_HEADERS.dup, []] if request.options?
 
         return method_not_allowed_response unless request.get?
 
@@ -301,17 +327,6 @@ module FastMcp
         defined?(ActionController::Live) &&
           env['action_controller.instance'].respond_to?(:response) &&
           env['action_controller.instance'].response.respond_to?(:stream)
-      end
-
-      # Set up CORS headers for preflight requests
-      def setup_cors_headers
-        {
-          'Access-Control-Allow-Origin' => '*',
-          'Access-Control-Allow-Methods' => 'GET, OPTIONS',
-          'Access-Control-Allow-Headers' => 'Content-Type',
-          'Access-Control-Max-Age' => '86400', # 24 hours
-          'Content-Type' => 'text/plain'
-        }
       end
 
       # Extract client ID from request or generate a new one
@@ -380,15 +395,14 @@ module FastMcp
         client_id = extract_client_id(env)
         @logger.debug("Setting up Rack hijack SSE connection for client #{client_id}")
 
-        env['rack.hijack'].call
-        io = env['rack.hijack_io']
+        io = env['rack.hijack'].call
         @logger.debug("Obtained hijack IO for client #{client_id}")
 
         setup_sse_connection(client_id, io, env)
         start_keep_alive_thread(client_id, io)
 
         # Return async response
-        [-1, {}, []]
+        [200, {}, []]
       end
 
       # Set up the SSE connection
@@ -518,7 +532,7 @@ module FastMcp
         register_sse_client(client_id, stream)
 
         # The controller will handle the streaming
-        [200, SSE_HEADERS, []]
+        [200, SSE_HEADERS.dup, []]
       end
 
       # Handle message POST request with specific server
@@ -548,7 +562,7 @@ module FastMcp
         response = server.handle_request(body, headers: headers) || []
 
         # Return the JSON response
-        [200, { 'Content-Type' => 'application/json' }, response]
+        [200, CONTENT_TYPE_JSON_HEADERS.dup, response]
       end
 
       # Return a method not allowed error response
@@ -569,7 +583,7 @@ module FastMcp
       end
 
       def json_rpc_error_response(http_status, code, message, id = nil)
-        [http_status, { 'Content-Type' => 'application/json' },
+        [http_status, CONTENT_TYPE_JSON_HEADERS.dup,
          [JSON.generate(
            {
              jsonrpc: '2.0',
