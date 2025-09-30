@@ -28,15 +28,6 @@ FastMcp.mount_in_rails(
   # allowed_ips: ['127.0.0.1', '::1'],
   # authenticate: true,       # Uncomment to enable authentication
   # auth_token: 'your-token', # Required if authenticate: true
-) do |server|
-  Rails.application.config.after_initialize do
-    # FastMcp will automatically discover and register:
-    # - All classes that inherit from ApplicationTool (which uses ActionTool::Base)
-    # - All classes that inherit from ApplicationResource (which uses ActionResource::Base)
-    server.register_tools(*ApplicationTool.descendants)
-    server.register_resources(*ApplicationResource.descendants)
-    # alternatively, you can register tools and resources manually:
-    # server.register_tool(MyTool)
-    # server.register_resource(MyResource)
-  end
-end
+  # tools_dir: Rails.root.join('app/tools'), # This is the default directory for tools
+  # resources_dir: Rails.root.join('app/resources'), # This is the default directory for resources
+)
