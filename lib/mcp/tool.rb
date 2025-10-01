@@ -82,19 +82,19 @@ module Dry
         # Override call method to manage nested context
         alias original_call call
 
-        def call(&block)
+        def call(*args, &block)
           if block
             # Use current context to track nested context if available
             context = MetadataContext.current
             if context
               context.with_nested(name) do
-                original_call(&block)
+                original_call(*args, &block)
               end
             else
-              original_call(&block)
+              original_call(*args, &block)
             end
           else
-            original_call(&block)
+            original_call(*args, &block)
           end
         end
       end
