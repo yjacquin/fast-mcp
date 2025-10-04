@@ -233,6 +233,8 @@ class SchemaMetadataProcessor
         property_schema[:required] =
           filter_required_properties(property_schema[:required], property_schema[:properties])
       # Recursively process array items with object properties
+      elsif property_schema[:type] == 'array' && !property_schema.key?(:items)
+        property_schema[:items] = {}
       elsif property_schema[:type] == 'array' && property_schema.dig(:items, :type) == 'object' &&
             property_schema.dig(:items, :properties)
         nested_path = path_prefix + [property_name.to_s]
