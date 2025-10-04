@@ -150,7 +150,7 @@ module FastMcp
                           FastMcp::Transports::RackTransport
                         end
     else
-      setup_streamable_rails_transport(app, options.merge(name: name, version: version, logger: logger), transport_type)
+      setup_streamable_rails_transport(app, options.merge(name: name, version: version, logger: logger))
       path_prefix = options.delete(:path_prefix) || '/mcp'
       messages_route = options.delete(:messages_route) || 'messages'
       sse_route = options.delete(:sse_route) || 'sse'
@@ -204,7 +204,7 @@ module FastMcp
     options[:allowed_origins] = allowed_origins
   end
 
-  def self.setup_streamable_rails_transport(app, options, _transport_type)
+  def self.setup_streamable_rails_transport(app, options)
     allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
     allowed_ips = options[:allowed_ips] || ['127.0.0.1', '::1', '::ffff:127.0.0.1']
 
