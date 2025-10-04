@@ -21,7 +21,9 @@ module FastMcp
     def add(severity, message = nil, progname = nil, &block)
       return if stdio_transport? # we don't want to log to stdout if we're using the stdio transport
 
-      # TODO: implement logging as the specification requires
+      # NOTE: MCP 2025-06-18 specifies structured logging via notifications/message
+      # This basic implementation works for current use cases. Future enhancement:
+      # send structured log messages as JSON-RPC notifications when client_initialized
       super
     end
 

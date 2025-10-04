@@ -2,14 +2,13 @@
 
 RSpec.describe FastMcp::Transports::RackTransport do
   let(:app) { ->(_env) { [200, { 'Content-Type' => 'text/plain' }, ['OK']] } }
-  let(:server) do 
-    instance_double(FastMcp::Server, 
-      logger: Logger.new(nil), 
-      transport: nil, 
-      'transport=' => nil,
-      contains_filters?: false,
-      handle_request: nil  # handle_request doesn't return anything, it sends through transport
-    )
+  let(:server) do
+    instance_double(FastMcp::Server,
+                    logger: Logger.new(nil),
+                    transport: nil,
+                    'transport=' => nil,
+                    contains_filters?: false,
+                    handle_request: nil) # handle_request doesn't return anything, it sends through transport
   end
   let(:logger) { Logger.new(nil) }
   let(:transport) { described_class.new(app, server, logger: logger, localhost_only: localhost_only) }
@@ -147,21 +146,17 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(transport.sse_clients).to be_empty
       end
 
-      it 'handles errors when mutex raises exception' do
-        # Add a mock SSE client that raises an error
+      it 'handles errors when write raises exception' do
+        # Add a mock SSE client that raises an error on write
         client_stream = double('stream')
         allow(client_stream).to receive(:respond_to?).and_return(false)
         allow(client_stream).to receive(:respond_to?).with(:closed?).and_return(true)
         allow(client_stream).to receive(:respond_to?).with(:flush).and_return(true)
         allow(client_stream).to receive(:closed?).and_return(false)
-        allow(client_stream).to receive(:write)
-        allow(client_stream).to receive(:flush)
+        allow(client_stream).to receive(:write).and_raise(StandardError.new('Write error'))
 
-        # Create a client with a mutex that will raise an error
-        client_mutex = double('mutex')
-        allow(client_mutex).to receive(:synchronize).and_raise(StandardError.new('Mutex error'))
-
-        transport.instance_variable_set(:@sse_clients, { 'test-client' => { stream: client_stream, mutex: client_mutex } })
+        transport.instance_variable_set(:@sse_clients,
+                                        { 'test-client' => { stream: client_stream } })
 
         expect(logger).to receive(:debug).with(/Broadcasting message to 1 SSE clients/)
         expect(logger).to receive(:error).with(/Error sending message to client test-client/)
@@ -196,7 +191,6 @@ RSpec.describe FastMcp::Transports::RackTransport do
           allowed_ips: ['127.0.0.1', '192.168.0.1']
         )
       end
-
 
       it 'accepts requests with allowed origin' do
         # Create request env
@@ -233,7 +227,8 @@ RSpec.describe FastMcp::Transports::RackTransport do
               message: 'Forbidden: Origin validation failed'
             },
             id: nil
-          })])
+          }
+        )])
       end
 
       it 'refuses requests with disallowed ip' do
@@ -247,13 +242,12 @@ RSpec.describe FastMcp::Transports::RackTransport do
 
         # Create a proper request double that includes necessary methods
         request = instance_double(Rack::Request,
-          ip: '127.0.0.2',
-          path: '/mcp/messages',
-          post?: true,
-          params: {},
-          body: instance_double(StringIO, read: '{"jsonrpc":"2.0","method":"ping","id":1}'),
-          host: 'localhost'
-        )
+                                  ip: '127.0.0.2',
+                                  path: '/mcp/messages',
+                                  post?: true,
+                                  params: {},
+                                  body: instance_double(StringIO, read: '{"jsonrpc":"2.0","method":"ping","id":1}'),
+                                  host: 'localhost')
         allow(Rack::Request).to receive(:new).with(env).and_return(request)
 
         expect(server).to receive(:transport=).with(transport)
@@ -270,7 +264,8 @@ RSpec.describe FastMcp::Transports::RackTransport do
               message: 'Forbidden: Remote IP not allowed'
             },
             id: nil
-          })])
+          }
+        )])
       end
 
       it 'accepts requests with origin matching a regex pattern' do
@@ -352,8 +347,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
       it 'handles root MCP endpoint requests' do
         # The default route handler doesn't have a special case for root requests
         # so we expect a 404 response with "Endpoint not found" message
-        env = { 'PATH_INFO' => '/mcp', 'REMOTE_ADDR' => '127.0.0.1'
- }
+        env = { 'PATH_INFO' => '/mcp', 'REMOTE_ADDR' => '127.0.0.1' }
         result = transport.call(env)
 
         # This should match the endpoint_not_found_response method behavior
@@ -441,7 +435,7 @@ RSpec.describe FastMcp::Transports::RackTransport do
           'CONTENT_TYPE' => 'application/json',
           'REMOTE_ADDR' => '127.0.0.1'
         }
-        
+
         # Mock the server to return a parse error
         allow(server).to receive(:handle_request).and_raise(JSON::ParserError, 'Invalid JSON')
 
@@ -472,10 +466,123 @@ RSpec.describe FastMcp::Transports::RackTransport do
         expect(response['error']['message']).to include('Method not allowed')
       end
     end
+
+    context 'with MCP protocol version validation' do
+      it 'accepts requests without protocol version header' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = transport.call(env)
+
+        expect(result[0]).to eq(200)
+        expect(result[1]['Content-Type']).to eq('application/json')
+      end
+
+      it 'accepts requests with supported protocol version' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => '2025-06-18',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = transport.call(env)
+
+        expect(result[0]).to eq(200)
+        expect(result[1]['Content-Type']).to eq('application/json')
+      end
+
+      it 'rejects requests with unsupported protocol version' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => '2024-11-05',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = transport.call(env)
+
+        expect(result[0]).to eq(400)
+        expect(result[1]['Content-Type']).to eq('application/json')
+
+        response = JSON.parse(result[2].first)
+        expect(response['jsonrpc']).to eq('2.0')
+        expect(response['error']['code']).to eq(-32_000)
+        expect(response['error']['message']).to eq('Unsupported protocol version: 2024-11-05')
+        expect(response['error']['data']['expected_version']).to eq('2025-06-18')
+        expect(response['id']).to be_nil
+      end
+
+      it 'rejects requests with invalid protocol version' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => 'invalid-version',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = transport.call(env)
+
+        expect(result[0]).to eq(400)
+        expect(result[1]['Content-Type']).to eq('application/json')
+
+        response = JSON.parse(result[2].first)
+        expect(response['jsonrpc']).to eq('2.0')
+        expect(response['error']['code']).to eq(-32_000)
+        expect(response['error']['message']).to eq('Unsupported protocol version: invalid-version')
+        expect(response['error']['data']['expected_version']).to eq('2025-06-18')
+      end
+
+      it 'accepts empty protocol version header' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => '',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        result = transport.call(env)
+
+        expect(result[0]).to eq(200)
+        expect(result[1]['Content-Type']).to eq('application/json')
+      end
+
+      it 'logs warning for unsupported protocol versions' do
+        # Create transport without deprecation warning for this test
+        transport = described_class.new(app, server, { logger: logger, warn_deprecation: false })
+
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}'),
+          'CONTENT_TYPE' => 'application/json',
+          'HTTP_MCP_PROTOCOL_VERSION' => '1.0.0',
+          'REMOTE_ADDR' => '127.0.0.1'
+        }
+
+        expect(logger).to receive(:warn).with('Unsupported protocol version: 1.0.0, expected: 2025-06-18')
+
+        result = transport.call(env)
+        expect(result[0]).to eq(400)
+      end
+    end
   end
 
   # Tests for private methods
-  describe '#validate_origin (private)' do
+  describe '#valid_origin? (private)' do
     let(:allowed_origins) { ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/] }
     let(:transport) { described_class.new(app, server, logger: logger, allowed_origins: allowed_origins) }
 
@@ -483,31 +590,31 @@ RSpec.describe FastMcp::Transports::RackTransport do
       request = instance_double('Rack::Request', host: 'localhost:3000')
 
       # Test allowed origins
-      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'http://localhost'})).to be true
-      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'http://127.0.0.1'})).to be true
-      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'https://example.com'})).to be true
-      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'https://sub.example.com'})).to be true
+      expect(transport.send(:valid_origin?, request, { 'HTTP_ORIGIN' => 'http://localhost' })).to be true
+      expect(transport.send(:valid_origin?, request, { 'HTTP_ORIGIN' => 'http://127.0.0.1' })).to be true
+      expect(transport.send(:valid_origin?, request, { 'HTTP_ORIGIN' => 'https://example.com' })).to be true
+      expect(transport.send(:valid_origin?, request, { 'HTTP_ORIGIN' => 'https://sub.example.com' })).to be true
 
       # Test disallowed origins
-      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'http://evil.com'})).to be false
-      expect(transport.send(:validate_origin, request, {'HTTP_ORIGIN' => 'http://sub.evil.com'})).to be false
+      expect(transport.send(:valid_origin?, request, { 'HTTP_ORIGIN' => 'http://evil.com' })).to be false
+      expect(transport.send(:valid_origin?, request, { 'HTTP_ORIGIN' => 'http://sub.evil.com' })).to be false
     end
 
     it 'falls back to referer when origin is missing' do
       request = instance_double('Rack::Request', host: 'localhost:3000')
 
       # Test with referer only
-      expect(transport.send(:validate_origin, request, {'HTTP_REFERER' => 'http://localhost/path'})).to be true
-      expect(transport.send(:validate_origin, request, {'HTTP_REFERER' => 'http://evil.com/path'})).to be false
+      expect(transport.send(:valid_origin?, request, { 'HTTP_REFERER' => 'http://localhost/path' })).to be true
+      expect(transport.send(:valid_origin?, request, { 'HTTP_REFERER' => 'http://evil.com/path' })).to be false
     end
 
     it 'falls back to host when origin and referer are missing' do
       # Test with host only (from request)
       request = instance_double('Rack::Request', host: 'localhost:3000')
-      expect(transport.send(:validate_origin, request, {})).to be true
+      expect(transport.send(:valid_origin?, request, {})).to be true
 
       request = instance_double('Rack::Request', host: 'evil.com:3000')
-      expect(transport.send(:validate_origin, request, {})).to be false
+      expect(transport.send(:valid_origin?, request, {})).to be false
     end
   end
 
@@ -517,7 +624,8 @@ RSpec.describe FastMcp::Transports::RackTransport do
     it 'extracts hostname from URLs correctly' do
       expect(transport.send(:extract_hostname, 'http://localhost')).to eq('localhost')
       expect(transport.send(:extract_hostname, 'https://example.com')).to eq('example.com')
-      expect(transport.send(:extract_hostname, 'http://sub.domain.example.com:8080/path')).to eq('sub.domain.example.com')
+      expect(transport.send(:extract_hostname,
+                            'http://sub.domain.example.com:8080/path')).to eq('sub.domain.example.com')
     end
 
     it 'handles URLs without scheme by adding a dummy scheme' do

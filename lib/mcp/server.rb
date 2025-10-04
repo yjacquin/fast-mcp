@@ -8,11 +8,16 @@ require_relative 'transports/stdio_transport'
 require_relative 'transports/rack_transport'
 require_relative 'transports/authenticated_rack_transport'
 require_relative 'logger'
+require_relative 'metadata'
 require_relative 'server_filtering'
+require_relative 'protocol_version'
 
 module FastMcp
   class Server
     include ServerFiltering
+    include Metadata
+
+    PROTOCOL_VERSION = Protocol::VERSION
 
     attr_reader :name, :version, :tools, :resources, :capabilities
 
@@ -212,8 +217,6 @@ module FastMcp
 
     private
 
-    PROTOCOL_VERSION = '2024-11-05'
-
     def handle_initialize(params, id)
       # Store client capabilities for later use
       @client_capabilities = params['capabilities'] || {}
@@ -225,7 +228,7 @@ module FastMcp
 
       # Prepare server response
       response = {
-        protocolVersion: PROTOCOL_VERSION, # For now, only version 2024-11-05 is supported.
+        protocolVersion: FastMcp::Protocol::VERSION,
         capabilities: @capabilities,
         serverInfo: {
           name: @name,
@@ -442,7 +445,9 @@ module FastMcp
 
     # Send a JSON-RPC result response
     def send_result(result, id, metadata: {})
-      result[:_meta] = metadata if metadata.is_a?(Hash) && !metadata.empty?
+      # Validate and sanitize metadata
+      sanitized_metadata = format_meta_field(metadata)
+      result[:_meta] = sanitized_metadata if sanitized_metadata
 
       response = {
         jsonrpc: '2.0',

@@ -2,6 +2,11 @@
 # frozen_string_literal: true
 
 # Example of using MCP as a Rack middleware
+#
+# NOTE: This example uses the legacy RackTransport with separate /messages and /sse endpoints.
+# For new projects, consider using rack_middleware_streamable.rb which demonstrates
+# the modern StreamableHTTP transport with a unified /mcp endpoint.
+# See docs/migration_guide.md for migration instructions.
 
 require 'bundler/setup'
 Bundler.require(:default, :examples)

@@ -22,10 +22,16 @@ Dir[File.join(File.dirname(__FILE__), 'mcp/transports', '*.rb')].each do |file|
   require file
 end
 
+# Require OAuth resource server components
+require_relative 'mcp/oauth/token_validator'
+require_relative 'mcp/oauth/introspection'
+require_relative 'mcp/oauth/resource_server'
+
 # Version information
 require_relative 'mcp/version'
 
 # Convenience method to create a Rack middleware
+# rubocop:disable Metrics/ModuleLength
 module FastMcp
   # Create a Rack middleware for the MCP server
   # @param app [#call] The Rack application
@@ -110,50 +116,108 @@ module FastMcp
   # @param options [Hash] Options for the middleware
   # @option options [String] :name The name of the server
   # @option options [String] :version The version of the server
-  # @option options [String] :path_prefix The path prefix for the MCP endpoints
-  # @option options [String] :messages_route The route for the messages endpoint
-  # @option options [String] :sse_route The route for the SSE endpoint
+  # @option options [Symbol] :transport The transport type (:streamable_http, :legacy, :oauth)
+  # @option options [String] :path The path for the MCP endpoint (for StreamableHTTP)
+  # @option options [String] :path_prefix The path prefix for the MCP endpoints (legacy)
+  # @option options [String] :messages_route The route for the messages endpoint (legacy)
+  # @option options [String] :sse_route The route for the SSE endpoint (legacy)
   # @option options [Logger] :logger The logger to use
   # @option options [Boolean] :authenticate Whether to use authentication
   # @option options [String] :auth_token The authentication token
+  # @option options [Boolean] :oauth_enabled Whether to use OAuth 2.1
+  # @option options [Proc] :opaque_token_validator OAuth token validator
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
   # @return [#call] The Rack middleware
+  # rubocop:disable Metrics/MethodLength
   def self.mount_in_rails(app, options = {})
     # Default options
     name = options.delete(:name) || app.class.module_parent_name.underscore.dasherize
     version = options.delete(:version) || '1.0.0'
     logger = options[:logger] || Rails.logger
-    path_prefix = options.delete(:path_prefix) || '/mcp'
-    messages_route = options.delete(:messages_route) || 'messages'
-    sse_route = options.delete(:sse_route) || 'sse'
-    authenticate = options.delete(:authenticate) || false
+    transport_type = options.delete(:transport) || detect_transport_type(options)
+
+    # Handle transport-specific options
+    if transport_type == :legacy
+      setup_legacy_rails_transport(app, options.merge(name: name, version: version, logger: logger))
+      authenticate = options.delete(:authenticate) || false
+      path = options.delete(:path) || '/mcp'
+      options.merge!(path: path)
+      transport_klass = if authenticate
+                          FastMcp::Transports::AuthenticatedRackTransport
+                        else
+                          FastMcp::Transports::RackTransport
+                        end
+    else
+      setup_streamable_rails_transport(app, options.merge(name: name, version: version, logger: logger))
+      path_prefix = options.delete(:path_prefix) || '/mcp'
+      messages_route = options.delete(:messages_route) || 'messages'
+      sse_route = options.delete(:sse_route) || 'sse'
+      options.merge!(
+        path_prefix: path_prefix,
+        messages_route: messages_route,
+        sse_route: sse_route,
+        warn_deprecation: true
+      )
+      transport_klass = case transport_type
+                        when :oauth
+                          FastMcp::Transports::OAuthStreamableHttpTransport
+                        when :authenticated
+                          FastMcp::Transports::AuthenticatedStreamableHttpTransport
+                        else
+                          FastMcp::Transports::StreamableHttpTransport
+                        end
+    end
+
+    # Create server
+    self.server = FastMcp::Server.new(name: name, version: version, logger: logger)
+    yield self.server if block_given?
+
+    # Insert middleware
+    app.middleware.use(
+      transport_klass,
+      self.server,
+      options
+    )
+  end
+  # rubocop:enable Metrics/MethodLength
+
+  def self.detect_transport_type(options)
+    # Detect transport type based on options
+    return :oauth if options[:oauth_enabled] || options[:opaque_token_validator]
+    return :legacy if options[:path_prefix] || options[:messages_route] || options[:sse_route]
+    return :authenticated if options[:authenticate] || options[:auth_token]
+
+    :streamable_http # Default to modern transport
+  end
+
+  def self.setup_legacy_rails_transport(app, options)
+    # Legacy transport setup with deprecation warning
+    warn_rails_legacy_usage
+
     allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
     allowed_ips = options[:allowed_ips] || FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_IPS
 
     options[:localhost_only] = Rails.env.local? if options[:localhost_only].nil?
     options[:allowed_ips] = allowed_ips
-    options[:logger] = logger
     options[:allowed_origins] = allowed_origins
+  end
 
-    # Create or get the server
-    self.server = FastMcp::Server.new(name: name, version: version, logger: logger)
-    yield self.server if block_given?
+  def self.setup_streamable_rails_transport(app, options)
+    allowed_origins = options[:allowed_origins] || default_rails_allowed_origins(app)
+    allowed_ips = options[:allowed_ips] || ['127.0.0.1', '::1', '::ffff:127.0.0.1']
 
-    # Choose the right middleware based on authentication
-    self.server.transport_klass = if authenticate
-                                    FastMcp::Transports::AuthenticatedRackTransport
-                                  else
-                                    FastMcp::Transports::RackTransport
-                                  end
+    options[:localhost_only] = Rails.env.local? if options[:localhost_only].nil?
+    options[:allowed_ips] = allowed_ips
+    options[:allowed_origins] = allowed_origins
+    options[:require_https] = Rails.env.production? if options[:require_https].nil?
+  end
 
-    # Insert the middleware in the Rails middleware stack
-    app.middleware.use(
-      self.server.transport_klass,
-      self.server,
-      options.merge(path_prefix: path_prefix, messages_route: messages_route, sse_route: sse_route)
-    )
+  def self.warn_rails_legacy_usage
+    Rails.logger.warn('DEPRECATION WARNING: Legacy MCP transport detected in mount_in_rails.')
+    Rails.logger.warn('Please migrate to StreamableHTTP transport for MCP 2025-06-18 compliance.')
+    Rails.logger.warn('See migration guide: https://github.com/yjacquin/fast-mcp/blob/main/docs/migration_guide.md')
   end
 
   def self.default_rails_allowed_origins(rail_app)
@@ -176,3 +240,4 @@ module FastMcp
     self.server.notify_resource_updated(uri)
   end
 end
+# rubocop:enable Metrics/ModuleLength

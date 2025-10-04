@@ -38,11 +38,11 @@ This approach is completely thread-safe as each request gets its own server inst
 FastMcp.mount_in_rails(app) do |server|
   # Register all tools
   server.register_tools(AdminTool, UserTool, PublicTool)
-  
+
   # Add a filter based on request parameters
   server.filter_tools do |request, tools|
     role = request.params['role']
-    
+
     case role
     when 'admin'
       tools # Admin sees all tools
@@ -60,7 +60,7 @@ end
 ```ruby
 server.filter_resources do |request, resources|
   tenant_id = request.headers['X-Tenant-ID']
-  
+
   # Only show resources for the current tenant
   resources.select { |r| r.tenant_id == tenant_id }
 end
@@ -75,7 +75,7 @@ class DangerousTool < FastMcp::Tool
   tool_name 'delete_all'
   description 'Delete all data'
   tags :admin, :dangerous, :write
-  
+
   def call
     # Dangerous operation
   end
@@ -85,7 +85,7 @@ class ReadOnlyTool < FastMcp::Tool
   tool_name 'list_users'
   description 'List all users'
   tags :read, :safe
-  
+
   def call
     # Safe read operation
   end
@@ -98,11 +98,11 @@ Tools can also have metadata:
 class ReportingTool < FastMcp::Tool
   tool_name 'generate_report'
   description 'Generate a report'
-  
+
   metadata :category, 'reporting'
   metadata :cpu_intensive, true
   metadata :requires_license, 'enterprise'
-  
+
   def call
     # Generate report
   end
@@ -143,7 +143,7 @@ end
 ```ruby
 server.filter_tools do |request, tools|
   api_version = request.env['HTTP_X_API_VERSION']
-  
+
   case api_version
   when 'v2'
     tools # All tools available in v2
@@ -178,9 +178,9 @@ The RackTransport automatically caches filtered server instances based on reques
 server.filter_tools do |request, tools|
   # Get user from your authentication system
   user = authenticate_request(request)
-  
+
   return [] unless user # No tools for unauthenticated requests
-  
+
   # Filter based on user permissions
   tools.select { |t| user.can_access_tool?(t) }
 end
@@ -203,7 +203,7 @@ The filtering system is designed to be completely thread-safe:
 class AdminTool < FastMcp::Tool
   tags :admin
   description "Administrative functions"
-  
+
   def call
     "Admin action performed"
   end
@@ -212,7 +212,7 @@ end
 class UserTool < FastMcp::Tool
   tags :user
   description "User functions"
-  
+
   def call
     "User action performed"
   end
@@ -220,7 +220,7 @@ end
 
 server.filter_tools do |request, tools|
   user_role = request.headers['X-User-Role']
-  
+
   case user_role
   when 'admin'
     tools
@@ -238,9 +238,9 @@ end
 server.filter_tools do |request, tools|
   user_id = request.headers['X-User-ID']
   enabled_features = FeatureFlags.for_user(user_id)
-  
+
   tools.reject do |tool|
-    tool.metadata(:feature_flag) && 
+    tool.metadata(:feature_flag) &&
     !enabled_features.include?(tool.metadata(:feature_flag))
   end
 end
@@ -251,7 +251,7 @@ end
 ```ruby
 server.filter_tools do |request, tools|
   client_ip = request.ip
-  
+
   if RateLimiter.exceeded?(client_ip, :expensive_operations)
     tools.reject { |t| t.metadata(:expensive) }
   else
@@ -287,4 +287,4 @@ server.filter_tools do |request, tools|
 end
 ```
 
-The filtering system handles all the complexity of creating request-scoped servers and ensuring thread safety. 
+The filtering system handles all the complexity of creating request-scoped servers and ensuring thread safety.

@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2025-10-04
+
+### Added
+
+- **MCP Protocol 2025-06-18 Support**: Updated to the latest Model Context Protocol specification
+- **OAuth 2.1 Resource Server Implementation**: Full OAuth 2.1 compliance with support for:
+  - JWT token validation with JWKS support
+  - Opaque token validation with custom validator
+  - Scope-based authorization (tools, resources, admin)
+  - Audience binding (RFC 8707) for confused deputy prevention
+  - Protected Resource Metadata endpoint (RFC 9728)
+  - WWW-Authenticate headers in error responses
+  - HTTPS enforcement (configurable per environment)
+- **StreamableHTTP Transport**: Modern unified transport replacing legacy HTTP+SSE with:
+  - Single `/mcp` endpoint for both requests and streaming
+  - Improved session management with cryptographically secure session IDs
+  - Rack hijacking support for efficient SSE connections
+  - DNS rebinding protection
+  - Protocol version header validation
+- **Fiber-Based Concurrency Support**: Automatic async mode detection with seamless fallback:
+  - Auto-detection of Fiber scheduler (Falcon, async gem)
+  - Graceful fallback to thread-based concurrency (Puma, Unicorn)
+  - Manual override capability via `async_mode` option
+- **Enhanced Metadata Handling**: Tool and Resource `_meta` field support with:
+  - Reserved prefix validation (`mcp:`, `mcp-`)
+  - Metadata sanitization and merging
+  - Format validation
+- New transports: `OAuthStreamableHttpTransport`, `AuthenticatedStreamableHttpTransport`
+- Comprehensive OAuth documentation suite (6 new guides, 4,000+ lines)
+- New examples demonstrating OAuth, StreamableHTTP, and authenticated transports
+
+### Changed
+
+- Protocol version updated from `2024-11-05` to `2025-06-18`
+- Base transport abstraction introduced for common functionality
+- Server metadata response now includes formatted `_meta` field
+
+### Deprecated
+
+- Legacy `RackTransport` (HTTP+SSE with separate endpoints) - still functional but migration recommended
+- Old path configuration (`path_prefix`, `messages_route`, `sse_route`) in favor of unified `path` parameter
+
+### Fixed
+
+- Audience binding validation logic in OAuth resource server
+
+### Dependencies
+
+- Added: `jwt` gem (~> 3.1) for OAuth 2.1 support
+
+### Migration Guide
+
+See [docs/migration_guide.md](docs/migration_guide.md) and [docs/rails_migration_guide.md](docs/rails_migration_guide.md) for detailed migration instructions from legacy transports to StreamableHTTP.
+
 ## [1.6.0] - 2025-09-28
 
 ### Added
