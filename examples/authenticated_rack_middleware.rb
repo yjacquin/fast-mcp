@@ -1,7 +1,12 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Example of using MCP as a Rack middleware
+# Example of using MCP as a Rack middleware with authentication
+#
+# NOTE: This example uses the legacy AuthenticatedRackTransport.
+# For new projects, consider using server_with_auth_transport.rb which demonstrates
+# the modern AuthenticatedStreamableHttpTransport with improved session management.
+# See docs/migration_guide.md for migration instructions.
 
 require 'bundler/setup'
 Bundler.require(:default, :examples)
