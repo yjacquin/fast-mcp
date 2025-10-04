@@ -444,7 +444,8 @@ See the [Migration Guide](migration_guide.md) for detailed instructions on migra
 
 ## Related Documentation
 
-- [OAuth 2.1 Integration Guide](oauth_integration.md)
-- [Transport Comparison](transport_comparison.md)
-- [Security Configuration](security_configuration.md)
-- [API Reference](api_reference.md)
+- [OAuth Configuration Guide](oauth-configuration-guide.md) - OAuth 2.1 setup and integration
+- [OAuth Resource Server](oauth-resource-server.md) - Resource server implementation details
+- [Security Configuration](security_configuration.md) - Security best practices
+- [Migration Guide](migration_guide.md) - Migrating from legacy transports
+- [Rails Integration](rails_integration.md) - Rails-specific integration guide

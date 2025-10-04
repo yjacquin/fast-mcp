@@ -115,7 +115,7 @@ FastMcp.mount_in_rails(
   path: '/mcp',
   oauth_enabled: true,
   jwt_enabled: true,
-  jwt_jwks_url: 'https://auth.example.com/.well-known/jwks.json',
+  jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
   resource_identifier: 'https://api.example.com',
   require_https: Rails.env.production?
 ) do |server|

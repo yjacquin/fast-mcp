@@ -633,8 +633,8 @@ transport = FastMcp::Transports::OAuthStreamableHttpTransport.new(
 ## Related Documentation
 
 - [OAuth Configuration Guide](oauth-configuration-guide.md) - Complete setup and configuration
-- [Security Best Practices](security.md) - General security guidelines
-- [Transport Comparison](transport_comparison.md) - Choosing the right transport
+- [Security Configuration](security_configuration.md) - General security guidelines
+- [StreamableHTTP Transport](streamable_http_transport.md) - Modern transport architecture
 - [OAuth Troubleshooting](oauth-troubleshooting.md) - Debugging OAuth issues
 
 ## Support

@@ -235,7 +235,7 @@ module FastMcp
           "Audience binding validation failed: token audience #{token_audiences} " \
           "does not include resource #{@resource_identifier}"
         )
-        raise UnauthorizedError, 'Token not intended for this resource server'
+        raise FastMcp::OAuth::InvalidRequestError, 'Token not intended for this resource server'
       end
     end
   end

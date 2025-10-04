@@ -122,5 +122,6 @@ expect(response).to have_http_status(200)
 ## Resources
 
 - [StreamableHTTP Transport Guide](streamable_http_transport.md)
-- [OAuth Integration Guide](oauth_integration.md)
+- [OAuth Configuration Guide](oauth-configuration-guide.md)
+- [OAuth Resource Server Guide](oauth-resource-server.md)
 - [Examples](../examples/)
