@@ -545,10 +545,14 @@ module FastMcp
                          .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
 
         # Let the specific server handle the JSON request directly
-        response = server.handle_request(body, headers: headers) || []
+        response = server.handle_request(body, headers: headers)
 
         # Return the JSON response
-        [200, { 'Content-Type' => 'application/json' }, response]
+        if response.nil?
+          [202, {}, []]
+        else
+          [200, { 'Content-Type' => 'application/json' }, response]
+        end
       end
 
       # Return a method not allowed error response

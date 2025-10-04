@@ -450,7 +450,7 @@ module FastMcp
         result: result
       }
 
-      @logger.info("Sending result: #{response.inspect}")
+      @logger.info("Sending result: #{truncate_string(response.inspect, 1000)}")
       send_response(response)
     end
 
@@ -471,7 +471,7 @@ module FastMcp
     # Send a JSON-RPC response
     def send_response(response)
       if @transport
-        @logger.debug("Sending response: #{response.inspect}")
+        @logger.debug("Sending response: #{truncate_string(response.inspect, 1000)}")
         @transport.send_message(response)
       else
         @logger.warn("No transport available to send response: #{response.inspect}")
@@ -488,6 +488,11 @@ module FastMcp
         new_value = value.is_a?(Hash) ? symbolize_keys(value) : value
         result[new_key] = new_value
       end
+    end
+
+    def truncate_string(input, truncate_to)
+      return input unless input.length > truncate_to
+      "#{input[0, truncate_to]}..."
     end
   end
 end
