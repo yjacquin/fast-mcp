@@ -171,7 +171,7 @@ module FastMcp
     end
 
     # Create server
-    self.server = FastMcp::Server.new(name: options[:name], version: options[:version], logger: logger)
+    self.server = FastMcp::Server.new(name: name, version: version, logger: logger)
     yield self.server if block_given?
 
     # Insert middleware
