@@ -18,6 +18,7 @@ module FastMcp
 
       # JWT token types
       JWT_TYPES = %w[JWT jwt].freeze
+      ALLOWED_ALGORITHMS = ['HS256', 'HS384', 'HS512'].freeze
 
       attr_reader :logger, :issuer, :audience, :required_scopes
 
@@ -106,6 +107,8 @@ module FastMcp
       def verify_token_signature!(encoded_token)
         header = encoded_token.header
         algorithm = header['alg']
+
+        raise InvalidTokenError, "Unallowed JWT algorithm: #{algorithm}" unless ALLOWED_ALGORITHMS.include?(algorithm)
 
         encoded_token.verify!(signature: { algorithm: algorithm, key: @hmac_secret })
       end

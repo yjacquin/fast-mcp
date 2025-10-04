@@ -124,6 +124,56 @@ RSpec.describe FastMcp::OAuth::TokenValidator do
         expect(validator.validate_token(jwt_token, required_scopes: ['mcp:read'])).to be(true)
         expect(validator.validate_token(jwt_token, required_scopes: ['mcp:admin'])).to be(false)
       end
+
+      it 'rejects JWT tokens with unallowed algorithms' do
+        validator = described_class.new(hmac_secret: 'test_secret', logger: logger)
+
+        # Mock JWT::EncodedToken with RS256 algorithm (not in ALLOWED_ALGORITHMS)
+        encoded_token = instance_double(JWT::EncodedToken)
+        allow(JWT::EncodedToken).to receive(:new).with(jwt_token).and_return(encoded_token)
+        allow(encoded_token).to receive(:header).and_return({ 'alg' => 'RS256' })
+
+        expect(validator.validate_token(jwt_token)).to be(false)
+      end
+
+      it 'accepts JWT tokens with HS256 algorithm' do
+        validator = described_class.new(hmac_secret: 'test_secret', logger: logger)
+
+        encoded_token = instance_double(JWT::EncodedToken)
+        allow(JWT::EncodedToken).to receive(:new).with(jwt_token).and_return(encoded_token)
+        allow(encoded_token).to receive(:header).and_return({ 'alg' => 'HS256' })
+        allow(encoded_token).to receive(:payload).and_return(valid_payload.transform_keys(&:to_s))
+        allow(encoded_token).to receive(:verify!).and_return(true)
+        allow(encoded_token).to receive(:verify_claims!).and_return(true)
+
+        expect(validator.validate_token(jwt_token)).to be(true)
+      end
+
+      it 'accepts JWT tokens with HS384 algorithm' do
+        validator = described_class.new(hmac_secret: 'test_secret', logger: logger)
+
+        encoded_token = instance_double(JWT::EncodedToken)
+        allow(JWT::EncodedToken).to receive(:new).with(jwt_token).and_return(encoded_token)
+        allow(encoded_token).to receive(:header).and_return({ 'alg' => 'HS384' })
+        allow(encoded_token).to receive(:payload).and_return(valid_payload.transform_keys(&:to_s))
+        allow(encoded_token).to receive(:verify!).and_return(true)
+        allow(encoded_token).to receive(:verify_claims!).and_return(true)
+
+        expect(validator.validate_token(jwt_token)).to be(true)
+      end
+
+      it 'accepts JWT tokens with HS512 algorithm' do
+        validator = described_class.new(hmac_secret: 'test_secret', logger: logger)
+
+        encoded_token = instance_double(JWT::EncodedToken)
+        allow(JWT::EncodedToken).to receive(:new).with(jwt_token).and_return(encoded_token)
+        allow(encoded_token).to receive(:header).and_return({ 'alg' => 'HS512' })
+        allow(encoded_token).to receive(:payload).and_return(valid_payload.transform_keys(&:to_s))
+        allow(encoded_token).to receive(:verify!).and_return(true)
+        allow(encoded_token).to receive(:verify_claims!).and_return(true)
+
+        expect(validator.validate_token(jwt_token)).to be(true)
+      end
     end
   end
 
