@@ -229,7 +229,7 @@ module FastMcp
         token_audiences = Array(token_audience)
 
         # Check if our resource identifier is in the token's audience
-        return unless token_audiences.include?(@resource_identifier)
+        return if token_audiences.include?(@resource_identifier)
 
         @logger.warn(
           "Audience binding validation failed: token audience #{token_audiences} " \

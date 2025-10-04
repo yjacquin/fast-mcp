@@ -365,12 +365,13 @@ Please refer to [configuring_mcp_clients](docs/configuring_mcp_clients.md)
 
 | Feature                                         | Status                                                    |
 | ----------------------------------------------- | --------------------------------------------------------- |
+| ✅ **MCP Protocol 2025-06-18**                  | Latest Model Context Protocol specification               |
 | ✅ **JSON-RPC 2.0**                             | Full implementation for communication                     |
 | ✅ **Tool Definition & Calling**                | Define and call tools with rich argument types            |
 | ✅ **Resource & Resource Templates Management** | Create, read, update, and subscribe to resources          |
 | ✅ **Transport Options**                        | STDIO, HTTP, and SSE for flexible integration             |
 | ✅ **Framework Integration**                    | Rails, Sinatra, Hanami, and any Rack-compatible framework |
-| ✅ **Authentication**                           | Secure your AI endpoints with token authentication        |
+| ✅ **OAuth 2.1 Resource Server**                | RFC-compliant token validation and authorization          |
 | ✅ **Schema Support**                           | Full JSON Schema for tool arguments with validation       |
 
 ## 🗺️ Use Cases
