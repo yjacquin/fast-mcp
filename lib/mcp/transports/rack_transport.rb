@@ -4,6 +4,7 @@ require 'json'
 require 'securerandom'
 require 'rack'
 require_relative 'base_transport'
+require_relative 'concurrency_adapter'
 
 module FastMcp
   module Transports
@@ -42,8 +43,14 @@ module FastMcp
         @allowed_origins = options[:allowed_origins] || DEFAULT_ALLOWED_ORIGINS
         @localhost_only = options.fetch(:localhost_only, true) # Default to localhost-only mode
         @allowed_ips = options[:allowed_ips] || DEFAULT_ALLOWED_IPS
-        @sse_clients = Concurrent::Hash.new
-        @sse_clients_mutex = Mutex.new
+
+        # Detect async mode and create appropriate concurrency adapter
+        @async_mode = options.fetch(:async_mode, :auto)
+        @concurrency = ConcurrencyAdapter.create(async_enabled: detect_async_mode?)
+
+        # Use adapter for concurrency primitives
+        @sse_clients = @concurrency.create_hash
+
         @running = false
         @filtered_servers_cache = {}
 
@@ -64,7 +71,7 @@ module FastMcp
         @running = false
 
         # Close all SSE connections
-        @sse_clients_mutex.synchronize do
+        @concurrency.synchronize do
           @sse_clients.each_value do |client|
             client[:stream].close if client[:stream].respond_to?(:close) && !client[:stream].closed?
           rescue StandardError => e
@@ -80,17 +87,14 @@ module FastMcp
         @logger.debug("Broadcasting message to #{@sse_clients.size} SSE clients: #{json_message}")
 
         clients_to_remove = []
-        @sse_clients_mutex.synchronize do
+        @concurrency.synchronize do
           @sse_clients.each do |client_id, client|
             stream = client[:stream]
-            mutex = client[:mutex]
-            next if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?) || mutex.nil?
+            next if stream.nil? || (stream.respond_to?(:closed?) && stream.closed?)
 
             begin
-              mutex.synchronize do
-                stream.write("data: #{json_message}\n\n")
-                stream.flush if stream.respond_to?(:flush)
-              end
+              stream.write("data: #{json_message}\n\n")
+              stream.flush if stream.respond_to?(:flush)
             rescue Errno::EPIPE, IOError => e
               @logger.info("Client #{client_id} disconnected: #{e.message}")
               clients_to_remove << client_id
@@ -106,16 +110,16 @@ module FastMcp
       end
 
       # Register a new SSE client
-      def register_sse_client(client_id, stream, mutex = nil)
-        @sse_clients_mutex.synchronize do
+      def register_sse_client(client_id, stream)
+        @concurrency.synchronize do
           @logger.info("Registering SSE client: #{client_id}")
-          @sse_clients[client_id] = { stream: stream, connected_at: Time.now, mutex: mutex || Mutex.new }
+          @sse_clients[client_id] = { stream: stream, connected_at: Time.now }
         end
       end
 
       # Unregister an SSE client
       def unregister_sse_client(client_id)
-        @sse_clients_mutex.synchronize do
+        @concurrency.synchronize do
           @logger.info("Unregistering SSE client: #{client_id}")
           @sse_clients.delete(client_id)
         end
@@ -397,24 +401,20 @@ module FastMcp
 
       # Set up the SSE connection
       def setup_sse_connection(client_id, io, env)
-        # Handle for reconnection, if the client_id is already registered we reuse the mutex
-        # If not a reconnection, generate a new mutex used in registration
-        client = @sse_clients[client_id]
-        mutex = client ? client[:mutex] : Mutex.new
         # Send headers
         @logger.debug("Sending HTTP headers for SSE connection #{client_id}")
-        mutex.synchronize do
+        @concurrency.synchronize do
           io.write("HTTP/1.1 200 OK\r\n")
           SSE_HEADERS.each { |k, v| io.write("#{k}: #{v}\r\n") }
           io.write("\r\n")
           io.flush
         end
 
-        # Register client (will overwrite if already present)
-        register_sse_client(client_id, io, mutex)
+        # Register client
+        register_sse_client(client_id, io)
 
         # Send an initial comment to keep the connection alive
-        mutex.synchronize { io.write(": SSE connection established\n\n") }
+        @concurrency.synchronize { io.write(": SSE connection established\n\n") }
 
         # Extract query parameters from the request
         query_string = env['QUERY_STRING']
@@ -423,11 +423,11 @@ module FastMcp
         endpoint = "#{@path_prefix}/#{@messages_route}"
         endpoint += "?#{query_string}" if query_string
         @logger.debug("Sending endpoint information to client #{client_id}: #{endpoint}")
-        mutex.synchronize { io.write("event: endpoint\ndata: #{endpoint}\n\n") }
+        @concurrency.synchronize { io.write("event: endpoint\ndata: #{endpoint}\n\n") }
 
         # Send a retry directive with a very short reconnect time
         # This helps browsers reconnect quickly if the connection is lost
-        mutex.synchronize do
+        @concurrency.synchronize do
           io.write("retry: 100\n\n")
           io.flush
         end
@@ -440,7 +440,7 @@ module FastMcp
       # Start a keep-alive thread for SSE connection
       def start_keep_alive_thread(client_id, io)
         @logger.info("Starting keep-alive thread for client #{client_id}")
-        Thread.new do
+        @concurrency.async_task do
           keep_alive_loop(io, client_id)
         rescue StandardError => e
           @logger.error("Error in SSE keep-alive for client #{client_id}: #{e.message}")
@@ -456,11 +456,10 @@ module FastMcp
         ping_count = 0
         ping_interval = 1 # Send a ping every 1 second
         @running = true
-        mutex = @sse_clients[client_id] && @sse_clients[client_id][:mutex]
         while @running && !io.closed?
           begin
-            mutex.synchronize { ping_count = send_keep_alive_ping(io, client_id, ping_count) }
-            sleep ping_interval
+            @concurrency.synchronize { ping_count = send_keep_alive_ping(io, client_id, ping_count) }
+            @concurrency.sleep(ping_interval)
           rescue Errno::EPIPE, IOError => e
             # Broken pipe or IO error - client disconnected
             @logger.error("SSE connection error for client #{client_id}: #{e.message}")
@@ -498,14 +497,9 @@ module FastMcp
       # Clean up SSE connection
       def cleanup_sse_connection(client_id, io)
         @logger.info("Cleaning up SSE connection for client #{client_id}")
-        mutex = @sse_clients[client_id] && @sse_clients[client_id][:mutex]
         unregister_sse_client(client_id)
         begin
-          if mutex
-            mutex.synchronize { io.close unless io.closed? }
-          else
-            io.close unless io.closed?
-          end
+          @concurrency.synchronize { io.close unless io.closed? }
           @logger.info("Successfully closed IO for client #{client_id}")
         rescue StandardError => e
           @logger.error("Error closing IO for client #{client_id}: #{e.message}")
@@ -639,6 +633,19 @@ module FastMcp
         @logger.warn('Please migrate to StreamableHttpTransport for MCP 2025-06-18 compliance.')
         @logger.warn('See https://modelcontextprotocol.io/specification/2025-06-18/basic/')
         @logger.warn('  transports#streamable-http for details.')
+      end
+
+      # Detect async mode based on configuration and environment
+      def detect_async_mode?
+        case @async_mode
+        when :auto
+          # Auto-detect: Check if running in Falcon/Async context
+          !Fiber.scheduler.nil?
+        when :enabled, true
+          true
+        else
+          false
+        end
       end
     end
   end

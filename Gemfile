@@ -6,6 +6,8 @@ source 'https://rubygems.org'
 gemspec
 
 group :development, :test do
+  gem 'async', '~> 2.0', require: false
+  gem 'async-io', '~> 1.0', require: false
   gem 'debug'
   gem 'json', '~> 2.0'
   gem 'mime-types', '~> 3.4'

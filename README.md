@@ -34,6 +34,7 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 - 🧩 **Framework Integration** - Works seamlessly with Rails, Sinatra or any Rack app
 - 🚀 **Real-time Updates** - Subscribe to changes for interactive applications
 - 🎯 **Dynamic Filtering** - Control tool/resource access based on request context
+- ⚡ **Async-Ready** - Automatic fiber-based concurrency with Falcon for maximum performance
 
 ### 🔐 OAuth 2.1 Resource Server (NEW!)
 
@@ -498,6 +499,57 @@ FastMcp.mount_in_rails(
 - [🔍 OAuth Troubleshooting](docs/oauth-troubleshooting.md) - Debug common issues
 - [🚀 OAuth Server Example](examples/server_with_oauth_transport.rb) - Production-ready server
 - [🚂 Rails OAuth Integration](examples/rails_oauth_integration.rb) - Rails-specific examples
+
+## ⚡ High-Performance Async Support
+
+Fast MCP automatically adapts to your server architecture for optimal performance:
+
+### Fiber-Based Servers (Falcon)
+
+When running with [Falcon](https://github.com/socketry/falcon) or other fiber-based async servers, Fast MCP automatically switches to fiber-aware concurrency primitives for maximum efficiency:
+
+```ruby
+# No configuration needed - automatically detected!
+# Supports hundreds/thousands of concurrent SSE connections with minimal memory
+bundle add falcon async async-io
+falcon serve
+```
+
+**Benefits with Falcon:**
+- ✅ Handles hundreds/thousands of concurrent SSE connections
+- ✅ Minimal memory overhead per connection
+- ✅ Cooperative scheduling for better CPU utilization
+- ✅ No thread pool exhaustion
+
+### Thread-Based Servers (Puma, Unicorn)
+
+Works seamlessly with traditional thread-based servers without any configuration changes:
+
+```ruby
+# Just works with your existing Puma/Unicorn setup
+bundle exec puma
+```
+
+### Manual Control (Optional)
+
+You can explicitly control the concurrency mode if needed:
+
+```ruby
+# Force async mode
+transport = FastMcp::Transports::StreamableHttpTransport.new(
+  app, server, async_mode: :enabled
+)
+
+# Force threaded mode
+transport = FastMcp::Transports::StreamableHttpTransport.new(
+  app, server, async_mode: :disabled
+)
+
+# Auto-detect (default)
+transport = FastMcp::Transports::StreamableHttpTransport.new(
+  app, server, async_mode: :auto
+)
+```
 
 ## 📖 Documentation
 
