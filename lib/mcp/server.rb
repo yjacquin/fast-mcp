@@ -304,6 +304,9 @@ module FastMcp
           tool_info[:annotations] = camel_case_annotations
         end
 
+        metadata = tool.metadata
+        tool_info[:_meta] = metadata if metadata.any?
+
         tool_info
       end
 
