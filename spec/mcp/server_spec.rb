@@ -216,6 +216,48 @@ RSpec.describe FastMcp::Server do
           server.handle_request(request)
         end
       end
+
+      context 'with tool metadata' do
+        let(:metadata_tool_class) do
+          Class.new(FastMcp::Tool) do
+            def self.name
+              'metadata-tool'
+            end
+
+            def self.description
+              'A tool with metadata'
+            end
+
+            metadata(:source, 'internal')
+            metadata(:cost, 1)
+
+            def call(**_args)
+              'ok'
+            end
+          end
+        end
+
+        before do
+          server.register_tool(metadata_tool_class)
+        end
+
+        it 'includes _meta in the tools list for tools with metadata' do
+          request = { jsonrpc: '2.0', method: 'tools/list', id: 1 }.to_json
+
+          expect(server).to receive(:send_result) do |result, id|
+            expect(id).to eq(1)
+
+            metadata_tool = result[:tools].find { |tool| tool[:name] == 'metadata-tool' }
+            expect(metadata_tool[:_meta]).to eq({ source: 'internal', cost: 1 })
+
+            # Ensure other tools without metadata do not include _meta
+            test_tool = result[:tools].find { |tool| tool[:name] == 'test-tool' }
+            expect(test_tool).not_to have_key(:_meta)
+          end
+
+          server.handle_request(request)
+        end
+      end
     end
 
     context 'with a tools/call request' do
