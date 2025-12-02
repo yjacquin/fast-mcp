@@ -28,6 +28,7 @@ Fast MCP solves all these problems by providing a clean, Ruby-focused implementa
 
 - 🛠️ **Tools API** - Let AI models call your Ruby functions securely, with in-depth argument validation through [Dry-Schema](https://github.com/dry-rb/dry-schema).
 - 📚 **Resources API** - Share data between your app and AI models
+  - 🔐 **Resource Authorization** - Define per-resource `authorize` blocks (read/subscribe/unsubscribe) and access request headers from within resources (Issue #106)
 - 🔄 **Multiple Transports** - Choose from STDIO, HTTP, or SSE based on your needs
 - 🧩 **Framework Integration** - Works seamlessly with Rails, Sinatra or any Rack app.
 - 🔒 **Authentication Support** - Secure your AI-powered endpoints with ease

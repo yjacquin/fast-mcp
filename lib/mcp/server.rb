@@ -171,7 +171,7 @@ module FastMcp
       when 'resources/templates/list'
         handle_resources_templates_list(id)
       when 'resources/read'
-        handle_resources_read(params, id)
+        handle_resources_read(params, id, headers: headers)
       when 'resources/subscribe'
         handle_resources_subscribe(params, id)
       when 'resources/unsubscribe'
@@ -239,7 +239,7 @@ module FastMcp
     end
 
     # Handle a resource read
-    def handle_resources_read(params, id)
+    def handle_resources_read(params, id, headers: {})
       uri = params['uri']
 
       return send_error(-32_602, 'Invalid params: missing resource URI', id) unless uri
@@ -252,10 +252,15 @@ module FastMcp
 
         @logger.debug("Found resource: #{resource.resource_name}, templated: #{resource.templated?}")
 
+        resource_instance = resource.initialize_from_uri(uri, headers: headers)
+        @logger.debug("Resource instance params: #{resource_instance.params.inspect}")
+
+        # Check authorization
+        authorized = resource_instance.authorized?
+        return send_error(-32_602, 'Unauthorized', id) unless authorized
+
         base_content = { uri: uri }
         base_content[:mimeType] = resource.mime_type if resource.mime_type
-        resource_instance = resource.initialize_from_uri(uri)
-        @logger.debug("Resource instance params: #{resource_instance.params.inspect}")
 
         result = if resource_instance.binary?
                    {

@@ -23,6 +23,8 @@ The Fast MCP library supports the following resource features:
 - **Resource Notifications**: Receive notifications when resources change
 - **Binary Content**: Support for both text and binary content
 - **Resource Metadata**: Access resource metadata without reading the content
+- **Resource Authorization**: Granular access control with `authorize` blocks for read operations
+- **Request Headers Access**: Access HTTP headers in authorization and content methods
 
 ## Server-Side Usage
 
@@ -142,6 +144,66 @@ This approach ensures that:
 3. Multiple instances can be created without conflicts
 4. Resources are more suitable for distributed environments
 
+## Authorization and Access Control
+
+### Resource Authorization
+
+You can implement granular access control for resources by using the `authorize` block. Authorization is checked for the `resource/read` operation. Access is granted only if all authorization checks pass.
+
+```ruby
+class ProtectedDataResource < FastMcp::Resource
+  uri "api/protected/data"
+  resource_name "Protected Data"
+  description "A resource that requires authorization to access"
+  mime_type "application/json"
+
+  # Define authorization logic for this resource
+  authorize do
+    # Access the current user from headers
+    auth_header = headers['authorization']
+    # Perform your authorization checks
+    auth_header && auth_header.start_with?('Bearer ')
+  end
+
+  def content
+    JSON.generate({
+      data: "This is protected data",
+      accessed_at: Time.now.to_s
+    })
+  end
+end
+```
+
+### Authorization with Parameters
+
+For templated resources, you can access template parameters in the authorization block:
+
+```ruby
+class UserResourceWithParams < FastMcp::Resource
+  uri "api/users/{user_id}/profile"
+  resource_name "User Profile"
+  description "Access user profile based on user_id"
+  mime_type "application/json"
+
+  authorize do
+    # Access template parameters via self.params
+    user_id = params[:user_id]
+    auth_header = headers['authorization']
+
+    # Example: Only allow if the requested user_id matches the authenticated user
+    # In a real app, you'd decode the token and verify the user_id
+    auth_header && auth_header.include?("user_#{user_id}")
+  end
+
+  def content
+    JSON.generate({
+      user_id: params[:user_id],
+      profile: "User profile data"
+    })
+  end
+end
+```
+
 ## Integration with Web Frameworks
 
 When integrating MCP resources with web frameworks like Rails, Sinatra, or Hanami, you can use the same approach as with tools. The resources will be exposed through the Rack middleware.
@@ -167,6 +229,10 @@ For more details on integrating with web frameworks, see:
 
 7. **Security**: Be mindful of what data you expose through resources, especially in multi-tenant applications.
 
+8. **Authorization**: Use the `authorize` block to implement access control for resource/read operations only.
+
+9. **Headers in Authorization**: Use request headers (`self.headers`) to implement per-request authorization logic for read operations.
+
 ## Conclusion
 
-MCP Resources provide a powerful way to share and synchronize data between servers and clients. By keeping resources stateless and using tools for updates, you can build robust, scalable applications that work well in distributed environments. 
+MCP Resources provide a powerful way to share and synchronize data between servers and clients. By keeping resources stateless and using tools for updates, you can build robust, scalable applications that work well in distributed environments. With the addition of granular authorization support for resource/read operations, you can now implement sophisticated access control policies to protect sensitive data.

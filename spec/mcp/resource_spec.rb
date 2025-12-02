@@ -220,4 +220,223 @@ RSpec.describe FastMcp::Resource do
       expect(resource.description).to eq('Custom description')
     end
   end
+
+  describe '#headers' do
+    let(:resource_class) do
+      Class.new(FastMcp::Resource) do
+        uri 'test/headers'
+        resource_name 'Headers Test'
+        description 'A resource that demonstrates header access'
+        mime_type 'application/json'
+
+        def content
+          {
+            message: 'Headers successfully accessed!',
+            user_agent: headers['user-agent'] || 'No User-Agent'
+          }.to_json
+        end
+      end
+    end
+
+    it 'can read headers' do
+      resource = resource_class.new(headers: { 'user-agent' => 'test-client/1.0' })
+      content = JSON.parse(resource.content)
+      expect(content['user_agent']).to eq('test-client/1.0')
+    end
+
+    it 'provides empty headers hash when none passed' do
+      resource = resource_class.new
+      expect(resource.headers).to be_a(Hash)
+      expect(resource.headers).to be_empty
+    end
+  end
+
+  describe '#authorize' do
+    context 'without authorization' do
+      let(:open_resource_class) do
+        Class.new(FastMcp::Resource) do
+          uri 'test/open'
+          resource_name 'Open Resource'
+          description 'An open resource'
+          mime_type 'text/plain'
+
+          def content
+            'Open content'
+          end
+        end
+      end
+
+      it 'returns true' do
+        resource = open_resource_class.new
+        expect(resource.authorized?).to be true
+      end
+    end
+
+    context 'with authorization' do
+      context 'without parameters' do
+        let(:token) { 'valid_token' }
+        let(:authorized_resource_class) do
+          valid_token = token
+          Class.new(FastMcp::Resource) do
+            uri 'test/protected'
+            resource_name 'Protected Resource'
+            description 'A protected resource'
+            mime_type 'text/plain'
+
+            authorize do
+              headers['AUTHORIZATION'] == valid_token
+            end
+
+            def content
+              'Protected content'
+            end
+          end
+        end
+
+        it 'returns true when authorized' do
+          resource = authorized_resource_class.new(headers: {
+                                                     'AUTHORIZATION' => token
+                                                   })
+
+          expect(resource.authorized?).to be true
+        end
+
+        it 'returns false when not authorized' do
+          resource = authorized_resource_class.new(headers: {
+                                                     'AUTHORIZATION' => 'invalid_token'
+                                                   })
+
+          expect(resource.authorized?).to be false
+        end
+      end
+
+      context 'with URI parameters' do
+        let(:token) { 'valid_token' }
+        let(:authorized_resource_class) do
+          valid_token = token
+          Class.new(FastMcp::Resource) do
+            uri 'test/user/{user_id}'
+            resource_name 'User Resource'
+            description 'A user-specific resource'
+            mime_type 'application/json'
+
+            authorize do |params|
+              headers['AUTHORIZATION'] == valid_token && params[:user_id] == '123'
+            end
+
+            def content
+              { user_id: params[:user_id] }.to_json
+            end
+          end
+        end
+
+        it 'returns true when authorized with correct parameters' do
+          resource = authorized_resource_class.new(
+            { user_id: '123' },
+            headers: { 'AUTHORIZATION' => token }
+          )
+
+          expect(resource.authorized?(user_id: '123')).to be true
+        end
+
+        it 'returns false when unauthorized with wrong parameters' do
+          resource = authorized_resource_class.new(
+            { user_id: '456' },
+            headers: { 'AUTHORIZATION' => token }
+          )
+
+          expect(resource.authorized?(user_id: '456')).to be false
+        end
+      end
+
+      context 'with inherited authorization' do
+        let(:token) { 'valid_token' }
+        let(:root_authorized_resource_class) do
+          valid_token = token
+          Class.new(FastMcp::Resource) do
+            uri 'test/base'
+            resource_name 'Base Resource'
+            description 'A base resource'
+            mime_type 'text/plain'
+
+            authorize do
+              headers['AUTHORIZATION'] == valid_token
+            end
+
+            def content
+              'Base content'
+            end
+          end
+        end
+
+        context 'with own authorization' do
+          let(:child_authorized_resource_class) do
+            Class.new(root_authorized_resource_class) do
+              uri 'test/child'
+              resource_name 'Child Resource'
+              description 'A child resource'
+
+              authorize do
+                headers['X-CUSTOM-HEADER'] == 'allowed'
+              end
+
+              def content
+                'Child content'
+              end
+            end
+          end
+
+          it 'returns true when fully authorized' do
+            resource = child_authorized_resource_class.new(headers: {
+                                                             'AUTHORIZATION' => token,
+                                                             'X-CUSTOM-HEADER' => 'allowed'
+                                                           })
+            expect(resource.authorized?).to be true
+          end
+
+          it 'returns false when failing parent authorization' do
+            resource = child_authorized_resource_class.new(headers: {
+                                                             'X-CUSTOM-HEADER' => 'allowed'
+                                                           })
+            expect(resource.authorized?).to be false
+          end
+
+          it 'returns false when failing child authorization' do
+            resource = child_authorized_resource_class.new(headers: {
+                                                             'AUTHORIZATION' => token
+                                                           })
+            expect(resource.authorized?).to be false
+          end
+        end
+
+        context 'without own authorization' do
+          let(:child_resource_class) do
+            Class.new(root_authorized_resource_class) do
+              uri 'test/child'
+              resource_name 'Child Resource'
+              description 'A child resource'
+
+              def content
+                'Child content'
+              end
+            end
+          end
+
+          it 'returns true when authorized' do
+            resource = child_resource_class.new(headers: {
+                                                  'AUTHORIZATION' => token
+                                                })
+            expect(resource.authorized?).to be true
+          end
+
+          it 'returns false when not authorized' do
+            resource = child_resource_class.new(headers: {
+                                                  'AUTHORIZATION' => 'invalid_token'
+                                                })
+            expect(resource.authorized?).to be false
+          end
+        end
+      end
+    end
+  end
 end 

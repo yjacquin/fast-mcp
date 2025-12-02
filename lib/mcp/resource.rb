@@ -61,9 +61,10 @@ module FastMcp
 
       # Initialize a new instance from the given URI
       # @param uri [String] The URI to initialize from
+      # @param headers [Hash] The HTTP headers from the request
       # @return [Resource] A new resource instance
-      def initialize_from_uri(uri)
-        new(params_from_uri(uri))
+      def initialize_from_uri(uri, headers: {})
+        new(params_from_uri(uri), headers: headers)
       end
 
       # Get the parameters from the given URI
@@ -102,6 +103,14 @@ module FastMcp
       def mime_type(value = nil)
         @mime_type = value if value
         @mime_type || (superclass.respond_to?(:mime_type) ? superclass.mime_type : nil)
+      end
+
+      # Add authorization block for this resource
+      # The block will be called to determine if access is allowed
+      # @param block [Proc] The authorization logic block
+      def authorize(&block)
+        @authorization_blocks ||= []
+        @authorization_blocks.push block
       end
 
       # Get the resource metadata (without content)
@@ -158,8 +167,10 @@ module FastMcp
 
     # Initialize with instance variables
     # @param params [Hash] The parameters for this resource instance
-    def initialize(params = {})
+    # @param headers [Hash] The HTTP headers from the request
+    def initialize(params = {}, headers: {})
       @params = params
+      @headers = headers
     end
 
     # URI of the resource - delegates to class method
@@ -189,6 +200,25 @@ module FastMcp
     # Get parameters from the URI template
     # @return [Hash] The parameters extracted from the URI
     attr_reader :params
+
+    # Get headers from the request
+    # @return [Hash] The HTTP headers from the request
+    attr_reader :headers
+
+    # Check if this resource access is authorized based on authorization blocks
+    # @return [Boolean] true if authorized, false otherwise
+    def authorized?
+      auth_checks = self.class.ancestors.filter_map do |ancestor|
+        ancestor.ancestors.include?(FastMcp::Resource) &&
+          ancestor.instance_variable_get(:@authorization_blocks)
+      end.flatten
+
+      return true if auth_checks.empty?
+
+      auth_checks.all? do |auth_check|
+        instance_exec(&auth_check)
+      end
+    end
 
     # Method to be overridden by subclasses to dynamically generate content
     # @return [String, nil] Generated content for this resource

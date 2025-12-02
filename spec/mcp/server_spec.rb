@@ -339,4 +339,263 @@ RSpec.describe FastMcp::Server do
       end
     end
   end
+
+  describe 'resources' do
+    let(:users_resource_class) do
+      Class.new(FastMcp::Resource) do
+        uri 'file://users.json'
+        resource_name 'Users'
+        description 'List of users'
+        mime_type 'application/json'
+
+        def content
+          JSON.generate([
+            { id: 1, name: 'Alice', email: 'alice@example.com' },
+            { id: 2, name: 'Bob', email: 'bob@example.com' }
+          ])
+        end
+      end
+    end
+
+    let(:protected_resource_class) do
+      token = 'secret-token'
+      Class.new(FastMcp::Resource) do
+        uri 'file://protected.json'
+        resource_name 'Protected Resource'
+        description 'A protected resource'
+        mime_type 'application/json'
+
+        authorize do
+          headers['AUTHORIZATION'] == token
+        end
+
+        def content
+          { data: 'sensitive' }.to_json
+        end
+      end
+    end
+
+    let(:user_resource_class) do
+      Class.new(FastMcp::Resource) do
+        uri 'file://users/{user_id}'
+        resource_name 'User Resource'
+        description 'A specific user resource'
+        mime_type 'application/json'
+
+        authorize do |params|
+          headers['X-USER-ID'] == params[:user_id]
+        end
+
+        def content
+          { user_id: params[:user_id] }.to_json
+        end
+      end
+    end
+
+    before do
+      server.register_resource(users_resource_class)
+      server.register_resource(protected_resource_class)
+      server.register_resource(user_resource_class)
+      allow(server).to receive(:send_response)
+    end
+
+    describe '#handle_request with resources/read' do
+      it 'reads a resource' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/read',
+          params: { uri: 'file://users.json' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result) do |result, id|
+          expect(id).to eq(1)
+          expect(result).to have_key(:contents)
+          expect(result[:contents]).to be_an(Array)
+          expect(result[:contents][0]).to have_key(:uri)
+          expect(result[:contents][0]).to have_key(:mimeType)
+          expect(result[:contents][0]).to have_key(:text)
+        end
+
+        server.handle_request(request)
+      end
+
+      it 'returns error when resource not found' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/read',
+          params: { uri: 'file://nonexistent.json' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_error).with(-32_602, /Resource not found/, 1)
+        server.handle_request(request)
+      end
+
+      it 'returns error when authorization fails' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/read',
+          params: { uri: 'file://protected.json' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_error).with(-32_602, /Unauthorized/, 1)
+        server.handle_request(request)
+      end
+
+      it 'reads a protected resource with valid authorization' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/read',
+          params: { uri: 'file://protected.json' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result) do |result, id|
+          expect(id).to eq(1)
+          expect(result[:contents][0][:text]).to include('sensitive')
+        end
+
+        server.handle_request(request, headers: { 'AUTHORIZATION' => 'secret-token' })
+      end
+
+      it 'reads a templated resource with valid authorization' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/read',
+          params: { uri: 'file://users/user123' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result) do |result, id|
+          expect(id).to eq(1)
+          expect(result[:contents][0][:text]).to include('user123')
+        end
+
+        server.handle_request(request, headers: { 'X-USER-ID' => 'user123' })
+      end
+
+      it 'returns error for templated resource with invalid authorization' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/read',
+          params: { uri: 'file://users/user123' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_error).with(-32_602, /Unauthorized/, 1)
+        server.handle_request(request, headers: { 'X-USER-ID' => 'user456' })
+      end
+
+      it 'passes headers to resource instance' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/read',
+          params: { uri: 'file://users.json' },
+          id: 1
+        }.to_json
+
+        custom_resource_class = Class.new(FastMcp::Resource) do
+          uri 'file://test-headers.json'
+          resource_name 'Test Headers'
+          description 'A resource that uses headers'
+          mime_type 'application/json'
+
+          def content
+            { user_agent: headers['USER-AGENT'] }.to_json
+          end
+        end
+
+        server.register_resource(custom_resource_class)
+
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/read',
+          params: { uri: 'file://test-headers.json' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result) do |result, id|
+          expect(id).to eq(1)
+          content = JSON.parse(result[:contents][0][:text])
+          expect(content['user_agent']).to eq('test-client/1.0')
+        end
+
+        server.handle_request(request, headers: { 'USER-AGENT' => 'test-client/1.0' })
+      end
+    end
+
+    describe '#handle_request with resources/subscribe' do
+      it 'subscribes to a resource' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/subscribe',
+          params: { uri: 'file://users.json' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result).with({}, 1)
+        server.handle_request(request)
+      end
+
+      it 'returns error when resource not found' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/subscribe',
+          params: { uri: 'file://nonexistent.json' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_error).with(-32_602, /Resource not found/, 1)
+        server.handle_request(request)
+      end
+    end
+
+    describe '#handle_request with resources/unsubscribe' do
+      it 'unsubscribes from a resource' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/unsubscribe',
+          params: { uri: 'file://users.json' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result).with({}, 1)
+        server.handle_request(request)
+      end
+
+      it 'returns error when resource not found' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/unsubscribe',
+          params: { uri: 'file://nonexistent.json' },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_error).with(-32_602, /Resource not found/, 1)
+        server.handle_request(request)
+      end
+    end
+
+    describe '#handle_request with resources/list' do
+      it 'lists all registered resources' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'resources/list',
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result) do |result, id|
+          expect(id).to eq(1)
+          expect(result[:resources]).to be_an(Array)
+          expect(result[:resources].length).to eq(3)
+          uris = result[:resources].map { |r| r[:uri] }
+          expect(uris).to include('file://users.json', 'file://protected.json')
+        end
+
+        server.handle_request(request)
+      end
+    end
+  end
 end
