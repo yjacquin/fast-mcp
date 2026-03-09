@@ -335,9 +335,10 @@ module FastMcp
       end
     end
 
-    def initialize(headers: {})
+    def initialize(headers: {}, request: nil)
       @_meta = {}
       @headers = headers
+      @request = request
     end
 
     def authorized?(**args)
@@ -361,7 +362,7 @@ module FastMcp
     end
 
     attr_accessor :_meta
-    attr_reader :headers
+    attr_reader :headers, :request
 
     def notify_resource_updated(uri)
       self.class.server.notify_resource_updated(uri)

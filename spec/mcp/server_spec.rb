@@ -292,6 +292,74 @@ RSpec.describe FastMcp::Server do
       end
     end
 
+    context 'with a tools/call request and rack_request' do
+      let(:request_tool_class) do
+        Class.new(FastMcp::Tool) do
+          def self.name
+            'request-tool'
+          end
+
+          def self.description
+            'A tool that reads from request'
+          end
+
+          arguments do
+            required(:key).filled(:string)
+          end
+
+          def call(key:)
+            value = request&.env&.dig(key)
+            "value: #{value || 'nil'}"
+          end
+        end
+      end
+
+      before do
+        server.register_tool(request_tool_class)
+      end
+
+      it 'passes the rack request to the tool' do
+        mock_env = { 'mcp.user' => 'test-user' }
+        mock_request = double('Rack::Request', env: mock_env)
+
+        request = {
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: {
+            name: 'request-tool',
+            arguments: { key: 'mcp.user' }
+          },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result).with(
+          { content: [{ text: 'value: test-user', type: 'text' }], isError: false },
+          1,
+          metadata: {}
+        )
+        server.handle_request(request, rack_request: mock_request)
+      end
+
+      it 'works without a rack request (backward compatible)' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: {
+            name: 'request-tool',
+            arguments: { key: 'mcp.user' }
+          },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result).with(
+          { content: [{ text: 'value: nil', type: 'text' }], isError: false },
+          1,
+          metadata: {}
+        )
+        server.handle_request(request)
+      end
+    end
+
     context 'with an invalid request' do
       it 'returns an error for an unknown method' do
         request = { jsonrpc: '2.0', method: 'unknown', id: 1 }.to_json

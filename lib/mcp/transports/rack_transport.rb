@@ -545,7 +545,7 @@ module FastMcp
                          .transform_keys { |k| k.sub('HTTP_', '').downcase.tr('_', '-') }
 
         # Let the specific server handle the JSON request directly
-        response = server.handle_request(body, headers: headers) || []
+        response = server.handle_request(body, headers: headers, rack_request: request) || []
 
         # Return the JSON response
         [200, { 'Content-Type' => 'application/json' }, response]

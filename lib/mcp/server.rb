@@ -132,14 +132,14 @@ module FastMcp
     end
 
     # Handle a JSON-RPC request and return the response as a JSON string
-    def handle_json_request(request, headers: {})
+    def handle_json_request(request, headers: {}, rack_request: nil)
       request_str = request.is_a?(String) ? request : JSON.generate(request)
 
-      handle_request(request_str, headers: headers)
+      handle_request(request_str, headers: headers, rack_request: rack_request)
     end
 
     # Handle incoming JSON-RPC request
-    def handle_request(json_str, headers: {}) # rubocop:disable Metrics/MethodLength
+    def handle_request(json_str, headers: {}, rack_request: nil) # rubocop:disable Metrics/MethodLength
       begin
         request = JSON.parse(json_str)
       rescue JSON::ParserError, TypeError
@@ -165,7 +165,7 @@ module FastMcp
       when 'tools/list'
         handle_tools_list(id)
       when 'tools/call'
-        handle_tools_call(params, headers, id)
+        handle_tools_call(params, headers, id, rack_request: rack_request)
       when 'resources/list'
         handle_resources_list(id)
       when 'resources/templates/list'
@@ -311,7 +311,7 @@ module FastMcp
     end
 
     # Handle tools/call request
-    def handle_tools_call(params, headers, id)
+    def handle_tools_call(params, headers, id, rack_request: nil)
       tool_name = params['name']
       arguments = params['arguments'] || {}
 
@@ -324,7 +324,7 @@ module FastMcp
         # Convert string keys to symbols for Ruby
         symbolized_args = symbolize_keys(arguments)
 
-        tool_instance = tool.new(headers: headers)
+        tool_instance = tool.new(headers: headers, request: rack_request)
         authorized = tool_instance.authorized?(**symbolized_args)
 
         return send_error(-32_602, 'Unauthorized', id) unless authorized

@@ -342,6 +342,39 @@ RSpec.describe FastMcp::Tool do
     end
   end
 
+  describe '#request' do
+    let(:test_class) do
+      Class.new(described_class) do
+        def self.name
+          'request-tool'
+        end
+
+        def self.description
+          'A tool that accesses the request'
+        end
+
+        def call(**_args)
+          request&.env&.dig('mcp.user') || 'no user'
+        end
+      end
+    end
+
+    it 'defaults to nil when no request is provided' do
+      tool = test_class.new
+      expect(tool.request).to be_nil
+      expect(tool.call).to eq('no user')
+    end
+
+    it 'can access the rack request' do
+      mock_env = { 'mcp.user' => 'admin' }
+      mock_request = double('Rack::Request', env: mock_env)
+      tool = test_class.new(request: mock_request)
+
+      expect(tool.request).to eq(mock_request)
+      expect(tool.call).to eq('admin')
+    end
+  end
+
   describe '#headers' do
     let(:test_class) do
       Class.new(described_class) do
