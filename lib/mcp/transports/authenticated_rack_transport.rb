@@ -8,7 +8,8 @@ module FastMcp
       def initialize(app, server, options = {})
         super
 
-        @auth_token = options[:auth_token]
+        auth_token_option = options[:auth_token]
+        @auth_token = auth_token_option.is_a?(Proc) ? auth_token_option.call : auth_token_option
         @auth_header_name = options[:auth_header_name] || 'Authorization'
         @auth_exempt_paths = options[:auth_exempt_paths] || []
         @auth_enabled = !@auth_token.nil?
@@ -36,7 +37,11 @@ module FastMcp
       end
 
       def valid_token?(token)
-        token == @auth_token
+        if @auth_token.is_a?(Array)
+          @auth_token.include?(token)
+        else
+          token == @auth_token
+        end
       end
 
       def unauthorized_response(request)

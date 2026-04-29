@@ -69,12 +69,24 @@ Fast MCP supports token-based authentication for all connections to ensure only 
 
 ### Basic Authentication
 
-To enable authentication, use the `authenticated_rack_middleware` method:
+To enable authentication, use the `authenticated_rack_middleware` method. The `auth_token` option accepts a static String, an Array of Strings, or a Proc that returns either:
 
 ```ruby
-# Enable authentication
+# Static token
 FastMcp.authenticated_rack_middleware(app,
   auth_token: 'your-secret-token',
+  # other options...
+)
+
+# Multiple valid tokens
+FastMcp.authenticated_rack_middleware(app,
+  auth_token: ['token-one', 'token-two'],
+  # other options...
+)
+
+# Proc evaluated at initialization (returns a String or Array of Strings)
+FastMcp.authenticated_rack_middleware(app,
+  auth_token: -> { ENV.fetch('MCP_AUTH_TOKENS').split(',') },
   # other options...
 )
 ```
@@ -110,7 +122,7 @@ Here are some best practices to enhance the security of your MCP server:
 1. **Always validate Origin headers** (enabled by default)
 2. **Use authentication** for all MCP endpoints in production
 3. **Deploy behind HTTPS** in production environments
-4. **Keep your auth_token secret** and rotate it regularly
+4. **Keep your auth_token secret** and rotate it regularly. Use a Proc to load tokens dynamically from environment variables or a secrets manager
 5. **Implement proper error handling** to avoid leaking sensitive information
 6. **Validate inputs thoroughly** in your tool implementations
 7. **Implement rate limiting** for MCP endpoints to prevent abuse

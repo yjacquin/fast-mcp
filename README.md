@@ -155,7 +155,7 @@ FastMcp.mount_in_rails(
   # whitelist specific ips to if you want to run on localhost and allow connections from other IPs
   # allowed_ips: ['127.0.0.1', '::1']
   # authenticate: true,       # Uncomment to enable authentication
-  # auth_token: 'your-token' # Required if authenticate: true
+  # auth_token: 'your-token', # Required if authenticate: true. Accepts a String, Array of Strings, or a Proc that returns either.
 ) do |server|
   Rails.application.config.after_initialize do
     # FastMcp will automatically discover and register:
@@ -388,12 +388,24 @@ FastMcp.rack_middleware(app,
 
 ### Authentication
 
-Fast MCP supports token-based authentication for all connections:
+Fast MCP supports token-based authentication for all connections. The `auth_token` option accepts a static String, an Array of Strings (to allow multiple valid tokens), or a Proc that returns either:
 
 ```ruby
-# Enable authentication
+# Enable authentication with a static token
 FastMcp.authenticated_rack_middleware(app,
   auth_token: 'your-secret-token',
+  # other options...
+)
+
+# Enable authentication with multiple valid tokens
+FastMcp.authenticated_rack_middleware(app,
+  auth_token: ['token-one', 'token-two'],
+  # other options...
+)
+
+# Enable authentication with a Proc (evaluated at initialization)
+FastMcp.authenticated_rack_middleware(app,
+  auth_token: -> { ENV.fetch('MCP_AUTH_TOKENS').split(',') },
   # other options...
 )
 ```

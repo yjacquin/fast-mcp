@@ -63,7 +63,9 @@ module FastMcp
   # @param options [Hash] Options for the middleware
   # @option options [String] :name The name of the server
   # @option options [String] :version The version of the server
-  # @option options [String] :auth_token The authentication token
+  # @option options [String, Array<String>, Proc] :auth_token The authentication token. Accepts a static String,
+  #   an Array of Strings (to allow multiple valid tokens), or a Proc that returns either.
+  #   A Proc is evaluated once at initialization.
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure
@@ -115,7 +117,9 @@ module FastMcp
   # @option options [String] :sse_route The route for the SSE endpoint
   # @option options [Logger] :logger The logger to use
   # @option options [Boolean] :authenticate Whether to use authentication
-  # @option options [String] :auth_token The authentication token
+  # @option options [String, Array<String>, Proc] :auth_token The authentication token. Accepts a static String,
+  #   an Array of Strings (to allow multiple valid tokens), or a Proc that returns either.
+  #   A Proc is evaluated once at initialization.
   # @option options [Array<String,Regexp>] :allowed_origins List of allowed origins for DNS rebinding protection
   # @yield [server] A block to configure the server
   # @yieldparam server [FastMcp::Server] The server to configure

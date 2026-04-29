@@ -24,7 +24,7 @@ FastMcp.mount_in_rails(
   # Add allowed origins below, it defaults to Rails.application.config.hosts
   # allowed_origins: ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/],
   # authenticate: true,       # Uncomment to enable authentication
-  # auth_token: 'your-token' # Required if authenticate: true
+  # auth_token: 'your-token', # Required if authenticate: true. Accepts a String, Array of Strings, or a Proc that returns either.
 ) do |server|
   Rails.application.config.after_initialize do
     # FastMcp will automatically discover and register:

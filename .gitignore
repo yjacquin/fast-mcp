@@ -4,3 +4,6 @@
 
 # Ignore gem files
 *.gem
+
+# Ignore IDE files
+.idea/

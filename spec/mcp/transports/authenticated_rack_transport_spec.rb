@@ -273,6 +273,151 @@ RSpec.describe FastMcp::Transports::AuthenticatedRackTransport do
       end
     end
 
+    context 'with Proc auth_token' do
+      context 'when Proc returns a single token string' do
+        let(:auth_token) { -> { 'proc-generated-token' } }
+
+        it 'resolves the Proc at initialization' do
+          expect(transport.instance_variable_get(:@auth_token)).to eq('proc-generated-token')
+        end
+
+        it 'authenticates with the resolved token' do
+          env = {
+            'PATH_INFO' => '/not-mcp',
+            'HTTP_AUTHORIZATION' => 'Bearer proc-generated-token'
+          }
+
+          expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
+          result = transport.call(env)
+          expect(result).to eq([200, {}, ['OK']])
+        end
+
+        it 'rejects an invalid token' do
+          env = {
+            'PATH_INFO' => '/mcp/messages',
+            'HTTP_AUTHORIZATION' => 'Bearer wrong-token'
+          }
+
+          result = transport.call(env)
+          expect(result[0]).to eq(401)
+        end
+      end
+
+      context 'when Proc returns an array of tokens' do
+        let(:auth_token) { -> { ['token-a', 'token-b', 'token-c'] } }
+
+        it 'resolves the Proc to an array at initialization' do
+          expect(transport.instance_variable_get(:@auth_token)).to eq(['token-a', 'token-b', 'token-c'])
+        end
+
+        it 'authenticates with any token from the array' do
+          %w[token-a token-b token-c].each do |token|
+            env = {
+              'PATH_INFO' => '/not-mcp',
+              'HTTP_AUTHORIZATION' => "Bearer #{token}"
+            }
+
+            expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
+            result = transport.call(env)
+            expect(result).to eq([200, {}, ['OK']])
+          end
+        end
+
+        it 'rejects a token not in the array' do
+          env = {
+            'PATH_INFO' => '/mcp/messages',
+            'HTTP_AUTHORIZATION' => 'Bearer token-d'
+          }
+
+          result = transport.call(env)
+          expect(result[0]).to eq(401)
+        end
+      end
+
+      context 'when Proc returns nil' do
+        let(:auth_token) { -> { nil } }
+
+        it 'disables authentication' do
+          expect(transport.instance_variable_get(:@auth_enabled)).to be(false)
+        end
+
+        it 'allows unauthenticated requests' do
+          env = { 'PATH_INFO' => '/not-mcp' }
+
+          expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
+          result = transport.call(env)
+          expect(result).to eq([200, {}, ['OK']])
+        end
+      end
+    end
+
+    context 'with Array auth_token' do
+      let(:auth_token) { ['token-one', 'token-two', 'token-three'] }
+
+      it 'stores the array as @auth_token' do
+        expect(transport.instance_variable_get(:@auth_token)).to eq(['token-one', 'token-two', 'token-three'])
+      end
+
+      it 'enables authentication' do
+        expect(transport.instance_variable_get(:@auth_enabled)).to be(true)
+      end
+
+      it 'accepts the first token in the array' do
+        env = {
+          'PATH_INFO' => '/not-mcp',
+          'HTTP_AUTHORIZATION' => 'Bearer token-one'
+        }
+
+        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
+        result = transport.call(env)
+        expect(result).to eq([200, {}, ['OK']])
+      end
+
+      it 'accepts the last token in the array' do
+        env = {
+          'PATH_INFO' => '/not-mcp',
+          'HTTP_AUTHORIZATION' => 'Bearer token-three'
+        }
+
+        expect(app).to receive(:call).with(env).and_return([200, {}, ['OK']])
+        result = transport.call(env)
+        expect(result).to eq([200, {}, ['OK']])
+      end
+
+      it 'rejects a token not in the array' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'HTTP_AUTHORIZATION' => 'Bearer not-in-array'
+        }
+
+        result = transport.call(env)
+        expect(result[0]).to eq(401)
+      end
+
+      it 'rejects an empty token' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'HTTP_AUTHORIZATION' => 'Bearer '
+        }
+
+        result = transport.call(env)
+        expect(result[0]).to eq(401)
+      end
+
+      it 'works with MCP message paths' do
+        env = {
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'HTTP_AUTHORIZATION' => 'Bearer token-two',
+          'REMOTE_ADDR' => '127.0.0.1',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"test","id":1}')
+        }
+
+        result = transport.call(env)
+        expect(result[0]).to eq(200)
+      end
+    end
+
     context 'with authentication disabled' do
       let(:transport) { described_class.new(app, server,logger: logger) }
 

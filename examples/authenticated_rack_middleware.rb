@@ -66,6 +66,11 @@ app = lambda do |_env|
 end
 
 # Create the MCP middleware
+# auth_token accepts a String, Array of Strings, or a Proc that returns either.
+# Examples:
+#   auth_token: 'secret'
+#   auth_token: ['token-one', 'token-two']
+#   auth_token: -> { ENV.fetch('MCP_AUTH_TOKENS').split(',') }
 mcp_app = FastMcp.authenticated_rack_middleware(app, name: 'example-mcp-server', version: '1.0.0',
                                                      auth_token: 'secret') do |server|
   # Register tool classes

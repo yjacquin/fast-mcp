@@ -27,7 +27,7 @@ FastMcp.mount_in_rails(
   # whitelist specific ips to if you want to run on localhost and allow connections from other IPs
   # allowed_ips: ['127.0.0.1', '::1'],
   # authenticate: true,       # Uncomment to enable authentication
-  # auth_token: 'your-token', # Required if authenticate: true
+  # auth_token: 'your-token', # Required if authenticate: true. Accepts a String, Array of Strings, or a Proc that returns either.
 ) do |server|
   Rails.application.config.after_initialize do
     # FastMcp will automatically discover and register:
