@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe FastMcp::Server do
+RSpec.describe FastMcp::Server do # rubocop:disable Metrics/BlockLength
   let(:server) { described_class.new(name: 'test-server', version: '1.0.0', logger: Logger.new(nil)) }
 
   describe '#initialize' do
@@ -77,10 +77,35 @@ RSpec.describe FastMcp::Server do
       end
     end
 
+    let(:tool_with_output_schema) do
+      Class.new(FastMcp::Tool) do
+        def self.name
+          'output-schema-greeting-tool'
+        end
+
+        def self.description
+          'A tool that greets a person with output schema'
+        end
+
+        arguments do
+          required(:name).filled(:string).description('Name of the person to greet')
+        end
+
+        response do
+          required(:greeting_response).filled(:string).description('Greet for the person')
+        end
+
+        def call(name:)
+          { greeting_response: "Hello #{ name }" }
+        end
+      end
+    end
+
     before do
       # Register the test tools
       server.register_tool(test_tool_class)
       server.register_tool(profile_tool_class)
+      server.register_tool(tool_with_output_schema)
 
       # Stub the send_response method
       allow(server).to receive(:send_response)
@@ -137,13 +162,14 @@ RSpec.describe FastMcp::Server do
         expect(server).to receive(:send_result) do |result, id|
           expect(id).to eq(1)
           expect(result[:tools]).to be_an(Array)
-          expect(result[:tools].length).to eq(2)
+          expect(result[:tools].length).to eq(3)
 
           # Test the simple tool
           test_tool = result[:tools].find { |t| t[:name] == 'test-tool' }
           expect(test_tool[:description]).to eq('A test tool')
           expect(test_tool[:inputSchema]).to be_a(Hash)
           expect(test_tool[:inputSchema][:properties][:name][:description]).to eq('User name')
+          expect(test_tool).not_to have_key(:outputSchema)
 
           # Test the tool with nested properties
           profile_tool = result[:tools].find { |t| t[:name] == 'profile-tool' }
@@ -152,6 +178,17 @@ RSpec.describe FastMcp::Server do
           # We no longer expect descriptions on nested fields since they aren't being passed through
           expect(profile_tool[:inputSchema][:properties][:user][:properties]).to have_key(:first_name)
           expect(profile_tool[:inputSchema][:properties][:user][:properties]).to have_key(:last_name)
+          expect(profile_tool).not_to have_key(:outputSchema)
+
+          # Test the tool with output schema
+          output_schema_tool = result[:tools].find { |t| t[:name] == 'output-schema-greeting-tool' }
+
+          expect(output_schema_tool[:description]).to eq('A tool that greets a person with output schema')
+          expect(output_schema_tool[:inputSchema][:properties][:name][:type]).to eq('string')
+          expect(output_schema_tool[:inputSchema][:properties][:name][:description]).to eq('Name of the person to greet')
+          # expect tool to have output schema
+          expect(output_schema_tool[:outputSchema][:properties][:greeting_response][:type]).to eq('string')
+          expect(output_schema_tool[:outputSchema][:properties][:greeting_response][:description]).to eq('Greet for the person')
         end
 
         server.handle_request(request)
@@ -256,6 +293,30 @@ RSpec.describe FastMcp::Server do
 
         expect(server).to receive(:send_result).with(
           { content: [{ text: 'John Doe', type: 'text' }], isError: false },
+          1,
+          metadata: {}
+        )
+        server.handle_request(request)
+      end
+
+      it 'returns output schema when the tool has it specified' do
+        request = {
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: {
+            name: 'output-schema-greeting-tool',
+            arguments: {
+              name: 'Pedro'
+            }
+          },
+          id: 1
+        }.to_json
+
+        expect(server).to receive(:send_result).with(
+          { content: [{ type: 'text',
+                        text: '{:greeting_response=>"Hello Pedro"}' }],
+            structuredContent: { greeting_response: 'Hello Pedro' },
+            isError: false },
           1,
           metadata: {}
         )

@@ -277,6 +277,41 @@ server.register_resource(StatisticsResource)
 server.start
 ```
 
+### Output Schema & Structured Content
+
+Just like `arguments` describes and validates what a tool *receives*, `response` describes and validates what a tool *returns*:
+
+```ruby
+class SummarizeTool < FastMcp::Tool
+  description "Summarize a given text"
+
+  arguments do
+    required(:text).filled(:string).description("Text to summarize")
+  end
+
+  # Optional: declare the shape of the tool's result
+  response do
+    required(:summary).filled(:string).description("The generated summary")
+    required(:word_count).filled(:integer).description("Number of words in the summary")
+  end
+
+  def call(text:)
+    summary = text.split('.').first(3).join('.') + '...'
+    { summary: summary, word_count: summary.split.size }
+  end
+end
+```
+
+`response` is entirely optional — a tool with no `response` block behaves exactly as before, returning only free-form `content`.
+
+When a `response` block is declared:
+
+- It's converted to JSON Schema and exposed as `outputSchema` in `tools/list`, so MCP clients know what shape to expect back.
+- Every call to that tool has its return value validated against the schema. If the tool returns something that doesn't match, the call fails with a clear error instead of silently sending bad data.
+- The result sent back to the client includes `structuredContent` (the actual object, matching `outputSchema`) alongside the regular text `content`, so both schema-aware and legacy clients can consume it.
+
+Tools that don't declare `response` never get an `outputSchema` or `structuredContent` — those fields are simply omitted, keeping the response format unchanged for existing tools.
+
 ## 🧪 Testing with the inspector
 
 MCP has developed a very [useful inspector](https://github.com/modelcontextprotocol/inspector).
