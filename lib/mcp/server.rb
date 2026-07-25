@@ -292,6 +292,9 @@ module FastMcp
           inputSchema: tool.input_schema_to_json || { type: 'object', properties: {}, required: [] }
         }
 
+        output_schema = tool.output_schema_to_json
+        tool_info[:outputSchema] = output_schema if output_schema
+
         # Add annotations if they exist
         annotations = tool.annotations
         unless annotations.empty?
@@ -320,6 +323,8 @@ module FastMcp
       tool = @tools[tool_name]
       return send_error(-32_602, "Tool not found: #{tool_name}", id) unless tool
 
+      output_schema = tool.output_schema_to_json || nil
+
       begin
         # Convert string keys to symbols for Ruby
         symbolized_args = symbolize_keys(arguments)
@@ -332,10 +337,13 @@ module FastMcp
         result, metadata = tool_instance.call_with_schema_validation!(**symbolized_args)
 
         # Format and send the result
-        send_formatted_result(result, id, metadata)
+        send_formatted_result(result, id, metadata, output_schema)
       rescue FastMcp::Tool::InvalidArgumentsError => e
         @logger.error("Invalid arguments for tool #{tool_name}: #{e.message}")
         send_error_result(e.message, id)
+      rescue FastMcp::Tool::InvalidOutputError => e
+        @logger.error("Invalid output for tool #{tool_name}: #{e.message}")
+        send_error_result("Tool #{tool_name} returned output that doesn't match its output schema: #{e.message}", id)
       rescue StandardError => e
         @logger.error("Error calling tool #{tool_name}: #{e.message}")
         send_error_result("#{e.message}, #{e.backtrace.join("\n")}", id)
@@ -343,19 +351,30 @@ module FastMcp
     end
 
     # Format and send successful result
-    def send_formatted_result(result, id, metadata)
+    def send_formatted_result(result, id, metadata, output_schema)
       # Check if the result is already in the expected format
       if result.is_a?(Hash) && result.key?(:content)
         send_result(result, id, metadata: metadata)
       else
-        # Format the result according to the MCP specification
-        formatted_result = {
-          content: [{ type: 'text', text: result.to_s }],
-          isError: false
-        }
+        formatted_result = formatted_result(result, output_schema)
 
         send_result(formatted_result, id, metadata: metadata)
       end
+    end
+
+    def formatted_result(result, output_schema)
+      if output_schema.nil?
+        { content: [{ type: 'text', text: result.to_s }],
+          isError: false }
+      else
+        structured_result = result.is_a?(Hash) ? result : JSON.parse(result)
+        { content: [{ type: 'text', text: result.to_s }],
+          structuredContent: structured_result,
+          isError: false }
+      end
+    rescue JSON::ParserError
+      { content: [{ type: 'text', text: result.to_s }],
+        isError: false }
     end
 
     # Format and send error result

@@ -261,6 +261,7 @@ module FastMcp
   # Main Tool class that represents an MCP Tool
   class Tool
     class InvalidArgumentsError < StandardError; end
+    class InvalidOutputError < StandardError; end
 
     class << self
       attr_accessor :server
@@ -287,17 +288,31 @@ module FastMcp
       end
 
       def arguments(&block)
-        @metadata_context = MetadataContext.new
+        input_metadata_context = MetadataContext.new
 
-        @input_schema = MetadataContext.with_context(@metadata_context) do
+        @input_schema = MetadataContext.with_context(input_metadata_context) do
           Dry::Schema.JSON(&block)
         end
 
-        @collected_metadata = @metadata_context.metadata
+        @collected_input_metadata = input_metadata_context.metadata
       end
 
       def input_schema
         @input_schema ||= Dry::Schema.JSON
+      end
+
+      def response(&block)
+        output_metadata_context = MetadataContext.new
+
+        @output_schema = MetadataContext.with_context(output_metadata_context) do
+          Dry::Schema.JSON(&block)
+        end
+
+        @collected_output_metadata = output_metadata_context.metadata
+      end
+
+      def output_schema
+        @output_schema ||= Dry::Schema.JSON
       end
 
       def tool_name(name = nil)
@@ -331,7 +346,13 @@ module FastMcp
       end
 
       def input_schema_to_json
-        SchemaMetadataProcessor.process(@input_schema, @collected_metadata || {})
+        SchemaMetadataProcessor.process(@input_schema, @collected_input_metadata || {})
+      end
+
+      def output_schema_to_json
+        return nil unless @output_schema
+
+        SchemaMetadataProcessor.process(@output_schema, @collected_output_metadata || {})
       end
     end
 
@@ -371,9 +392,17 @@ module FastMcp
       arg_validation = self.class.input_schema.call(args)
       raise InvalidArgumentsError, arg_validation.errors.to_h.to_json if arg_validation.errors.any?
 
+      response = call(**args)
+
+      if self.class.output_schema_to_json
+        parsed_response = response.is_a?(String) ? JSON.parse(response) : response
+        response_validation = self.class.output_schema.call(parsed_response)
+        raise InvalidOutputError, response_validation.errors.to_h.to_json if response_validation.errors.any?
+      end
+
       # When calling the tool, its metadata can be altered to be returned in response.
       # We return the altered metadata with the tool's result
-      [call(**args), _meta]
+      [response, _meta]
     end
   end
 end
