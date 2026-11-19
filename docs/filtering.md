@@ -168,9 +168,9 @@ env['fast_mcp.server'] = custom_filtered_server
 
 This takes precedence over any configured filters.
 
-### Caching
+### Filters run on every request
 
-The RackTransport automatically caches filtered server instances based on request parameters to improve performance. Identical requests will reuse the same filtered server instance.
+The RackTransport runs your filters and builds a filtered server for every request. Filtered servers are not cached, because a filter can read any part of the request (headers, cookies, the client IP, values set by your authentication middleware) and a cached result could be served to a request that should see different tools. Building a filtered server takes microseconds; if a filter itself does slow work, such as a database lookup, cache that inside the filter.
 
 ### Combining with Authentication
 
@@ -264,7 +264,7 @@ end
 
 1. **Keep Filters Fast**: Filters run on every request, so keep them efficient
 2. **Use Tags Wisely**: Create a consistent tagging system across your tools
-3. **Cache When Possible**: The built-in caching helps, but consider caching expensive checks
+3. **Cache Expensive Checks**: Filters are not cached, so cache slow lookups inside the filter
 4. **Fail Secure**: When in doubt, exclude tools rather than include them
 5. **Log Filter Actions**: Consider logging when tools are filtered for debugging
 6. **Test Thoroughly**: Write tests for your filter logic to ensure security

@@ -44,7 +44,6 @@ module FastMcp
         @sse_clients = Concurrent::Hash.new
         @sse_clients_mutex = Mutex.new
         @running = false
-        @filtered_servers_cache = {}
       end
 
       # Start the transport
@@ -587,40 +586,16 @@ module FastMcp
           return env[SERVER_ENV_KEY]
         end
 
-        # 2. Apply filters if configured
+        # 2. Apply filters if configured. A filter can read any part of the
+        # request, so it runs for every request instead of being cached.
         if @server.contains_filters?
           @logger.debug('Server has filters, creating filtered copy')
-          # Cache filtered servers to avoid recreating them
-          cache_key = generate_cache_key(request)
-
-          @filtered_servers_cache[cache_key] ||= @server.create_filtered_copy(request)
-          return @filtered_servers_cache[cache_key]
+          return @server.create_filtered_copy(request)
         end
 
         # 3. Use the default server
         @logger.debug('Using default server')
         @server
-      end
-
-      # Generate a cache key based on filter-relevant request attributes
-      def generate_cache_key(request)
-        # Generate a cache key based on filter-relevant request attributes
-        # This is a simple example - real implementation would be more sophisticated
-        {
-          path: request.path,
-          params: request.params.sort.to_h,
-          headers: extract_relevant_headers(request)
-        }.hash
-      end
-
-      # Extract headers that might be relevant for filtering
-      def extract_relevant_headers(request)
-        relevant_headers = {}
-        ['X-User-Role', 'X-API-Version', 'X-Tenant-ID', 'Authorization'].each do |header|
-          header_key = "HTTP_#{header.upcase.tr('-', '_')}"
-          relevant_headers[header] = request.env[header_key] if request.env[header_key]
-        end
-        relevant_headers
       end
     end
   end
