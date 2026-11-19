@@ -474,6 +474,52 @@ RSpec.describe FastMcp::Transports::RackTransport do
     end
   end
 
+  describe 'SSE reconnection' do
+    # Each SSE connection's keep-alive thread runs cleanup_sse_connection when
+    # it ends. The thread is stubbed here and its cleanup called directly, so
+    # the order of events is fixed.
+    before do
+      allow(transport).to receive(:start_keep_alive_thread)
+      allow(transport).to receive(:sleep)
+    end
+
+    def open_sse(io, client_id)
+      transport.call(
+        'PATH_INFO' => '/mcp/sse',
+        'REQUEST_METHOD' => 'GET',
+        'rack.hijack?' => true,
+        'rack.hijack' => -> {},
+        'rack.hijack_io' => io,
+        'rack.input' => StringIO.new(''),
+        'REMOTE_ADDR' => '127.0.0.1',
+        'QUERY_STRING' => "client_id=#{client_id}"
+      )
+    end
+
+    it 'keeps a reconnected client registered when the old connection cleans up' do
+      old_io = StringIO.new
+      new_io = StringIO.new
+      open_sse(old_io, 'abc')
+      open_sse(new_io, 'abc')
+
+      transport.send(:cleanup_sse_connection, 'abc', old_io)
+      transport.send_message({ jsonrpc: '2.0', id: 1, result: {} })
+
+      expect(transport.instance_variable_get(:@sse_clients)['abc']).to include(stream: new_io)
+      expect(new_io.string).to include('"id":1')
+    end
+
+    it 'unregisters a client when its own connection cleans up' do
+      io = StringIO.new
+      open_sse(io, 'abc')
+
+      transport.send(:cleanup_sse_connection, 'abc', io)
+
+      expect(transport.instance_variable_get(:@sse_clients)).not_to have_key('abc')
+      expect(io).to be_closed
+    end
+  end
+
   # Tests for private methods
   describe '#validate_origin (private)' do
     let(:allowed_origins) { ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/] }

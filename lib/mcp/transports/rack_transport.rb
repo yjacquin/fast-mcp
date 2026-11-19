@@ -494,8 +494,15 @@ module FastMcp
       # Clean up SSE connection
       def cleanup_sse_connection(client_id, io)
         @logger.info("Cleaning up SSE connection for client #{client_id}")
-        mutex = @sse_clients[client_id] && @sse_clients[client_id][:mutex]
-        unregister_sse_client(client_id)
+        # A client that reconnected with the same id is registered with a new
+        # stream by now. Only remove the entry if it still holds this one.
+        mutex = @sse_clients_mutex.synchronize do
+          client = @sse_clients[client_id]
+          next unless client && client[:stream].equal?(io)
+
+          @logger.info("Unregistering SSE client: #{client_id}")
+          @sse_clients.delete(client_id)[:mutex]
+        end
         begin
           if mutex
             mutex.synchronize { io.close unless io.closed? }
