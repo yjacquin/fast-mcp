@@ -104,26 +104,64 @@ RSpec.describe 'FastMcp::Transports::RackTransport with filtering' do
       expect(filtered_server.tools.keys).not_to include('admin_tool')
     end
     
-    it 'caches filtered servers' do
-      server.filter_tools { |_request, tools| tools }
-      
-      # Get the cache
-      cache = transport.instance_variable_get(:@filtered_servers_cache)
-      expect(cache).to be_empty
-      
-      # After a request, it should have cached a server
-      env = {
-        'PATH_INFO' => '/mcp/messages',
-        'REQUEST_METHOD' => 'POST',
-        'QUERY_STRING' => 'role=user',
-        'REMOTE_ADDR' => '127.0.0.1',
-        'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
-      }
-      
-      transport.call(env)
-      
-      # Cache should have one entry
-      expect(cache.size).to eq(1)
+    it 'runs the filters for every request' do
+      calls = 0
+      server.filter_tools do |_request, tools|
+        calls += 1
+        tools
+      end
+
+      3.times do
+        transport.call(
+          'PATH_INFO' => '/mcp/messages',
+          'REQUEST_METHOD' => 'POST',
+          'QUERY_STRING' => 'role=user',
+          'REMOTE_ADDR' => '127.0.0.1',
+          'CONTENT_TYPE' => 'application/json',
+          'rack.input' => StringIO.new('{"jsonrpc":"2.0","method":"ping","id":1}')
+        )
+      end
+
+      expect(calls).to eq(3)
     end
   end
-end 
+
+  # A filter can read anything on the request: here a header, like the
+  # feature-flag example in docs/filtering.md.
+  describe 'filters that read other parts of the request' do
+    let(:stream) { StringIO.new }
+
+    before do
+      server.filter_tools do |request, tools|
+        request.env['HTTP_X_USER_ID'] == 'alice' ? tools : tools.reject { |t| t.tags.include?(:admin) }
+      end
+      transport.instance_variable_set(:@sse_clients, { 'client' => { stream: stream, mutex: Mutex.new } })
+    end
+
+    def rpc(user, body)
+      transport.call(
+        'PATH_INFO' => '/mcp/messages',
+        'REQUEST_METHOD' => 'POST',
+        'REMOTE_ADDR' => '127.0.0.1',
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_USER_ID' => user,
+        'rack.input' => StringIO.new(JSON.generate(body))
+      )
+      JSON.parse(stream.string.scan(/^data: (.*)$/).last.first)
+    end
+
+    it "lists only the tools the caller's own request allows" do
+      rpc('alice', { jsonrpc: '2.0', id: 1, method: 'tools/list' })
+      bob = rpc('bob', { jsonrpc: '2.0', id: 2, method: 'tools/list' })
+
+      expect(bob['result']['tools'].map { |tool| tool['name'] }).to eq(['user_tool'])
+    end
+
+    it "does not run a tool that the caller's request filters out" do
+      rpc('alice', { jsonrpc: '2.0', id: 1, method: 'tools/list' })
+      bob = rpc('bob', { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'admin_tool', arguments: {} } })
+
+      expect(bob).to include('error' => include('message' => 'Tool not found: admin_tool'))
+    end
+  end
+end
